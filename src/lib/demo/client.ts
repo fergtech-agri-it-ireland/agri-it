@@ -9,7 +9,7 @@ import { todayISO } from '../format';
 
 const DB_KEY = 'agri-it:demo-db';
 const SIGNED_OUT_KEY = 'agri-it:demo-signed-out';
-const VERSION = 2; // bump when the seed's shape changes so stored demo data is rebuilt
+const VERSION = 3; // bump when the seed's shape changes so stored demo data is rebuilt
 
 function store(): Storage | null {
   try { return window.localStorage; } catch { return null; }
@@ -21,6 +21,8 @@ function load(): DB {
       const p = JSON.parse(raw) as { v: number; db: DB };
       if (p.v === VERSION) return p.db;
     }
+    // Older demo data: drop it and the app cache built from it, so nothing stale is shown.
+    if (raw) { store()?.removeItem('agri-it:cache'); store()?.removeItem('agri-it:outbox'); }
   } catch { /* fall through to a fresh seed */ }
   return buildSeed();
 }

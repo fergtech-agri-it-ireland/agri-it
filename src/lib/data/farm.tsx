@@ -120,12 +120,24 @@ async function fetchBundle(farmId: string): Promise<FarmBundle> {
   return { farm, groups, suppliers, branches, supplierSettings, products, txns, rules, silage, benchmarks, evidence, income, costs, budget, records, documents, jobs, routines, completions, feedLogs } as unknown as FarmBundle;
 }
 
+const LIST_KEYS = ['groups', 'suppliers', 'branches', 'supplierSettings', 'products', 'txns', 'rules', 'silage', 'benchmarks', 'evidence', 'income', 'costs', 'budget', 'records', 'documents', 'jobs', 'routines', 'completions', 'feedLogs'] as const;
+
+/** Data cached by an older version of the app can lack newer lists. Treat a missing list as empty. */
+export function normalizeBundle(b: FarmBundle): FarmBundle {
+  const missing = LIST_KEYS.filter((k) => !Array.isArray((b as unknown as Record<string, unknown>)[k]));
+  if (!missing.length) return b;
+  const fixed = { ...b } as unknown as Record<string, unknown>;
+  for (const k of missing) fixed[k] = [];
+  return fixed as unknown as FarmBundle;
+}
+
 export function useBundle() {
   const { farmId } = useFarmCtx();
   return useQuery({
     queryKey: ['bundle', farmId],
     enabled: !!farmId,
     queryFn: () => fetchBundle(farmId!),
+    select: normalizeBundle,
     staleTime: 30_000
   });
 }
@@ -159,7 +171,8 @@ export function useSave() {
 
   return useCallback(async (ops: Op[], opts: SaveOptions): Promise<SaveResult> => {
     const key = ['bundle', farmId];
-    const previous = qc.getQueryData<FarmBundle>(key);
+    const cached = qc.getQueryData<FarmBundle>(key);
+    const previous = cached && normalizeBundle(cached);
     if (opts.patch && previous) qc.setQueryData<FarmBundle>(key, opts.patch(previous));
     try {
       const { queued } = await execute(ops, opts.label);

@@ -9,6 +9,7 @@ import { registerSW } from 'virtual:pwa-register';
 import './index.css';
 import App from './App';
 import { ToastProvider } from './components/Toast';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { FarmProvider } from './lib/data/farm';
 import { IS_DEMO } from './lib/env';
 import { startThemeClock } from './lib/theme';
@@ -22,6 +23,8 @@ const queryClient = new QueryClient({
     queries: { networkMode: 'offlineFirst', gcTime: 1000 * 60 * 60 * 24 * 7, retry: 1, refetchOnWindowFocus: true }
   }
 });
+// Bump when the shape of cached farm data changes, so an older cache is thrown away instead of crashing screens.
+const CACHE_VERSION = 'v3-routines';
 const persister = createSyncStoragePersister({ storage: window.localStorage, key: 'agri-it:cache' });
 
 startThemeClock();
@@ -29,7 +32,8 @@ if (!IS_DEMO) registerSW({ immediate: true });
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <PersistQueryClientProvider client={queryClient} persistOptions={{ persister, maxAge: 1000 * 60 * 60 * 24 * 7, buster: 'v1' }}>
+    <ErrorBoundary>
+    <PersistQueryClientProvider client={queryClient} persistOptions={{ persister, maxAge: 1000 * 60 * 60 * 24 * 7, buster: CACHE_VERSION }}>
       <Router>
         <ToastProvider>
           <FarmProvider>
@@ -38,5 +42,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         </ToastProvider>
       </Router>
     </PersistQueryClientProvider>
+    </ErrorBoundary>
   </React.StrictMode>
 );

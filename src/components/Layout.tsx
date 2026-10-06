@@ -7,6 +7,26 @@ import { useDerived, useSnapshotRecorder } from '../lib/data/derived';
 import { discard, flush, retryFailed, subscribeOutbox, type Queued } from '../lib/offline/outbox';
 import { Button, Sheet } from './ui';
 import type { FarmBundle } from '../lib/types';
+import { IS_DEMO } from '../lib/env';
+import { resetDemo } from '../lib/demo/client';
+import { Logo } from './Logo';
+
+/** Demo build only: say plainly this is sample data, and offer a clean restart. */
+function DemoBanner() {
+  const [confirm, setConfirm] = useState(false);
+  return (
+    <div className="no-print mx-auto flex max-w-xl items-center gap-3 px-3 pt-2">
+      <p className="min-w-0 flex-1 rounded-xl bg-hivis px-3 py-2 text-sm font-bold leading-snug text-ink">
+        Demo farm with sample data. Changes stay on this device only.
+      </p>
+      {confirm ? (
+        <button onClick={resetDemo} className="min-h-tap shrink-0 rounded-xl bg-ink px-3 text-sm font-bold text-white">Reset now</button>
+      ) : (
+        <button onClick={() => setConfirm(true)} className="min-h-tap shrink-0 rounded-xl border-2 border-ink/80 bg-white px-3 text-sm font-bold">Reset</button>
+      )}
+    </div>
+  );
+}
 
 const tabs = [
   { to: '/', label: 'Today', Icon: Home, end: true },
@@ -131,6 +151,7 @@ export function AppShell() {
     <>
       <SyncStatus />
       {data && <Recorder bundle={data} />}
+      {IS_DEMO && <DemoBanner />}
       <Outlet />
       {!hideNav && <BottomNav onRecord={() => setRecordOpen(true)} />}
       <RecordSheet open={recordOpen} onClose={() => setRecordOpen(false)} />
@@ -163,7 +184,7 @@ export function Splash() {
   return (
     <div className="flex min-h-[100dvh] items-center justify-center">
       <div className="flex items-center gap-3 text-field">
-        <img src="/icons/favicon.svg" alt="" className="h-10 w-10 animate-pulse" />
+        <Logo className="h-10 w-10 animate-pulse" />
         <span className="h-display text-3xl">Agri-It</span>
       </div>
     </div>

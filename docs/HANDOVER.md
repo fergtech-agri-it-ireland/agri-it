@@ -1,6 +1,6 @@
 # Agri-It MVP: Handover
 
-**Last updated:** 6 October 2026
+**Last updated:** 6 October 2026 (demo build added)
 **Owner:** Feargal
 **Status:** MVP code complete, builds clean, tests pass. Not yet pushed to GitHub or deployed.
 
@@ -29,7 +29,7 @@ It is not a herd, grassland or accounting system. It does not prescribe rations,
 | Database | Migrations + seed validated against real Postgres 16 with Supabase auth/storage stubs; RLS isolation tested |
 | GitHub | Not pushed yet |
 | Supabase cloud | Not created yet (local only) |
-| Deployed | No |
+| Deployed | No. A browser-only demo (sample data, no database) is published as a private Claude artifact; rebuild with `npm run build:demo` |
 
 **Important:** the build sandbox resets between chats. The only copy of the code is the zip from the 29 Sept chat (and wherever Feargal has saved it). A new chat starts with no code unless the zip is uploaded again or the repo is on GitHub. **Push to GitHub first** so future chats can attach the repo.
 

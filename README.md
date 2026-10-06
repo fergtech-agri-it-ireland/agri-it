@@ -63,6 +63,15 @@ npm run dev -- --host
 
 Open the `Network` URL on a phone on the same Wi-Fi. For the phone to reach the database, set `VITE_SUPABASE_URL` in `.env.local` to your computer's LAN IP (for example `http://192.168.1.20:54321`) instead of `127.0.0.1`. Voice dictation and "install to home screen" need HTTPS or localhost, so test those on the deployed version.
 
+### Demo build (no database)
+
+```bash
+npm run build:demo        # writes dist-demo/index.html, one self-contained file
+npm run preview:demo      # serve it locally
+```
+
+The demo runs the real screens and forecast engines against the Glenview Farm sample data held in the browser, through an in-browser stand-in for Supabase (`src/lib/demo/`). Nothing reaches a server, and a Reset button restores the sample farm. Use it to show the app without any backend; CSV export and print are switched off in this mode.
+
 ---
 
 ## Push to GitHub

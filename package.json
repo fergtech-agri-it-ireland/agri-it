@@ -17,7 +17,9 @@
     "supabase:start": "supabase start",
     "supabase:stop": "supabase stop",
     "supabase:reset": "supabase db reset",
-    "supabase:status": "supabase status"
+    "supabase:status": "supabase status",
+    "build:demo": "tsc -b && vite build --mode demo",
+    "preview:demo": "vite preview --mode demo --outDir dist-demo"
   },
   "dependencies": {
     "@fontsource/atkinson-hyperlegible": "^5.1.0",
@@ -43,6 +45,7 @@
     "typescript": "~5.6.3",
     "vite": "^5.4.10",
     "vite-plugin-pwa": "^0.20.5",
+    "vite-plugin-singlefile": "^2.3.3",
     "vitest": "^2.1.4"
   }
 }

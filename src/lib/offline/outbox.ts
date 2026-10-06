@@ -4,6 +4,7 @@
  * is idempotent (RPCs return early; inserts upsert with ignoreDuplicates).
  */
 import { supabase } from '../supabase';
+import { IS_DEMO } from '../env';
 
 export type Op =
   | { kind: 'rpc'; fn: string; args: Record<string, unknown> }
@@ -86,7 +87,7 @@ async function run(op: Op): Promise<unknown> {
 
 /** Run now if we can; queue if offline. Server-side validation errors are thrown to the caller. */
 export async function execute(ops: Op[], label: string): Promise<{ queued: boolean }> {
-  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+  if (!IS_DEMO && typeof navigator !== 'undefined' && !navigator.onLine) {
     enqueue(ops, label);
     return { queued: true };
   }

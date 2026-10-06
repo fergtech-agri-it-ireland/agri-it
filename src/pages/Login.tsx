@@ -1,8 +1,10 @@
 import { useState, type FormEvent } from 'react';
 import { Navigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { IS_DEMO } from '../lib/env';
 import { useFarmCtx } from '../lib/data/farm';
 import { Button, Card } from '../components/ui';
+import { Logo } from '../components/Logo';
 
 export default function Login() {
   const { session } = useFarmCtx();
@@ -30,7 +32,7 @@ export default function Login() {
   return (
     <div className="mx-auto flex min-h-[100dvh] max-w-md flex-col justify-center gap-6 px-4 py-10">
       <div className="flex items-center gap-3">
-        <img src="/icons/favicon.svg" alt="" className="h-14 w-14" />
+        <Logo className="h-14 w-14" />
         <div>
           <h1 className="h-display text-5xl">Agri-It</h1>
           <p className="text-muted">Feed, cash and records. Enter it once.</p>
@@ -54,7 +56,7 @@ export default function Login() {
           {mode === 'in' ? 'New to Agri-It? Create an account' : 'Have an account? Sign in'}
         </Button>
       </Card>
-      {import.meta.env.DEV && (
+      {(import.meta.env.DEV || IS_DEMO) && (
         <Button variant="hivis" block disabled={busy} onClick={(e) => { setMode('in'); submit(e, { email: 'demo@agri-it.local', password: 'agri-it-demo' }); }}>
           Open the demo farm
         </Button>

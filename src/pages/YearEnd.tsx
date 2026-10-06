@@ -5,6 +5,7 @@ import { useFarmData } from '../lib/data/farm';
 import { yearEndCsv, yearEndPack } from '../lib/forecast/money';
 import { eur, fmtDate, fmtMonth, fmtNum, todayISO } from '../lib/format';
 import { Button, Card, Chips, List, Row, Screen, SectionTitle, ToneIcon } from '../components/ui';
+import { IS_DEMO } from '../lib/env';
 
 export default function YearEnd() {
   const b = useFarmData();
@@ -63,10 +64,14 @@ export default function YearEnd() {
       <SectionTitle>Main suppliers</SectionTitle>
       <List>{pack.supplierTotals.slice(0, 8).map((s) => <Row key={s.name} title={s.name} right={<b>{eur(s.total)}</b>} />)}</List>
 
-      <div className="no-print grid grid-cols-2 gap-2">
-        <Button variant="primary" onClick={exportCsv}><Download className="h-5 w-5" />Export CSV</Button>
-        <Button variant="secondary" onClick={() => window.print()}><Printer className="h-5 w-5" />Print / PDF</Button>
-      </div>
+      {IS_DEMO ? (
+        <p className="rounded-xl bg-field-light px-4 py-3 font-bold text-field">CSV export and Print / PDF work in the installed app. This demo can only show the pack on screen.</p>
+      ) : (
+        <div className="no-print grid grid-cols-2 gap-2">
+          <Button variant="primary" onClick={exportCsv}><Download className="h-5 w-5" />Export CSV</Button>
+          <Button variant="secondary" onClick={() => window.print()}><Printer className="h-5 w-5" />Print / PDF</Button>
+        </div>
+      )}
       <p className="no-print px-1 text-sm text-muted">Tax-relevant records stay in <Link className="underline" to="/records">Records</Link>. Discuss accounts and tax with your accountant.</p>
     </Screen>
   );

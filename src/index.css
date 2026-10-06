@@ -1,0 +1,61 @@
+@import '@fontsource/atkinson-hyperlegible/400.css';
+@import '@fontsource/atkinson-hyperlegible/700.css';
+@import '@fontsource/barlow-condensed/600.css';
+@import '@fontsource/barlow-condensed/700.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+    text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-pasture font-sans text-base text-ink antialiased;
+    min-height: 100dvh;
+  }
+  /* Sunlight mode: pure black on white, heavier strokes. Toggle in Settings. */
+  html.sunlight body { @apply bg-white; color: #000; }
+  html.sunlight .text-muted { color: #1f2a24; }
+  html.sunlight .border-line { border-color: #6b7a71; }
+  html.sunlight .shadow-lift { box-shadow: none; border: 2px solid #17211c; }
+
+  :focus-visible {
+    outline: 3px solid #1d4d36;
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  input, select, textarea, button { font: inherit; }
+  input[type='number']::-webkit-inner-spin-button,
+  input[type='number']::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  input[type='number'] { -moz-appearance: textfield; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
+}
+
+@layer components {
+  .numeral { @apply font-display font-bold tracking-tight; font-variant-numeric: tabular-nums; }
+  .h-display { @apply font-display font-semibold leading-none tracking-tight; }
+  .input {
+    @apply block w-full min-h-tap rounded-xl border-2 border-line bg-white px-4 text-lg text-ink placeholder:text-muted/70;
+  }
+  .input:focus { @apply border-field outline-none ring-2 ring-field/25; }
+  .label { @apply mb-1.5 block text-[0.95rem] font-bold text-ink; }
+  .hint { @apply mt-1 text-sm text-muted; }
+  .pad-bottom { padding-bottom: calc(6.5rem + env(safe-area-inset-bottom)); }
+}
+
+/* Sheet + toast motion answers the user's action only */
+@keyframes sheet-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@keyframes toast-in { from { transform: translateY(12px); opacity: 0; } to { transform: none; opacity: 1; } }
+.anim-sheet { animation: sheet-up 180ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+.anim-toast { animation: toast-in 160ms ease-out; }
+
+@media print {
+  nav, .no-print { display: none !important; }
+  body { background: #fff; }
+  .pad-bottom { padding-bottom: 0; }
+}

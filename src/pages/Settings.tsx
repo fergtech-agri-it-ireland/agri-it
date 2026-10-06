@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { COUNTIES_NI, COUNTIES_ROI, type Farm } from '../lib/types';
 import { todayISO } from '../lib/format';
 import { Button, Card, Chips, DateChips, Field, NumberInput, Screen, SectionTitle, Stepper, TextInput } from '../components/ui';
+import { useTheme, type DawnPref } from '../lib/theme';
 
 export default function Settings() {
   const b = useFarmData();
@@ -21,26 +22,27 @@ export default function Settings() {
   const [reserve, setReserve] = useState(f.forage_reserve_percent);
   const [housing, setHousing] = useState(f.housing_start ?? '');
   const [turnout, setTurnout] = useState(f.turnout_date ?? '');
-  const [sun, setSun] = useState(document.documentElement.classList.contains('sunlight'));
+  const [feedTarget, setFeedTarget] = useState(f.feed_target_days ?? 30);
+  const theme = useTheme();
 
   async function submit() {
     const patch: Partial<Farm> = {
       name, county, eircode: eircode || null, opening_cash_eur: cash === '' ? null : Number(cash), opening_cash_date: cash === '' ? null : cashDate,
       financial_year_start_month: Number(fyMonth), default_lead_time_days: knowLead ? lead : null, forage_reserve_percent: reserve,
-      housing_start: housing || null, turnout_date: turnout || null
+      housing_start: housing || null, turnout_date: turnout || null, feed_target_days: feedTarget
     };
     await save([{ kind: 'update', table: 'farms', match: { id: f.id }, patch }], { label: 'Settings saved', patch: (x) => ({ ...x, farm: { ...x.farm, ...patch } }) });
   }
 
   return (
     <Screen title="Settings" back="/farm">
-      <Card>
+      <SectionTitle>Screen</SectionTitle>
+      <Card className="space-y-4">
+        <Chips<DawnPref> label="Dawn mode (dark screen)" columns={3} value={theme.dawnPref} onChange={theme.setDawnPref}
+          options={[{ value: 'off', label: 'Off' }, { value: 'on', label: 'On' }, { value: 'auto', label: 'Auto', sub: 'Before 8am, after 8pm' }]}
+          hint="Easier on the eyes in the parlour before light. Only changes this phone." />
         <label className="flex min-h-tap items-center gap-3 font-bold">
-          <input type="checkbox" className="h-6 w-6 accent-field" checked={sun} onChange={(e) => {
-            setSun(e.target.checked);
-            document.documentElement.classList.toggle('sunlight', e.target.checked);
-            localStorage.setItem('agri-it:sunlight', e.target.checked ? '1' : '0');
-          }} />
+          <input type="checkbox" className="h-6 w-6 accent-field" checked={theme.sunlight} onChange={(e) => theme.setSunlight(e.target.checked)} />
           Sunlight mode (maximum contrast outdoors)
         </label>
       </Card>
@@ -70,6 +72,7 @@ export default function Settings() {
           Default delivery time for feed
         </label>
         {knowLead && <Stepper label="Days from order to delivery" value={lead} onChange={setLead} unit="days" hint="Used when a feed or supplier has no lead time of its own." />}
+        <Stepper label="Feed you like to have in hand" value={feedTarget} step={5} min={1} onChange={setFeedTarget} unit="days" hint="Fills the Feed dial on Today. Your own comfort level, not a recommendation." />
         <div className="grid grid-cols-2 gap-2">
           <Field label="Housing from" htmlFor="h"><input id="h" type="date" className="input" value={housing} onChange={(e) => setHousing(e.target.value)} /></Field>
           <Field label="Turnout" htmlFor="t"><input id="t" type="date" className="input" value={turnout} onChange={(e) => setTurnout(e.target.value)} /></Field>

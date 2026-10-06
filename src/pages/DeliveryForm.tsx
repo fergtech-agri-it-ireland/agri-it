@@ -1,9 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useFarmData, useFarmCtx, useSave } from '../lib/data/farm';
 import { forecastFeed } from '../lib/forecast/feed';
 import type { Evidence, FeedTransaction } from '../lib/types';
-import { eur, fmtDay, fmtKg, todayISO, uuid } from '../lib/format';
+import { eur, fmtDay, fmtKg, fmtMonth, todayISO, uuid } from '../lib/format';
+import { budgetVsActual, fyRange } from '../lib/forecast/money';
+import { clearPendingPhoto, peekPendingPhoto } from '../lib/pendingPhoto';
+import { showSaved } from '../lib/saved';
 import { uploadDocument } from '../lib/upload';
 import { useToast } from '../components/Toast';
 import { Button, Card, Chips, DateChips, Empty, LinkButton, NumberInput, SaveBar, Screen } from '../components/ui';
@@ -36,7 +39,8 @@ export default function DeliveryForm() {
   const [priceMode, setPriceMode] = useState<'per_t' | 'total'>('per_t');
   const [price, setPrice] = useState(initialLast?.price_per_tonne_eur ? String(initialLast.price_per_tonne_eur) : '');
   const [evidence, setEvidence] = useState<Evidence>('confirmed_docket');
-  const [photo, setPhoto] = useState<File | null>(null);
+  const [photo, setPhoto] = useState<File | null>(() => peekPendingPhoto());
+  useEffect(() => () => clearPendingPhoto(), []);
   const [busy, setBusy] = useState(false);
 
   function pickFeed(id: string) {
@@ -79,7 +83,7 @@ export default function DeliveryForm() {
       catch (e) { toast.show({ message: (e as Error).message, tone: 'error' }); }
     }
     const id = uuid();
-    const ok = await save([{
+    const result = await save([{
       kind: 'rpc', fn: 'record_feed_delivery', args: {
         p_id: id, p_farm_id: farmId, p_feed_product_id: feedId, p_quantity_kg: qty, p_delivery_date: date, p_supplier_id: supplierId,
         p_order_date: orderId ? b.txns.find((t) => t.id === orderId)?.order_date ?? null : null,
@@ -89,6 +93,7 @@ export default function DeliveryForm() {
       }
     }], {
       label: 'Delivery saved',
+      quiet: true,
       patch: (x) => ({
         ...x,
         txns: [...x.txns.map((t) => (t.id === orderId ? { ...t, order_status: 'delivered' as const } : t)), { ...draft, id, document_id: documentId }]
@@ -97,7 +102,36 @@ export default function DeliveryForm() {
       undoLabel: 'Delivery removed'
     });
     setBusy(false);
-    if (ok) nav(`/feed/${feedId}`, { replace: true });
+    if (!result) return;
+
+    // Before/after for the Saved screen, from the same engines the app uses everywhere
+    const product = b.products.find((p) => p.id === feedId)!;
+    const supplierName = b.suppliers.find((s) => s.id === supplierId)?.name ?? null;
+    const fy = fyRange(b.farm, today);
+    const feedSpend = b.costs.filter((c) => c.category === 'feed' && c.occurred_on >= fy.start && c.occurred_on <= fy.end).reduce((s, c) => s + Number(c.amount_eur), 0);
+    const feedBudget = budgetVsActual(b.farm, b, today).rows.find((r) => r.kind === 'cost' && r.category === 'feed')?.budget ?? 0;
+    const before = preview?.before;
+    const after = preview?.after;
+    const days = (n: number | null | undefined) => (n === null || n === undefined ? null : Math.floor(n));
+    showSaved(nav, result, {
+      title: 'Delivery saved',
+      subtitle: `${product.name}, ${fmtKg(qty)}${supplierName ? ` from ${supplierName}` : ''}`,
+      compare: days(before?.daysRemaining) !== null && days(after?.daysRemaining) !== null
+        ? { label: `Days of ${product.name} left`, before: days(before!.daysRemaining)!, after: days(after!.daysRemaining)!, unit: 'days' }
+        : undefined,
+      rows: [
+        ...(after?.runOutDate ? [{ label: 'Runs out', before: before?.runOutDate ? fmtDay(before.runOutDate) : null, after: fmtDay(after.runOutDate) }] : []),
+        ...(after?.orderByDate ? [{ label: 'Order by', before: before?.orderByDate ? fmtDay(before.orderByDate) : null, after: fmtDay(after.orderByDate) }] : []),
+        ...(total ? [{ label: 'Feed spend this year', before: eur(feedSpend), after: eur(feedSpend + total), sub: feedBudget > 0 ? `of ${eur(feedBudget)} budget so far` : undefined }] : [])
+      ],
+      note: total
+        ? `Also added ${eur(total)} to ${fmtMonth(date.slice(0, 7))} costs${supplierName ? ` and ${supplierName}'s history` : ''}.`
+        : 'No price entered, so costs and cash are unchanged. You can add the invoice later.',
+      undo: [{ kind: 'rpc', fn: 'undo_feed_delivery', args: { p_id: id } }],
+      undoLabel: 'Delivery removed',
+      photo: documentId ? undefined : { table: 'feed_transactions', id, recordType: 'feed_docket' },
+      again: { label: 'Another delivery', to: '/record/delivery' }
+    });
   }
 
   const order = orderId ? b.txns.find((t) => t.id === orderId) : null;

@@ -42,7 +42,7 @@ export default function SupplierDetail() {
           </div>
         ))}
         {c.note && <p className="text-muted">{c.note}</p>}
-        {supplier.source_url && <a href={supplier.source_url} target="_blank" rel="noreferrer" className="inline-flex min-h-tap items-center gap-1 font-bold text-field underline">Check the supplier's own contact page <ExternalLink className="h-4 w-4" /></a>}
+        {supplier.source_url && <a href={supplier.source_url} target="_blank" rel="noreferrer" className="inline-flex min-h-tap items-center gap-1 font-bold text-accent underline">Check the supplier's own contact page <ExternalLink className="h-4 w-4" /></a>}
         {spend > 0 && <p className="text-sm">You've spent {eur(spend)} with them in the last two years.</p>}
       </Card>
       <SectionTitle>My rep</SectionTitle>

@@ -1,8 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useFarmData, useFarmCtx, useSave } from '../lib/data/farm';
 import type { Income } from '../lib/types';
 import { eur, fmtNum, todayISO, uuid } from '../lib/format';
+import { budgetVsActual, cashPosition, fyRange } from '../lib/forecast/money';
+import { clearPendingPhoto, peekPendingPhoto } from '../lib/pendingPhoto';
+import { showSaved } from '../lib/saved';
 import { uploadDocument } from '../lib/upload';
 import { Button, Card, DateChips, NumberInput, SaveBar, Screen, TextInput } from '../components/ui';
 import { PhotoInput } from '../components/pickers';
@@ -20,7 +23,8 @@ export default function MilkSaleForm() {
   const [showSolids, setShowSolids] = useState(false);
   const [date, setDate] = useState(todayISO());
   const [buyer, setBuyer] = useState(last?.counterparty ?? '');
-  const [photo, setPhoto] = useState<File | null>(null);
+  const [photo, setPhoto] = useState<File | null>(() => peekPendingPhoto());
+  useEffect(() => () => clearPendingPhoto(), []);
   const cpl = amount && litres ? (Number(amount) / Number(litres)) * 100 : null;
 
   async function submit() {
@@ -30,12 +34,37 @@ export default function MilkSaleForm() {
       milk_litres: litres ? Number(litres) : null, fat_kg: fat ? Number(fat) : null, protein_kg: protein ? Number(protein) : null,
       description: 'Milk cheque', document_id: documentId
     };
-    const ok = await save([{ kind: 'insert', table: 'income', row }], {
+    const result = await save([{ kind: 'insert', table: 'income', row }], {
       label: 'Milk cheque saved',
+      quiet: true,
       patch: (x) => ({ ...x, income: [{ ...row, animal_group_id: null, head_count: null } as Income, ...x.income] }),
       undo: [{ kind: 'delete', table: 'income', match: { id: row.id } }]
     });
-    if (ok) nav('/money', { replace: true });
+    if (!result) return;
+
+    const today = todayISO();
+    const fy = fyRange(b.farm, today);
+    const milkYear = b.income.filter((i) => i.income_type === 'milk' && i.occurred_on >= fy.start && i.occurred_on <= fy.end);
+    const yearBefore = milkYear.reduce((s, i) => s + Number(i.amount_eur), 0);
+    const litresYear = milkYear.reduce((s, i) => s + Number(i.milk_litres ?? 0), 0) + Number(litres || 0);
+    const yearAfter = yearBefore + (row.occurred_on >= fy.start && row.occurred_on <= fy.end ? row.amount_eur : 0);
+    const budget = budgetVsActual(b.farm, b, today).rows.find((r) => r.kind === 'income' && r.category === 'milk')?.budget ?? 0;
+    const cash = cashPosition(b.farm, b.income, b.costs, today);
+    const litresWithPrice = milkYear.filter((i) => i.milk_litres).reduce((s, i) => s + Number(i.amount_eur), 0) + (litres ? row.amount_eur : 0);
+    showSaved(nav, result, {
+      title: 'Milk cheque saved',
+      subtitle: `${eur(row.amount_eur)}${buyer ? ` from ${buyer}` : ''}${litres ? `, ${fmtNum(Number(litres))} L` : ''}`,
+      rows: [
+        { label: 'Milk income this year', before: eur(yearBefore), after: eur(yearAfter), sub: budget > 0 ? `of ${eur(budget)} budget so far` : undefined },
+        ...(cash && row.occurred_on <= today ? [{ label: 'Cash recorded', before: eur(cash.balance), after: eur(cash.balance + row.amount_eur) }] : []),
+        ...(cpl !== null ? [{ label: 'This cheque', after: `${fmtNum(cpl)} c/L`, sub: litresYear > 0 ? `Year average ${fmtNum((litresWithPrice / litresYear) * 100)} c/L` : undefined }] : [])
+      ],
+      note: 'Added to income, cash flow and the year-end pack.',
+      undo: [{ kind: 'delete', table: 'income', match: { id: row.id } }],
+      undoLabel: 'Milk cheque removed',
+      photo: documentId ? undefined : { table: 'income', id: row.id, recordType: 'invoice' },
+      again: { label: 'Another cheque', to: '/record/milk' }
+    });
   }
 
   return (
@@ -44,7 +73,7 @@ export default function MilkSaleForm() {
         <NumberInput label="Amount received" value={amount} onChange={setAmount} unit="€" autoFocus />
         <NumberInput label="Litres (optional)" value={litres} onChange={setLitres} unit="L" hint={cpl ? `${fmtNum(cpl)} c/L` : last?.milk_litres ? `Last cheque: ${fmtNum(Number(last.milk_litres))} L for ${eur(Number(last.amount_eur))}` : undefined} />
         {!showSolids ? (
-          <button type="button" className="min-h-tap font-bold text-field underline" onClick={() => setShowSolids(true)}>Add fat and protein kg</button>
+          <button type="button" className="min-h-tap font-bold text-accent underline" onClick={() => setShowSolids(true)}>Add fat and protein kg</button>
         ) : (
           <div className="grid grid-cols-2 gap-3">
             <NumberInput label="Fat" value={fat} onChange={setFat} unit="kg" />

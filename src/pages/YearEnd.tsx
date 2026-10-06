@@ -35,7 +35,7 @@ export default function YearEnd() {
       ) : (
         <List>
           {pack.missing.map((m) => (
-            <Row key={m.id} to={m.to} icon={<ToneIcon tone="warn" />} title={m.text} right={<span className="no-print font-bold text-field">{m.fix}</span>} />
+            <Row key={m.id} to={m.to} icon={<ToneIcon tone="warn" />} title={m.text} right={<span className="no-print font-bold text-accent">{m.fix}</span>} />
           ))}
         </List>
       )}
@@ -65,7 +65,7 @@ export default function YearEnd() {
       <List>{pack.supplierTotals.slice(0, 8).map((s) => <Row key={s.name} title={s.name} right={<b>{eur(s.total)}</b>} />)}</List>
 
       {IS_DEMO ? (
-        <p className="rounded-xl bg-field-light px-4 py-3 font-bold text-field">CSV export and Print / PDF work in the installed app. This demo can only show the pack on screen.</p>
+        <p className="rounded-xl bg-field-light px-4 py-3 font-bold text-accent">CSV export and Print / PDF work in the installed app. This demo can only show the pack on screen.</p>
       ) : (
         <div className="no-print grid grid-cols-2 gap-2">
           <Button variant="primary" onClick={exportCsv}><Download className="h-5 w-5" />Export CSV</Button>

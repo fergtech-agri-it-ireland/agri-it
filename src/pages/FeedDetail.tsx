@@ -1,15 +1,14 @@
 import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronRight, Pencil } from 'lucide-react';
+import { CalendarDays, Pencil, Phone } from 'lucide-react';
 import { useFarmData, useSave } from '../lib/data/farm';
 import { useDerived } from '../lib/data/derived';
-import { countVariances } from '../lib/forecast/feed';
+import { countVariances, rulesForDay, runoutSteps } from '../lib/forecast/feed';
 import { supabase } from '../lib/supabase';
 import { EVIDENCE_LABEL } from '../lib/types';
 import { eur, fmtDate, fmtDay, fmtKg, fmtNum } from '../lib/format';
-import { resolveContacts } from '../lib/suppliers';
+import { resolveContacts, telHref } from '../lib/suppliers';
 import { Button, CallButton, Card, ConfidenceBadge, Empty, Explain, LinkButton, List, Row, Screen, SectionTitle } from '../components/ui';
-import { FeedGauge } from '../components/FeedGauge';
 
 export default function FeedDetail() {
   const { id } = useParams();
@@ -39,21 +38,75 @@ export default function FeedDetail() {
   const contacts = supplier ? resolveContacts(supplier, b.branches, b.supplierSettings.find((s) => s.supplier_id === supplier.id), b.farm) : null;
   const prev = (snaps.data ?? []).find((s) => s.output.run_out !== f.runOutDate);
 
+  // The sum (after MyFitnessPal's remaining-calories equation): stock minus each stretch of planned use
+  const steps = f.stockKg !== null && f.stockKg > 0 ? runoutSteps(f.stockKg, rules, b.groups, d.today) : [];
+  const lastCount = [...txns].find((t) => t.txn_type === 'count' || t.txn_type === 'opening');
+  const deliveredSince = lastCount ? txns.filter((t) => t.txn_type === 'delivery' && t.effective_on > lastCount.effective_on).reduce((s, t) => s + Number(t.quantity_kg), 0) : 0;
+  const stockBasis = lastCount
+    ? `${lastCount.txn_type === 'count' ? 'Counted' : 'Opening stock'} ${fmtDay(lastCount.effective_on)}${deliveredSince ? `, then ${fmtKg(deliveredSince)} delivered` : ''}, less planned use`
+    : 'From deliveries only, no count yet';
+  const stepLabel = (from: string, to: string, i: number) => {
+    const start = i === 0 && from === d.today ? 'Today' : fmtDay(from);
+    return from === to ? start : `${start} to ${fmtDay(to)}`;
+  };
+  const tempLabel = (day: string) => rulesForDay(rules, day).find((r) => r.is_temporary)?.label;
+  const lastDelivery = txns.find((t) => t.txn_type === 'delivery');
+  const shares = f.activeRules.filter((r) => r.dailyKg > 0);
+  const shades = ['bg-field', 'bg-field/60', 'bg-field/35', 'bg-field/20'];
+  const orderTone = f.status === 'order_now' ? 'bg-danger-bg text-danger' : f.status === 'order_soon' ? 'bg-warn-bg text-warn' : 'bg-ok-bg text-ok';
+  const phone = contacts?.routes[0];
+  // Every line of the sum in kg so it visibly adds up (8,600 − 840 − 4,000 = 3,760)
+  const kgx = (n: number) => `${Math.round(n).toLocaleString('en-IE')} kg`;
+
   return (
-    <Screen title={product.name} back="/forecast" sub={[supplier?.name, product.storage_location].filter(Boolean).join(', ')}
+    <Screen title={product.name} back="/" sub={[product.storage_location, supplier ? `from ${supplier.name}` : null].filter(Boolean).join(', ')}
       right={<Link to={`/feed/${product.id}/edit`} aria-label="Edit feed" className="flex min-h-tap min-w-tap items-center justify-center rounded-full hover:bg-field-light"><Pencil className="h-6 w-6" /></Link>}>
-      <FeedGauge product={product} f={f} phone={contacts?.routes[0]?.phone} />
 
-      <div className="grid grid-cols-2 gap-2">
-        <LinkButton to={`/record/delivery?feed=${product.id}`} variant="primary">Feed arrived</LinkButton>
-        <LinkButton to={`/feed/${product.id}/count`} variant="secondary">Stock count</LinkButton>
-      </div>
-
-      {f.upcomingChanges.length > 0 && (
-        <Card>
-          <p className="font-bold">Coming up</p>
-          {f.upcomingChanges.map((c) => <p key={c.date}>{fmtDay(c.date)}: {c.reason}, use becomes {fmtKg(c.dailyUseKg)}/day</p>)}
-        </Card>
+      {f.stockKg === null ? (
+        <Empty title="How much is in the bin?" body="Add a stock count and Agri-It works out when it runs out." action={<LinkButton to={`/feed/${product.id}/count`} variant="hivis">Add a stock count</LinkButton>} />
+      ) : (
+        <section aria-label="How the run-out date is worked out" className="rounded-[1.375rem] bg-card px-4 pb-3 pt-3.5 shadow-lift" style={{ fontVariantNumeric: 'tabular-nums' }}>
+          <div className="flex items-baseline justify-between gap-3 border-b border-line pb-2.5">
+            <span><b className="block">In the bin now</b><span className="text-sm text-muted">{stockBasis}</span></span>
+            <b className="shrink-0 text-[1.1875rem]">{kgx(f.stockKg)}</b>
+          </div>
+          {steps.map((st, i) => st.final ? (
+            <div key={st.from} className="flex items-baseline justify-between gap-3 border-b-2 border-ink py-2.5">
+              <span><b className="block">{steps.length > 1 ? 'Left after that' : 'At your feeding plan'}</b><span className="text-sm text-muted">{kgx(st.startKg)} at {kgx(st.kgPerDay)} a day</span></span>
+              <b className="shrink-0 text-[1.1875rem]">{Math.floor(st.days)} {Math.floor(st.days) === 1 ? 'day' : 'days'}</b>
+            </div>
+          ) : (
+            <div key={st.from} className="flex items-baseline justify-between gap-3 border-b border-line py-2.5">
+              <span><b className="block">{stepLabel(st.from, st.to, i)}</b><span className="text-sm text-muted">{tempLabel(st.from) ? `${tempLabel(st.from)}: ` : ''}{kgx(st.kgPerDay)} a day for {st.days} {st.days === 1 ? 'day' : 'days'}</span></span>
+              <b className="shrink-0 text-[1.1875rem] text-muted">−{kgx(st.usedKg)}</b>
+            </div>
+          ))}
+          {steps.length === 0 ? (
+            <div className="pt-3">
+              <p className="font-bold">No feeding plan, so no run-out date.</p>
+              <LinkButton to={`/feed/${product.id}/rule/new`} variant="hivis" className="mt-2">Add who eats it</LinkButton>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-3 pt-2.5">
+              <span>
+                <b className="block text-[1.1875rem]">{f.runOutDate ? `Runs out ${fmtDay(f.runOutDate)}` : 'Lasts over a year'}</b>
+                <span className="text-sm text-muted">{f.safetyLabel} spare kept{f.leadTimeDays !== null ? `, ${f.leadTimeDays} days for delivery` : ''}</span>
+              </span>
+              <span className="numeral shrink-0 text-[2.75rem] leading-none">{f.daysRemaining !== null ? Math.floor(f.daysRemaining) : '365+'}<span className="font-sans text-sm font-bold"> days</span></span>
+            </div>
+          )}
+          {steps.length > 0 && (f.orderByDate ? (
+            <p className={`mt-3 flex items-center gap-2.5 rounded-[0.875rem] px-3 py-2.5 font-bold ${orderTone}`}>
+              <CalendarDays className="h-[1.375rem] w-[1.375rem] shrink-0" aria-hidden />
+              {f.status === 'order_now' ? `Order now. The order-by date was ${fmtDay(f.orderByDate)}` : `Order by ${fmtDay(f.orderByDate)}`}
+            </p>
+          ) : f.reorderDate && (
+            <Link to={`/feed/${product.id}/edit`} className="mt-3 flex min-h-tap items-center gap-2.5 rounded-[0.875rem] bg-field-light px-3 font-bold text-accent">
+              <CalendarDays className="h-[1.375rem] w-[1.375rem] shrink-0" aria-hidden />Reorder point {fmtDay(f.reorderDate)}. Set a delivery time for an order-by date
+            </Link>
+          ))}
+          <div className="mt-3 flex justify-end"><ConfidenceBadge level={f.confidence} /></div>
+        </section>
       )}
 
       {f.openOrders.length > 0 && (
@@ -61,27 +114,57 @@ export default function FeedDetail() {
           {f.openOrders.map((o) => (
             <Row key={o.id} to={`/record/delivery?feed=${product.id}&order=${o.id}`} title={`Ordered ${fmtKg(o.kg)}, not delivered`}
               sub={o.expected ? `Expected ${fmtDay(o.expected)}. Not counted as stock until you confirm it arrived.` : 'Not counted as stock until delivered.'}
-              right={<span className="font-bold text-field">Confirm</span>} />
+              right={<span className="font-bold text-accent">Confirm</span>} />
           ))}
         </List>
       )}
 
-      <SectionTitle action={<Link to={`/feed/${product.id}/rule/new`} className="min-h-tap px-2 py-3 font-bold text-field">Add group</Link>}>Your feeding plan</SectionTitle>
+      <div className="grid grid-cols-2 gap-2.5">
+        {phone ? (
+          <a href={telHref(phone.phone)} className="flex min-h-[4.25rem] flex-col items-center justify-center rounded-[1.125rem] border-2 border-ink bg-card leading-tight">
+            <span className="flex items-center gap-1.5 font-bold"><Phone className="h-5 w-5" aria-hidden />Call {supplier?.name.split(' ')[0]}</span>
+            <span className="text-sm text-muted">{phone.phone}</span>
+          </a>
+        ) : (
+          <LinkButton to={`/feed/${product.id}/count`} variant="secondary">Stock count</LinkButton>
+        )}
+        <Link to={`/record/order?feed=${product.id}${lastDelivery ? `&kg=${lastDelivery.quantity_kg}` : ''}`} className="flex min-h-[4.25rem] flex-col items-center justify-center rounded-[1.125rem] bg-hivis leading-tight text-onhivis">
+          <b>{lastDelivery ? `Order ${fmtKg(Number(lastDelivery.quantity_kg))} again` : 'Record an order'}</b>
+          {lastDelivery?.price_per_tonne_eur && <span className="text-sm">Last price {eur(Number(lastDelivery.price_per_tonne_eur))}/t</span>}
+        </Link>
+        <LinkButton to={`/record/delivery?feed=${product.id}`} variant="primary">Feed arrived</LinkButton>
+        {phone ? <LinkButton to={`/feed/${product.id}/count`} variant="secondary">Stock count</LinkButton> : <span />}
+      </div>
+
+      <SectionTitle action={<Link to={`/feed/${product.id}/rule/new`} className="flex min-h-tap items-center px-2 font-bold text-accent">Add group</Link>}>Who eats it</SectionTitle>
       {rules.length === 0 ? (
         <Empty title="No feeding plan" body="Tell Agri-It which groups eat this feed and how much. It never suggests a rate." action={<LinkButton to={`/feed/${product.id}/rule/new`} variant="hivis">Add a group</LinkButton>} />
       ) : (
-        <List>
-          {rules.map((r) => {
-            const g = b.groups.find((x) => x.id === r.animal_group_id);
-            const heads = r.head_count_override ?? g?.head_count ?? 0;
-            return (
-              <Row key={r.id} to={`/feed/${product.id}/rule/${r.id}`}
-                title={<>{g?.name ?? 'Group'} {r.is_temporary && <span className="ml-1 rounded bg-hivis px-1.5 text-sm">Temporary</span>}</>}
-                sub={`${heads} head × ${fmtNum(Number(r.kg_per_head_per_feed))} kg × ${fmtNum(Number(r.feeds_per_day))}/day = ${fmtKg(heads * r.kg_per_head_per_feed * r.feeds_per_day)}/day${r.is_temporary || r.end_date ? `, ${fmtDay(r.start_date)} to ${r.end_date ? fmtDay(r.end_date) : 'ongoing'}` : ''}`}
-                right={<ChevronRight className="h-5 w-5 text-muted" />} />
-            );
-          })}
-        </List>
+        <div className="rounded-[1.375rem] bg-card px-4 pb-1 pt-3 shadow-lift">
+          {shares.length > 0 && (
+            <div className="flex h-[1.125rem] gap-0.5 overflow-hidden rounded-md" aria-hidden>
+              {shares.map((r, i) => <span key={r.ruleId} className={shades[i % shades.length]} style={{ flex: `${r.dailyKg} 1 0` }} />)}
+            </div>
+          )}
+          <div className="divide-y divide-line">
+            {rules.map((r) => {
+              const g = b.groups.find((x) => x.id === r.animal_group_id);
+              const heads = r.head_count_override ?? g?.head_count ?? 0;
+              const daily = heads * r.kg_per_head_per_feed * r.feeds_per_day;
+              const idx = shares.findIndex((x) => x.ruleId === r.id);
+              return (
+                <Link key={r.id} to={`/feed/${product.id}/rule/${r.id}`} className="flex min-h-[3.75rem] items-center gap-3 py-2">
+                  <span className={`h-3.5 w-3.5 shrink-0 rounded ${idx >= 0 ? shades[idx % shades.length] : 'border-2 border-dashed border-line'}`} aria-hidden />
+                  <span className="min-w-0 flex-1">
+                    <b className="block leading-snug">{g?.name ?? 'Group'}, {fmtKg(daily)} a day {r.is_temporary && <span className="ml-1 rounded bg-hivis px-1.5 text-sm text-onhivis">Temporary</span>}</b>
+                    <span className="text-sm text-muted">{heads} head, {fmtNum(Number(r.kg_per_head_per_feed))} kg {r.feeds_per_day === 1 ? 'once' : r.feeds_per_day === 2 ? 'twice' : `${fmtNum(Number(r.feeds_per_day))} times`} a day{r.is_temporary || r.end_date ? `, ${fmtDay(r.start_date)} to ${r.end_date ? fmtDay(r.end_date) : 'ongoing'}` : ''}</span>
+                  </span>
+                  <span className="font-bold text-accent">Change</span>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
       )}
 
       <Explain>

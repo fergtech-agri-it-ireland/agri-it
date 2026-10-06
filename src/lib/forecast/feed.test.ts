@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { countVariances, forecastFeed, rulesForDay } from './feed';
+import { countVariances, forecastFeed, rulesForDay, runoutSteps } from './feed';
 import type { AnimalGroup, FeedProduct, FeedTransaction, FeedingRule } from '../types';
 import { addDays } from '../format';
 
@@ -193,5 +193,28 @@ describe('predicted vs counted', () => {
     const last = v.at(-1)!;
     expect(last.predictedKg).toBe(5000 - 10 * 280);
     expect(last.varianceKg).toBe(2000 - 2200);
+  });
+});
+
+describe('runoutSteps: the sum on the feed screen', () => {
+  it('is one step when the plan is steady (spec example: 8,000 kg at 280 kg/day)', () => {
+    const s = runoutSteps(8000, specRules, groups, TODAY);
+    expect(s).toHaveLength(1);
+    expect(s[0].days).toBeCloseTo(28.57, 1);
+    expect(s[0].final).toBe(true);
+    expect(s[0].usedKg).toBeCloseTo(8000);
+  });
+  it('splits at a temporary plan and adds up to the forecast run-out', () => {
+    const temp = rule({ animal_group_id: 'cows', kg_per_head_per_feed: 1.5, feeds_per_day: 2, is_temporary: true, start_date: addDays(TODAY, 3), end_date: addDays(TODAY, 12) });
+    const rules = [...specRules, temp];
+    const s = runoutSteps(8600, rules, groups, TODAY);
+    expect(s.map((x) => [x.kgPerDay, Math.round(x.days * 10) / 10])).toEqual([[280, 3], [400, 10], [280, 13.4]]);
+    expect(s[2].startKg).toBe(3760);
+    const total = s.reduce((t, x) => t + x.days, 0);
+    const f = forecastFeed({ product, txns: [txn({ txn_type: 'count', quantity_kg: 8600, effective_on: TODAY, evidence: 'measured' })], rules, groups, farmLeadTimeDays: null, today: TODAY });
+    expect(total).toBeCloseTo(f.daysRemaining!, 5);
+  });
+  it('returns nothing to explain when there is no plan', () => {
+    expect(runoutSteps(1000, [], groups, TODAY)).toEqual([]);
   });
 });

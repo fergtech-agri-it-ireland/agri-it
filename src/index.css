@@ -7,6 +7,28 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Theme tokens as RGB channels. Day is the default; .sunlight and .dawn redefine them. */
+:root {
+  --ink: 23 33 28; --muted: 77 91 83; --line: 201 211 204; --pasture: 238 242 238; --card: 255 255 255;
+  --track: 230 236 231; --accent: 29 77 54; --inverse: 23 33 28; --oninverse: 255 255 255; --onhivis: 23 33 28;
+  --field: 29 77 54; --field-dark: 20 56 38; --field-light: 215 230 220;
+  --hivis: 255 198 26; --hivis-dark: 224 168 0;
+  --danger: 168 35 26; --danger-bg: 251 228 225; --warn: 122 74 0; --warn-bg: 255 241 204;
+  --ok: 30 107 67; --ok-bg: 225 242 231;
+  color-scheme: light;
+}
+/* Sunlight mode: pure white ground, darker greys and borders for glare. */
+html.sunlight { --pasture: 255 255 255; --ink: 0 0 0; --muted: 31 42 36; --line: 107 122 113; }
+/* Dawn mode: dark screen for early milking and late checks. */
+html.dawn {
+  --ink: 236 243 238; --muted: 169 185 175; --line: 44 63 51; --pasture: 14 23 18; --card: 23 36 28;
+  --track: 38 55 44; --accent: 143 211 174; --inverse: 236 243 238; --oninverse: 14 23 18;
+  --field: 47 122 85; --field-dark: 37 99 69; --field-light: 30 52 39;
+  --danger: 255 138 122; --danger-bg: 63 22 18; --warn: 255 212 92; --warn-bg: 58 46 5;
+  --ok: 127 221 170; --ok-bg: 18 48 31;
+  color-scheme: dark;
+}
+
 @layer base {
   html {
     -webkit-tap-highlight-color: transparent;
@@ -16,14 +38,11 @@
     @apply bg-pasture font-sans text-base text-ink antialiased;
     min-height: 100dvh;
   }
-  /* Sunlight mode: pure black on white, heavier strokes. Toggle in Settings. */
-  html.sunlight body { @apply bg-white; color: #000; }
-  html.sunlight .text-muted { color: #1f2a24; }
-  html.sunlight .border-line { border-color: #6b7a71; }
-  html.sunlight .shadow-lift { box-shadow: none; border: 2px solid #17211c; }
+  html.sunlight .shadow-lift { box-shadow: none; border: 2px solid rgb(var(--ink)); }
+  html.dawn .shadow-lift { box-shadow: none; }
 
   :focus-visible {
-    outline: 3px solid #1d4d36;
+    outline: 3px solid rgb(var(--accent));
     outline-offset: 2px;
     border-radius: 6px;
   }
@@ -40,7 +59,7 @@
   .numeral { @apply font-display font-bold tracking-tight; font-variant-numeric: tabular-nums; }
   .h-display { @apply font-display font-semibold leading-none tracking-tight; }
   .input {
-    @apply block w-full min-h-tap rounded-xl border-2 border-line bg-white px-4 text-lg text-ink placeholder:text-muted/70;
+    @apply block w-full min-h-tap rounded-xl border-2 border-line bg-card px-4 text-lg text-ink placeholder:text-muted/70;
   }
   .input:focus { @apply border-field outline-none ring-2 ring-field/25; }
   .label { @apply mb-1.5 block text-[0.95rem] font-bold text-ink; }

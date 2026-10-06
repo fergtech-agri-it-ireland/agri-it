@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { clearPendingPhoto, peekPendingPhoto } from '../lib/pendingPhoto';
 import { useNavigate } from 'react-router-dom';
 import { useFarmData, useFarmCtx, useSave } from '../lib/data/farm';
 import { uploadDocument } from '../lib/upload';
@@ -12,7 +14,8 @@ export default function RecordForm() {
   const { farmId } = useFarmCtx();
   const save = useSave();
   const nav = useNavigate();
-  const [type, setType] = useState<RecordType>('medicine');
+  const [params] = useSearchParams();
+  const [type, setType] = useState<RecordType>((params.get('type') as RecordType) ?? 'medicine');
   const [date, setDate] = useState(todayISO());
   const [title, setTitle] = useState('');
   const [product, setProduct] = useState('');
@@ -20,7 +23,8 @@ export default function RecordForm() {
   const [animals, setAnimals] = useState('');
   const [withdrawal, setWithdrawal] = useState('');
   const [direction, setDirection] = useState<'in' | 'out'>('out');
-  const [photo, setPhoto] = useState<File | null>(null);
+  const [photo, setPhoto] = useState<File | null>(() => peekPendingPhoto());
+  useEffect(() => () => clearPendingPhoto(), []);
 
   async function submit() {
     const documentId = photo && navigator.onLine ? await uploadDocument(photo, farmId!, type, true).catch(() => null) : null;

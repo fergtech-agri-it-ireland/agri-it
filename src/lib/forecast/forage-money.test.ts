@@ -6,7 +6,7 @@ import type { AnimalGroup, Farm, FarmBundle, ForageBenchmark, SilageStore } from
 const farm: Farm = {
   id: 'f', name: 'Test', eircode: null, county: 'Tipperary', jurisdiction: 'ROI', enterprise: 'dairy',
   financial_year_start_month: 1, opening_cash_eur: 10000, opening_cash_date: '2026-01-01',
-  default_lead_time_days: 3, forage_reserve_percent: 15, housing_start: '2026-11-01', turnout_date: '2027-03-01'
+  default_lead_time_days: 3, forage_reserve_percent: 15, feed_target_days: 30, housing_start: '2026-11-01', turnout_date: '2027-03-01'
 };
 const store = (p: Partial<SilageStore>): SilageStore => ({
   id: 's', farm_id: 'f', name: 'Pit', method: 'pit_dimensions', acreage: null, yield_t_per_acre: null,

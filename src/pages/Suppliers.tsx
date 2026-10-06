@@ -32,7 +32,7 @@ export default function Suppliers() {
         {list.map((s) => (
           <Row key={s.id} to={`/suppliers/${s.id}`} title={s.name}
             sub={s.farm_id ? 'Added by you' : s.verified_on ? <span className="inline-flex items-center gap-1"><ShieldCheck className="h-4 w-4" aria-hidden />Directory, {s.coverage.join(' and ')}</span> : 'Needs a verified number'}
-            right={<span className="flex items-center gap-2">{mine.has(s.id) && <span className="rounded bg-field-light px-2 text-sm font-bold text-field">Yours</span>}<ChevronRight className="h-5 w-5 text-muted" /></span>} />
+            right={<span className="flex items-center gap-2">{mine.has(s.id) && <span className="rounded bg-field-light px-2 text-sm font-bold text-accent">Yours</span>}<ChevronRight className="h-5 w-5 text-muted" /></span>} />
         ))}
       </List>
       <Sheet open={open} onClose={() => setOpen(false)} title="Local supplier">

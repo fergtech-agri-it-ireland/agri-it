@@ -29,6 +29,9 @@ import RecordForm from './pages/RecordForm';
 import Jobs from './pages/Jobs';
 import Ask from './pages/Ask';
 import Settings from './pages/Settings';
+import Record from './pages/Record';
+import Saved from './pages/Saved';
+import Diary from './pages/Diary';
 
 export default function App() {
   if (!supabaseConfigured) return <MissingConfig />;
@@ -45,6 +48,8 @@ export default function App() {
         <Route path="feed/:id/count" element={<StockCount />} />
         <Route path="feed/:id/rule/new" element={<FeedingRuleForm />} />
         <Route path="feed/:id/rule/:ruleId" element={<FeedingRuleForm />} />
+        <Route path="record" element={<Record />} />
+        <Route path="record/done" element={<Saved />} />
         <Route path="record/delivery" element={<DeliveryForm />} />
         <Route path="record/order" element={<OrderForm />} />
         <Route path="record/count" element={<StockCount />} />
@@ -54,6 +59,7 @@ export default function App() {
         <Route path="record/income" element={<IncomeForm />} />
         <Route path="money" element={<Money />} />
         <Route path="money/year-end" element={<YearEnd />} />
+        <Route path="diary" element={<Diary />} />
         <Route path="money/budget" element={<Budget />} />
         <Route path="farm" element={<FarmHub />} />
         <Route path="farm/groups" element={<Groups />} />
@@ -79,9 +85,9 @@ function MissingConfig() {
       <h1 className="h-display text-4xl">Connect Supabase</h1>
       <p>Agri-It needs a Supabase project. For local testing:</p>
       <ol className="list-decimal space-y-1 pl-6">
-        <li>Run <code className="rounded bg-white px-1">npm run supabase:start</code> (Docker must be running).</li>
-        <li>Copy <code className="rounded bg-white px-1">.env.example</code> to <code className="rounded bg-white px-1">.env.local</code> and paste the anon key it printed.</li>
-        <li>Restart <code className="rounded bg-white px-1">npm run dev</code>.</li>
+        <li>Run <code className="rounded bg-card px-1">npm run supabase:start</code> (Docker must be running).</li>
+        <li>Copy <code className="rounded bg-card px-1">.env.example</code> to <code className="rounded bg-card px-1">.env.local</code> and paste the anon key it printed.</li>
+        <li>Restart <code className="rounded bg-card px-1">npm run dev</code>.</li>
       </ol>
     </div>
   );

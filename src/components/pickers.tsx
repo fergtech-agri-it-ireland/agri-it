@@ -69,7 +69,7 @@ export function PhotoInput({ file, onFile }: { file: File | null; onFile: (f: Fi
         <input type="file" accept="image/*,application/pdf" capture="environment" className="sr-only" onChange={(e) => onFile(e.target.files?.[0] ?? null)} />
         {file ? `Attached: ${file.name}` : 'Take photo'}
       </label>
-      {file && <button type="button" className="mt-1 text-sm font-bold text-field underline" onClick={() => onFile(null)}>Remove photo</button>}
+      {file && <button type="button" className="mt-1 text-sm font-bold text-accent underline" onClick={() => onFile(null)}>Remove photo</button>}
       {!navigator.onLine && <p className="hint">You're offline. Photos can only be attached with signal; the rest saves now.</p>}
     </div>
   );

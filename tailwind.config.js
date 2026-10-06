@@ -6,15 +6,22 @@ export default {
   theme: {
     extend: {
       colors: {
-        ink: '#17211C',
-        muted: '#4D5B53',
-        line: '#C9D3CC',
-        pasture: '#EEF2EE',
-        field: { DEFAULT: '#1D4D36', dark: '#143826', light: '#D7E6DC' },
-        hivis: { DEFAULT: '#FFC61A', dark: '#E0A800' },
-        danger: { DEFAULT: '#A8231A', bg: '#FBE4E1' },
-        warn: { DEFAULT: '#7A4A00', bg: '#FFF1CC' },
-        ok: { DEFAULT: '#1E6B43', bg: '#E1F2E7' }
+        // Every colour is a CSS variable (src/index.css) so day, sunlight and dawn modes swap together.
+        ink: 'rgb(var(--ink) / <alpha-value>)',
+        muted: 'rgb(var(--muted) / <alpha-value>)',
+        line: 'rgb(var(--line) / <alpha-value>)',
+        pasture: 'rgb(var(--pasture) / <alpha-value>)',
+        card: 'rgb(var(--card) / <alpha-value>)',
+        track: 'rgb(var(--track) / <alpha-value>)',
+        accent: 'rgb(var(--accent) / <alpha-value>)',
+        inverse: 'rgb(var(--inverse) / <alpha-value>)',
+        oninverse: 'rgb(var(--oninverse) / <alpha-value>)',
+        onhivis: 'rgb(var(--onhivis) / <alpha-value>)',
+        field: { DEFAULT: 'rgb(var(--field) / <alpha-value>)', dark: 'rgb(var(--field-dark) / <alpha-value>)', light: 'rgb(var(--field-light) / <alpha-value>)' },
+        hivis: { DEFAULT: 'rgb(var(--hivis) / <alpha-value>)', dark: 'rgb(var(--hivis-dark) / <alpha-value>)' },
+        danger: { DEFAULT: 'rgb(var(--danger) / <alpha-value>)', bg: 'rgb(var(--danger-bg) / <alpha-value>)' },
+        warn: { DEFAULT: 'rgb(var(--warn) / <alpha-value>)', bg: 'rgb(var(--warn-bg) / <alpha-value>)' },
+        ok: { DEFAULT: 'rgb(var(--ok) / <alpha-value>)', bg: 'rgb(var(--ok-bg) / <alpha-value>)' }
       },
       fontFamily: {
         sans: ['"Atkinson Hyperlegible"', 'system-ui', 'sans-serif'],

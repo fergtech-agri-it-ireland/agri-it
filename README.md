@@ -6,9 +6,9 @@ Irish farm intelligence for day-to-day decisions: purchased feed run-out and reo
 
 Built from the *Agri-It MVP Overview* (September 2026). Mobile-first, installable, and works offline.
 
-| Today | Feed arrived | Feed detail | Silage | Record |
-| --- | --- | --- | --- | --- |
-| ![Today](docs/screenshots/today.png) | ![Feed arrived](docs/screenshots/delivery.png) | ![Feed](docs/screenshots/feed-detail.png) | ![Silage](docs/screenshots/silage.png) | ![Record](docs/screenshots/record-sheet.png) |
+| Today | Dawn mode | Record | Saved | Feed sum | Farm diary |
+| --- | --- | --- | --- | --- | --- |
+| ![Today](docs/screenshots/today.png) | ![Dawn mode](docs/screenshots/today-dawn.png) | ![Record](docs/screenshots/record.png) | ![Saved](docs/screenshots/saved.png) | ![Feed](docs/screenshots/feed-detail.png) | ![Diary](docs/screenshots/diary.png) |
 
 ---
 
@@ -50,7 +50,7 @@ The demo farm (Glenview Farm, Co. Tipperary) has groups, two feeds, an open orde
 | `npm run supabase:reset` | Rebuild the database from migrations and reseed the demo farm |
 | `npm run supabase:status` | Show local URLs and keys again |
 | `npm run supabase:stop` | Stop the local stack |
-| `npm test` | Unit tests for the forecast engines |
+| `npm test` | Unit tests for the forecast engines and Today dials |
 | `npm run typecheck` / `npm run build` | Type-check / production build with service worker |
 
 Supabase Studio (table browser, SQL editor) runs at http://127.0.0.1:54323 while the stack is up.
@@ -144,11 +144,16 @@ src/
 
 Designed for someone standing in a yard with gloves, glare, a patchy signal and a minute to spare. These patterns come from agritech UX research and from how successful Irish farm apps work:
 
-- **Answer first.** Today leads with what needs doing: order feed, silage short, cash pressure, jobs due. Formulas and assumptions sit one tap deeper under "How this is worked out".
-- **Thumb reach.** The bottom tab bar has a central hi-vis **Record** button that opens the farmer intents from spec section 8 as large tiles. Save buttons are pinned to the bottom of the screen.
+- **Three dials first (from WHOOP).** Today opens on Feed, Silage and Cash dials. Each ring fills only against a real number: the lowest feed against *your own* days-in-hand target (Settings), silage in store against winter need, cash full when the 90-day outlook stays positive. Then "Do next", then what goes in the trough today.
+- **Dawn mode (WHOOP's dark look).** A dark screen for the parlour before light, on, off or automatic (before 8am and after 8pm). It puts "Before milking" feeding first. One tap on Today switches it.
+- **Same as last time (from MyFitnessPal's recent foods).** The Record screen offers the last delivery, milk cheque and bill as one-tap repeats that open the form already filled in. **Photo a docket** comes first: take the photo, say what it is, and that form opens with it attached.
+- **The sum shown (from MyFitnessPal's calories-remaining equation).** The feed screen shows the run-out date as a sum in kg: stock, minus each stretch of planned use (including a temporary higher rate), equals days left. It always matches the forecast because it uses the same rules.
+- **What changed, then a next step (from Strava's post-activity summary).** After a delivery, sale or milk cheque, a Saved screen shows before and after (days of feed, run-out, order-by, spend against budget, head counts, cash) with clear next steps: Done, add the docket photo, record another, or Undo.
+- **Farm diary (Strava's progress chart and feed).** Milk cheques by month with your best month marked, then everything recorded as one timeline.
+- **Thumb reach.** The bottom tab bar has a central hi-vis **Record** button. Save buttons are pinned to the bottom of the screen.
 - **Big targets, little typing.** Touch targets are at least 56px (above Material's 48dp minimum). Forms use −/+ steppers, Today/Yesterday date chips, numeric keypads and tap-to-choose options instead of dropdowns, plus voice dictation for notes. Forms prefill from the last entry: the last quantity, price, supplier and milk processor.
 - **Readable in sunlight.** Near-black on white, an Atkinson Hyperlegible body font designed for legibility, and a **Sunlight mode** in Settings. Status is always shown with an icon and words, never by colour alone.
-- **Undo instead of "Are you sure?"** Saving is instant. A toast offers Undo for about seven seconds.
+- **Undo instead of "Are you sure?"** Saving is instant. The Saved screen or a toast offers Undo.
 - **Offline-first.** Farm data is cached on the phone. Writes made with no signal are queued, shown in a calm status pill, and sent automatically when signal returns. Retries can't create duplicates, because every write carries a client-generated id.
 - **See the effect before saving.** Entering a delivery shows the new run-out date live.
 - **Trust through transparency.** Every forecast shows its confidence and what it was based on. Published figures show their source. Ask Agri-It refuses to prescribe feeding rates.

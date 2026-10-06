@@ -23,7 +23,7 @@ export default function Ask() {
         <button aria-label="Ask" className="flex min-h-tap min-w-tap items-center justify-center rounded-xl bg-field text-white"><Send className="h-6 w-6" /></button>
       </form>
       <div className="flex flex-wrap gap-2">
-        {SUGGESTED.map((s) => <button key={s} onClick={() => run(s)} className="min-h-[2.75rem] rounded-full border-2 border-line bg-white px-3 text-left font-bold">{s}</button>)}
+        {SUGGESTED.map((s) => <button key={s} onClick={() => run(s)} className="min-h-[2.75rem] rounded-full border-2 border-line bg-card px-3 text-left font-bold">{s}</button>)}
       </div>
       {thread.map(({ q: question, a }, i) => (
         <Card key={i} className="space-y-2">

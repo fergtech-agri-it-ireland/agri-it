@@ -385,3 +385,52 @@ export function countVariances(
   }
   return out;
 }
+
+export interface RunoutStep {
+  from: ISODate;
+  to: ISODate;
+  days: number; // whole days, or a fraction on the final step
+  kgPerDay: number;
+  startKg: number; // stock at the start of this step
+  usedKg: number;
+  final: boolean; // the step where stock runs out
+}
+
+/**
+ * The run-out date as a visible sum (after MyFitnessPal's "goal − food + exercise = remaining"):
+ * today's stock, minus each stretch of days at a steady daily use, until it runs out.
+ * A new step starts whenever the feeding plan changes (e.g. a temporary higher rate).
+ * Uses the same daily-use rules as forecastFeed, so the steps always add up to its answer.
+ */
+export function runoutSteps(stockKg: number, rules: FeedingRule[], groups: AnimalGroup[], today: ISODate): RunoutStep[] {
+  const gm = new Map(groups.map((g) => [g.id, g]));
+  const steps: RunoutStep[] = [];
+  let stock = stockKg;
+  let idle = 0;
+  for (let i = 0; i < HORIZON_DAYS && stock > 0; i++) {
+    const day = addDays(today, i);
+    const use = dailyUse(rules, gm, day);
+    if (use <= 0) {
+      if (++idle > 60) break; // nothing planned for two months: no run-out to explain
+      continue;
+    }
+    idle = 0;
+    let cur = steps.at(-1);
+    if (!cur || Math.abs(cur.kgPerDay - use) > 1e-9 || addDays(cur.to, 1) !== day) {
+      cur = { from: day, to: day, days: 0, kgPerDay: use, startKg: stock, usedKg: 0, final: false };
+      steps.push(cur);
+    }
+    cur.to = day;
+    if (stock - use <= 0) {
+      cur.days += stock / use;
+      cur.usedKg += stock;
+      cur.final = true;
+      stock = 0;
+    } else {
+      cur.days += 1;
+      cur.usedKg += use;
+      stock -= use;
+    }
+  }
+  return steps;
+}

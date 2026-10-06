@@ -32,7 +32,7 @@ export function Screen({ title, back, right, children, sub }: { title: string; b
 
 export function Card({ children, className = '', as: As = 'section' }: { children: ReactNode; className?: string; as?: 'section' | 'div' | 'article' }) {
   // Let a caller's background replace the default white (Tailwind can't resolve two bg-* classes by order)
-  const bg = /(^|\s)bg-/.test(className) ? '' : 'bg-white';
+  const bg = /(^|\s)bg-/.test(className) ? '' : 'bg-card';
   return <As className={`rounded-2xl p-4 shadow-lift ${bg} ${className}`}>{children}</As>;
 }
 
@@ -51,10 +51,10 @@ export function SectionTitle({ children, action }: { children: ReactNode; action
 type Variant = 'primary' | 'hivis' | 'secondary' | 'ghost' | 'danger';
 const variants: Record<Variant, string> = {
   primary: 'bg-field text-white hover:bg-field-dark active:bg-field-dark',
-  hivis: 'bg-hivis text-ink hover:bg-hivis-dark active:bg-hivis-dark',
-  secondary: 'bg-white text-ink border-2 border-ink/80 hover:bg-pasture',
-  ghost: 'text-field hover:bg-field-light',
-  danger: 'bg-white text-danger border-2 border-danger hover:bg-danger-bg'
+  hivis: 'bg-hivis text-onhivis hover:bg-hivis-dark active:bg-hivis-dark',
+  secondary: 'bg-card text-ink border-2 border-ink/80 hover:bg-pasture',
+  ghost: 'text-accent hover:bg-field-light',
+  danger: 'bg-card text-danger border-2 border-danger hover:bg-danger-bg'
 };
 export function Button({ variant = 'primary', block, className = '', children, ...rest }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; block?: boolean }) {
   return (
@@ -81,7 +81,7 @@ export function CallButton({ phone, label, variant = 'hivis', block }: { phone: 
 /** Sticky save bar: the thumb never has to reach for the top of the screen. */
 export function SaveBar({ children }: { children: ReactNode }) {
   return (
-    <div className="fixed inset-x-0 z-30 border-t border-line bg-white/95 px-3 py-3 backdrop-blur" style={{ bottom: 0, paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}>
+    <div className="fixed inset-x-0 z-30 border-t border-line bg-card/95 px-3 py-3 backdrop-blur" style={{ bottom: 0, paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}>
       <div className="mx-auto flex max-w-xl gap-3">{children}</div>
     </div>
   );
@@ -138,13 +138,13 @@ export function Stepper({ label, value, onChange, step = 1, min = 0, unit, hint,
   return (
     <Field label={label} hint={hint} htmlFor={id}>
       <div className="flex items-stretch gap-2">
-        <button type="button" aria-label={`Decrease ${label}`} onClick={() => set(value - step)} className="flex min-h-tap min-w-tap items-center justify-center rounded-xl border-2 border-ink/80 bg-white active:bg-pasture"><Minus className="h-6 w-6" /></button>
+        <button type="button" aria-label={`Decrease ${label}`} onClick={() => set(value - step)} className="flex min-h-tap min-w-tap items-center justify-center rounded-xl border-2 border-ink/80 bg-card active:bg-pasture"><Minus className="h-6 w-6" /></button>
         <div className="relative flex-1">
           <input id={id} className="input text-center text-2xl font-bold" type="number" inputMode={decimals ? 'decimal' : 'numeric'} value={Number.isFinite(value) ? value : ''}
             onChange={(e) => set(Number(e.target.value || 0))} />
           {unit && <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-bold text-muted">{unit}</span>}
         </div>
-        <button type="button" aria-label={`Increase ${label}`} onClick={() => set(value + step)} className="flex min-h-tap min-w-tap items-center justify-center rounded-xl border-2 border-ink/80 bg-white active:bg-pasture"><Plus className="h-6 w-6" /></button>
+        <button type="button" aria-label={`Increase ${label}`} onClick={() => set(value + step)} className="flex min-h-tap min-w-tap items-center justify-center rounded-xl border-2 border-ink/80 bg-card active:bg-pasture"><Plus className="h-6 w-6" /></button>
       </div>
     </Field>
   );
@@ -163,7 +163,7 @@ export function Chips<T extends string>({ label, options, value, onChange, hint,
           const on = o.value === value;
           return (
             <button key={o.value} type="button" aria-pressed={on} onClick={() => onChange(o.value)}
-              className={`min-h-tap rounded-xl border-2 px-4 py-2 text-left font-bold leading-tight ${on ? 'border-field bg-field text-white' : 'border-line bg-white text-ink hover:border-ink/60'}`}>
+              className={`min-h-tap rounded-xl border-2 px-4 py-2 text-left font-bold leading-tight ${on ? 'border-field bg-field text-white' : 'border-line bg-card text-ink hover:border-ink/60'}`}>
               <span className="flex items-center gap-2">{on && <CheckCircle2 className="h-5 w-5 shrink-0" aria-hidden />}{o.label}</span>
               {o.sub && <span className={`block text-sm font-normal ${on ? 'text-white/85' : 'text-muted'}`}>{o.sub}</span>}
             </button>
@@ -188,9 +188,9 @@ export function DateChips({ label, value, onChange, allowFuture }: { label: stri
       <div className="flex flex-wrap gap-2">
         {quick.map((d, i) => (
           <button key={d} type="button" aria-pressed={value === d} onClick={() => onChange(d)}
-            className={`min-h-tap rounded-xl border-2 px-4 font-bold ${value === d ? 'border-field bg-field text-white' : 'border-line bg-white'}`}>{names[i]}</button>
+            className={`min-h-tap rounded-xl border-2 px-4 font-bold ${value === d ? 'border-field bg-field text-white' : 'border-line bg-card'}`}>{names[i]}</button>
         ))}
-        <label htmlFor={id} className={`relative flex min-h-tap flex-1 items-center rounded-xl border-2 px-3 font-bold ${!isQuick ? 'border-field bg-field-light' : 'border-line bg-white'}`}>
+        <label htmlFor={id} className={`relative flex min-h-tap flex-1 items-center rounded-xl border-2 px-3 font-bold ${!isQuick ? 'border-field bg-field-light' : 'border-line bg-card'}`}>
           <span className="sr-only">Pick another date</span>
           <input id={id} type="date" className="w-full bg-transparent" value={value} max={allowFuture ? undefined : today} onChange={(e) => e.target.value && onChange(e.target.value)} />
         </label>
@@ -222,7 +222,7 @@ export function VoiceButton({ onText }: { onText: (t: string) => void }) {
         setOn(true);
         r.start();
       }}
-      className={`flex min-h-tap min-w-tap items-center justify-center rounded-xl border-2 ${on ? 'border-danger bg-danger-bg text-danger' : 'border-line bg-white'}`}>
+      className={`flex min-h-tap min-w-tap items-center justify-center rounded-xl border-2 ${on ? 'border-danger bg-danger-bg text-danger' : 'border-line bg-card'}`}>
       <Mic className="h-6 w-6" />
     </button>
   );
@@ -236,7 +236,7 @@ export function ConfidenceBadge({ level }: { level: Confidence }) {
     high: { text: 'High confidence', cls: 'bg-ok-bg text-ok', Icon: CheckCircle2 },
     medium: { text: 'Medium confidence', cls: 'bg-warn-bg text-warn', Icon: Info },
     low: { text: 'Low confidence', cls: 'bg-danger-bg text-danger', Icon: AlertTriangle },
-    scenario: { text: 'What-if scenario', cls: 'bg-field-light text-field', Icon: CircleHelp }
+    scenario: { text: 'What-if scenario', cls: 'bg-field-light text-accent', Icon: CircleHelp }
   };
   const m = map[level];
   return <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-sm font-bold ${m.cls}`}><m.Icon className="h-4 w-4" aria-hidden />{m.text}</span>;
@@ -246,13 +246,13 @@ export function ToneIcon({ tone, className = 'h-6 w-6' }: { tone: 'urgent' | 'wa
   if (tone === 'urgent') return <AlertOctagon className={`${className} text-danger`} aria-label="Urgent" />;
   if (tone === 'warn') return <AlertTriangle className={`${className} text-warn`} aria-label="Warning" />;
   if (tone === 'ok') return <CheckCircle2 className={`${className} text-ok`} aria-label="OK" />;
-  return <Info className={`${className} text-field`} aria-label="Info" />;
+  return <Info className={`${className} text-accent`} aria-label="Info" />;
 }
 
 /** Simple first, detail on demand: assumptions and formulas one tap deeper. */
 export function Explain({ title = 'How this is worked out', children, defaultOpen }: { title?: string; children: ReactNode; defaultOpen?: boolean }) {
   return (
-    <details className="group rounded-xl border-2 border-line bg-white" open={defaultOpen}>
+    <details className="group rounded-xl border-2 border-line bg-card" open={defaultOpen}>
       <summary className="flex min-h-tap cursor-pointer list-none items-center justify-between gap-2 px-4 font-bold">
         {title}
         <ChevronDown className="h-5 w-5 transition-transform group-open:rotate-180" aria-hidden />
@@ -288,7 +288,7 @@ export function Row({ to, title, sub, right, icon }: { to?: string; title: React
 }
 
 export function List({ children }: { children: ReactNode }) {
-  return <div className="divide-y divide-line overflow-hidden rounded-2xl bg-white shadow-lift">{children}</div>;
+  return <div className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-lift">{children}</div>;
 }
 
 // ---------------------------------------------------------------------------
@@ -304,8 +304,8 @@ export function Sheet({ open, onClose, title, children }: { open: boolean; onClo
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-40" role="dialog" aria-modal="true" aria-label={title}>
-      <button aria-label="Close" className="absolute inset-0 bg-ink/50" onClick={onClose} />
-      <div className="anim-sheet absolute inset-x-0 bottom-0 mx-auto max-w-xl rounded-t-3xl bg-white px-4 pt-3" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}>
+      <button aria-label="Close" className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="anim-sheet absolute inset-x-0 bottom-0 mx-auto max-w-xl rounded-t-3xl bg-card px-4 pt-3" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}>
         <div className="mx-auto mb-2 h-1.5 w-12 rounded-full bg-line" aria-hidden />
         <div className="mb-3 flex items-center justify-between">
           <h2 className="h-display text-3xl">{title}</h2>

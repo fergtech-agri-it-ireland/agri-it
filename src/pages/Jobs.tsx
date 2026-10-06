@@ -33,7 +33,7 @@ export default function Jobs() {
         {open.length === 0 && <Row title="Nothing to do" />}
         {open.map((j) => (
           <button key={j.id} className="block w-full text-left" onClick={() => toggle(j.id, new Date().toISOString())}>
-            <Row icon={<Circle className="h-7 w-7 text-field" aria-label="Mark done" />} title={j.title} sub={j.due_on ? `${j.due_on < todayISO() ? 'Overdue, ' : ''}due ${fmtDay(j.due_on)}` : undefined} />
+            <Row icon={<Circle className="h-7 w-7 text-accent" aria-label="Mark done" />} title={j.title} sub={j.due_on ? `${j.due_on < todayISO() ? 'Overdue, ' : ''}due ${fmtDay(j.due_on)}` : undefined} />
           </button>
         ))}
       </List>

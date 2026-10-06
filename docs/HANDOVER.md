@@ -1,6 +1,6 @@
 # Agri-It MVP: Handover
 
-**Last updated:** 6 October 2026 (demo build added)
+**Last updated:** 6 October 2026 (UI redesign: dials, dawn mode, Record, Saved, feed sum, diary)
 **Owner:** Feargal
 **Status:** MVP code complete, builds clean, tests pass. Not yet pushed to GitHub or deployed.
 
@@ -22,16 +22,17 @@ It is not a herd, grassland or accounting system. It does not prescribe rations,
 
 | Item | State |
 | --- | --- |
-| Code | Complete for P0 scope. 93 files. Delivered as `agri-it.zip` in the 29 Sept 2026 chat |
+| Code | Complete for P0 scope, plus the UI redesign based on WHOOP, MyFitnessPal and Strava patterns (6 Oct 2026) |
 | Typecheck | Clean (`tsc -b --noEmit`) |
-| Unit tests | 30/30 passing (forecast engines) |
+| Unit tests | 43/43 passing (forecast engines, run-out steps, Today dials) |
+| Browser test | 82/82 checks on the demo build at phone size: every new flow, numbers on each screen, no sideways scroll at 360px in day and dawn mode, no console errors (script not in the repo) |
 | Production build | Clean, PWA service worker generated |
-| Database | Migrations + seed validated against real Postgres 16 with Supabase auth/storage stubs; RLS isolation tested |
-| GitHub | Not pushed yet |
+| Database | All three migrations + seed validated against real Postgres 16 with Supabase auth/storage stubs; RLS isolation tested |
+| GitHub | `fergtech-ireland/agri-it` (private), CI green |
 | Supabase cloud | Not created yet (local only) |
 | Deployed | No. A browser-only demo (sample data, no database) is published as a private Claude artifact; rebuild with `npm run build:demo` |
 
-**Important:** the build sandbox resets between chats. The only copy of the code is the zip from the 29 Sept chat (and wherever Feargal has saved it). A new chat starts with no code unless the zip is uploaded again or the repo is on GitHub. **Push to GitHub first** so future chats can attach the repo.
+**Important:** the build sandbox resets between chats. The code lives at `fergtech-ireland/agri-it` on GitHub: attach that repo in a new chat. The Claude GitHub app is installed for that repo, so a chat can push to it.
 
 ---
 
@@ -80,6 +81,7 @@ supabase/
   migrations/
     20260929000100_schema.sql     tables, enums, indexes
     20260929000200_security_and_functions.sql   RLS, storage policies, RPCs
+    20261006000100_feed_target.sql              farms.feed_target_days (fills the Feed dial)
   seed.sql                        evidence sources, Teagasc allowances, suppliers, DEMO user + farm
 src/
   main.tsx, App.tsx               providers, routes
@@ -117,7 +119,7 @@ Feed is always stored in **kg**. Money is `numeric(12,2)` euro.
 
 | Table | Purpose |
 | --- | --- |
-| `farms` | Eircode, county, ROI/NI, enterprise, FY start month, opening cash + date, default lead time, forage reserve %, housing/turnout dates |
+| `farms` | Eircode, county, ROI/NI, enterprise, FY start month, opening cash + date, default lead time, forage reserve %, housing/turnout dates, feed target days (farmer's own comfort level, default 30) |
 | `farm_members` | user to farm, role `owner` / `member` / `advisor` (advisor = read-only) |
 | `animal_groups` | class, head count, `head_count_updated_at`, optional farm-history forage t/head/month, housed flag |
 | `head_count_history` | audit of every head count change |
@@ -171,7 +173,9 @@ Feed is always stored in **kg**. Money is `numeric(12,2)` euro.
 
 ## 8. Screens and routes
 
-Today `/` · Forecast `/forecast` (tabs feed, forage, cash) · Feed: new, detail, edit, count, rule new/edit · Record: delivery, order, count, milk, sale, cost, income · Money `/money`, year-end, budget · Farm hub, groups, silage (+form), jobs · Suppliers + detail · Records + new · Ask · Settings · Login · Onboarding (3 steps).
+Today `/` (three dials, Do next, Feeding today, quick tiles, feed cards) · Record `/record` (photo a docket, same as last time, something new) · Saved `/record/done` (after delivery, sale, milk cheque) · Forecast `/forecast` (tabs feed, forage, cash) · Feed: new, detail (the sum, who eats it, call, order again), edit, count, rule new/edit · Record forms: delivery, order (`?feed=&kg=`), count, milk, sale, cost (`?repeat=<cost id>`), income · Money `/money`, year-end, budget · Farm diary `/diary` · Farm hub, groups, silage (+form), jobs · Suppliers + detail · Records + new (`?type=`) · Ask · Settings (dawn mode, sunlight, feed target) · Login · Onboarding (3 steps).
+
+New modules: `lib/theme.ts` (dawn/sunlight modes), `lib/dials.ts` (+tests), `runoutSteps()` in `lib/forecast/feed.ts` (+tests), `lib/saved.ts` (Saved screen contract), `lib/pendingPhoto.ts` (photo hand-off), `components/Dial.tsx`. Colours are CSS variables in `src/index.css`; use `text-accent` for green text and `bg-field` for green fills, `bg-card` for surfaces, `text-onhivis` on yellow, `bg-inverse`/`text-oninverse` for toasts.
 
 Navigation: bottom bar Today / Forecast / **Record (hi-vis centre button)** / Money / Farm. Record opens a sheet of 8 intent tiles (spec section 8).
 
@@ -179,11 +183,17 @@ Navigation: bottom bar Today / Forecast / **Record (hi-vis centre button)** / Mo
 
 ## 9. UX decisions (keep these)
 
+- Three dials first (Feed, Silage, Cash); rings fill only against real denominators (feed target, winter need, 90-day outlook).
+- Dawn mode (dark, auto before 8am/after 8pm) puts "Before milking" feeding first.
+- Record screen: photo a docket first, then "same as last time" repeats, then new entries.
+- Saved screen after delivery/sale/milk: before and after, then Done / add photo / another / Undo.
+- Feed screen shows the run-out as a sum in kg that matches the forecast exactly.
+- Farm diary: milk cheques by month (best month marked) and one timeline.
 - Answer first; formulas behind "How this is worked out".
 - Touch targets ≥ 56px; save button pinned to the bottom (thumb reach).
 - Steppers, Today/Yesterday chips, numeric keypads, tap-to-choose chips, voice dictation; forms prefill from the last entry.
 - Sunlight mode in Settings; status always icon + words, never colour alone.
-- Undo toast instead of confirmation dialogs.
+- Undo (Saved screen or toast) instead of confirmation dialogs.
 - Offline-first: cached reads, queued writes, calm sync pill.
 - Live preview: delivery form shows the new run-out date before saving.
 - Every forecast shows confidence and its basis; published figures show source.

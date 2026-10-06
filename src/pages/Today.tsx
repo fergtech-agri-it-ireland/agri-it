@@ -1,45 +1,136 @@
-import { useState } from 'react';
+import { useState, type ComponentType } from 'react';
 import { Link } from 'react-router-dom';
-import { Beef, ChevronRight, MessageCircleQuestion, Milk, PackageCheck, Receipt } from 'lucide-react';
+import {
+  Banknote, Beef, CalendarCheck, ChevronRight, MessageCircleQuestion, Milk, Moon, Package, PackageCheck, Receipt, Sun, Truck, Users, Warehouse
+} from 'lucide-react';
 import { useFarmData } from '../lib/data/farm';
-import { useDerived } from '../lib/data/derived';
-import { eur, fmtDate, fmtNum, todayISO } from '../lib/format';
+import { useDerived, type Priority } from '../lib/data/derived';
+import { cashDial, feedDial, silageDial } from '../lib/dials';
+import { useTheme } from '../lib/theme';
+import { addDays, fmtDay, fmtKg, todayISO } from '../lib/format';
 import { primaryRoute } from '../lib/suppliers';
-import { Card, LinkButton, List, Row, Screen, SectionTitle, ToneIcon } from '../components/ui';
+import { Card, LinkButton, Screen, SectionTitle } from '../components/ui';
+import { Dial } from '../components/Dial';
 import { FeedGauge } from '../components/FeedGauge';
 
 const rank = { order_now: 0, order_soon: 1, no_stock_record: 2, no_plan: 3, ok: 4 } as const;
+const weekdayFmt = new Intl.DateTimeFormat('en-IE', { weekday: 'long', day: 'numeric', month: 'long' });
+const greeting = (h = new Date().getHours()) => (h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening');
+
+const iconFor = (p: Priority): ComponentType<{ className?: string }> => {
+  if (p.id.startsWith('order-')) return Truck;
+  if (p.id.startsWith('feed-')) return Package;
+  if (p.id === 'forage') return Warehouse;
+  if (p.id.startsWith('job-')) return CalendarCheck;
+  if (p.id === 'heads') return Users;
+  return Banknote;
+};
+const tileTone: Record<Priority['tone'], string> = {
+  urgent: 'bg-danger-bg text-danger',
+  warn: 'bg-warn-bg text-warn',
+  info: 'bg-field-light text-accent',
+  ok: 'bg-ok-bg text-ok'
+};
+const timesADay = (n: number) => (n === 1 ? 'once a day' : n === 2 ? 'twice a day' : `${n} times a day`);
 
 export default function Today() {
   const b = useFarmData();
   const d = useDerived(b);
+  const theme = useTheme();
   const [showAll, setShowAll] = useState(false);
+
   const products = b.products.filter((p) => !p.archived)
     .map((p) => ({ p, f: d.feed.get(p.id)! }))
     .sort((a, c) => rank[a.f.status] - rank[c.f.status] || (a.f.daysRemaining ?? 999) - (c.f.daysRemaining ?? 999));
-  const shown = showAll ? d.priorities : d.priorities.slice(0, 4);
+  const dials = [
+    feedDial(b.products, d.feed, b.farm.feed_target_days ?? 30),
+    silageDial(d.forage),
+    cashDial(d.cash, d.cash90.lowest)
+  ];
+  const shown = showAll ? d.priorities : d.priorities.slice(0, 3);
 
-  return (
-    <Screen title={b.farm.name} sub={fmtDate(todayISO())}
-      right={<Link to="/ask" aria-label="Ask Agri-It" className="flex min-h-tap items-center gap-1 rounded-full bg-white px-4 font-bold text-field shadow-lift"><MessageCircleQuestion className="h-5 w-5" aria-hidden />Ask</Link>}>
+  // What goes in the trough today: straight from the farmer's own feeding plan
+  const feeding = products.flatMap(({ p, f }) => f.activeRules.map((r) => ({
+    key: r.ruleId, title: `${r.groupName}: ${fmtKg(r.dailyKg)} ${p.name}`,
+    sub: `${r.heads} head, ${r.kgPerHeadPerFeed} kg ${timesADay(r.feedsPerDay)}${r.temporary && r.endDate ? `, until ${fmtDay(r.endDate)}` : ''}`,
+    to: `/feed/${p.id}`
+  })));
+  const changes = products.flatMap(({ p, f }) => f.upcomingChanges.filter((c) => c.date <= addDays(todayISO(), 7)).slice(0, 1).map((c) => ({
+    key: `${p.id}-${c.date}`, text: `${p.name}: ${c.reason} ${fmtDay(c.date)}, ${fmtKg(c.dailyUseKg)} a day`, to: `/feed/${p.id}`
+  })));
 
-      {/* What needs doing: the answer first */}
+  const doNext = (
+    <section aria-labelledby="donext" className="space-y-2">
+      <SectionTitle><span id="donext">{theme.dawn ? 'Then' : 'Do next'}</span></SectionTitle>
       {d.priorities.length === 0 ? (
-        <Card className="flex items-center gap-3"><ToneIcon tone="ok" /><p className="font-bold">Nothing urgent. Feed, silage and cash look in hand.</p></Card>
+        <Card className="font-bold">Nothing urgent. Feed, silage and cash look in hand.</Card>
       ) : (
-        <List>
-          {shown.map((p) => (
-            <Row key={p.id} to={p.to} icon={<ToneIcon tone={p.tone} />} title={p.title} sub={p.detail} right={<ChevronRight className="h-5 w-5 text-muted" aria-hidden />} />
-          ))}
-          {d.priorities.length > 4 && (
-            <button className="min-h-tap w-full px-4 text-left font-bold text-field" onClick={() => setShowAll(!showAll)}>
-              {showAll ? 'Show fewer' : `Show ${d.priorities.length - 4} more`}
+        <div className="divide-y divide-line overflow-hidden rounded-[1.375rem] bg-card shadow-lift">
+          {shown.map((p) => {
+            const Icon = iconFor(p);
+            return (
+              <Link key={p.id} to={p.to} className="flex min-h-[4.5rem] items-center gap-3.5 px-4 py-2.5 hover:bg-pasture">
+                <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-[0.875rem] ${tileTone[p.tone]}`}>
+                  <Icon className="h-7 w-7" aria-hidden />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="sr-only">{p.tone === 'urgent' ? 'Urgent: ' : p.tone === 'warn' ? 'Soon: ' : ''}</span>
+                  <b className="block leading-snug">{p.title}</b>
+                  <span className="text-[0.95rem] text-muted">{p.detail}</span>
+                </span>
+                <ChevronRight className="h-5 w-5 shrink-0 text-muted" aria-hidden />
+              </Link>
+            );
+          })}
+          {d.priorities.length > 3 && (
+            <button className="min-h-tap w-full px-4 text-left font-bold text-accent" onClick={() => setShowAll(!showAll)}>
+              {showAll ? 'Show fewer' : `Show ${d.priorities.length - 3} more`}
             </button>
           )}
-        </List>
+        </div>
       )}
+    </section>
+  );
 
-      {/* Most common jobs, big and in reach */}
+  const feedingToday = feeding.length > 0 && (
+    <section aria-labelledby="feeding" className="space-y-2">
+      <SectionTitle><span id="feeding">{theme.dawn ? 'Before milking' : 'Feeding today'}</span></SectionTitle>
+      <div className="divide-y divide-line overflow-hidden rounded-[1.375rem] bg-card shadow-lift">
+        {feeding.map((r) => (
+          <Link key={r.key} to={r.to} className="flex min-h-[4.25rem] items-center gap-3.5 px-4 py-2 hover:bg-pasture">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[0.875rem] bg-field-light text-accent"><Package className="h-7 w-7" aria-hidden /></span>
+            <span className="min-w-0 flex-1"><b className="block leading-snug">{r.title}</b><span className="text-[0.95rem] text-muted">{r.sub}</span></span>
+          </Link>
+        ))}
+        {changes.map((c) => (
+          <Link key={c.key} to={c.to} className="flex min-h-tap items-center gap-2 px-4 py-2 text-[0.95rem] font-bold text-warn hover:bg-pasture">
+            <CalendarCheck className="h-5 w-5 shrink-0" aria-hidden />{c.text}
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+
+  return (
+    <Screen title={b.farm.name} sub={theme.dawn ? `${greeting()}. ${fmtDay(todayISO())}` : weekdayFmt.format(new Date())}
+      right={
+        <div className="flex gap-2">
+          <button onClick={theme.toggleDawn} aria-label={theme.dawn ? 'Switch to day screen' : 'Switch to dawn mode'}
+            className="flex h-14 w-14 items-center justify-center rounded-full bg-card text-ink shadow-lift">
+            {theme.dawn ? <Sun className="h-6 w-6" aria-hidden /> : <Moon className="h-6 w-6" aria-hidden />}
+          </button>
+          <Link to="/ask" aria-label="Ask Agri-It" className="flex min-h-tap items-center gap-1.5 rounded-full bg-card px-4 font-bold text-accent shadow-lift">
+            <MessageCircleQuestion className="h-5 w-5" aria-hidden />Ask
+          </Link>
+        </div>
+      }>
+
+      <section aria-label="Farm at a glance" className="grid grid-cols-3 gap-1 rounded-[1.375rem] bg-card px-2 pb-3.5 pt-3 shadow-lift">
+        {dials.map(({ id, ...x }) => <Dial key={id} {...x} />)}
+      </section>
+
+      {theme.dawn ? <>{feedingToday}{doNext}</> : <>{doNext}{feedingToday}</>}
+
       <div className="grid grid-cols-4 gap-2" aria-label="Quick record">
         {[
           { to: '/record/delivery', label: 'Feed arrived', Icon: PackageCheck },
@@ -47,13 +138,13 @@ export default function Today() {
           { to: '/record/sale', label: 'Sold animals', Icon: Beef },
           { to: '/record/cost', label: 'Paid a bill', Icon: Receipt }
         ].map(({ to, label, Icon }) => (
-          <Link key={to} to={to} className="flex min-h-[5rem] flex-col items-center justify-center gap-1 rounded-2xl bg-white px-1 text-center text-sm font-bold leading-tight shadow-lift active:bg-field-light">
-            <Icon className="h-7 w-7 text-field" aria-hidden />{label}
+          <Link key={to} to={to} className="flex min-h-[5.75rem] flex-col items-center justify-center gap-1.5 rounded-[1.125rem] bg-card px-1 text-center text-sm font-bold leading-tight shadow-lift active:bg-field-light">
+            <Icon className="h-8 w-8 text-accent" aria-hidden />{label}
           </Link>
         ))}
       </div>
 
-      <SectionTitle action={<Link to="/feed/new" className="flex min-h-tap items-center px-2 font-bold text-field">Add feed</Link>}>Bought-in feed</SectionTitle>
+      <SectionTitle action={<Link to="/feed/new" className="flex min-h-tap items-center px-2 font-bold text-accent">Add feed</Link>}>Bought-in feed</SectionTitle>
       {products.length === 0 ? (
         <Card>
           <p className="font-bold">Track meal and nuts</p>
@@ -65,25 +156,7 @@ export default function Today() {
           <FeedGauge key={p.id} product={p} f={f} compact phone={primaryRoute(b.suppliers.find((s) => s.id === p.supplier_id), b)?.phone} />
         ))
       )}
-
-      <SectionTitle>Winter and cash</SectionTitle>
-      <div className="grid grid-cols-2 gap-3">
-        <Link to="/forecast?tab=forage" className="rounded-2xl bg-white p-4 shadow-lift">
-          <p className="font-bold">Silage</p>
-          {d.forage.monthsOfCover !== null ? (
-            <p className="numeral mt-1 text-4xl leading-none">{fmtNum(d.forage.monthsOfCover)}<span className="ml-1 font-sans text-base font-bold">months</span></p>
-          ) : <p className="mt-1 text-muted">Add silage and stock</p>}
-          <p className="mt-1 flex items-center gap-1 text-sm font-bold">
-            <ToneIcon tone={d.forage.status === 'deficit' ? 'urgent' : d.forage.status === 'tight' ? 'warn' : d.forage.status === 'surplus' ? 'ok' : 'info'} className="h-4 w-4" />
-            {{ deficit: 'Short for winter', tight: 'Tight', surplus: 'Covered + reserve', incomplete: 'Needs details' }[d.forage.status]}
-          </p>
-        </Link>
-        <Link to="/forecast?tab=cash" className="rounded-2xl bg-white p-4 shadow-lift">
-          <p className="font-bold">Cash</p>
-          {d.cash ? <p className="numeral mt-1 text-4xl leading-none">{eur(d.cash.balance)}</p> : <p className="mt-1 text-muted">Add bank balance</p>}
-          {d.cash90.lowest && d.cash && <p className="mt-1 text-sm text-muted">90-day low {eur(d.cash90.lowest.closing)}</p>}
-        </Link>
-      </div>
     </Screen>
   );
 }
+

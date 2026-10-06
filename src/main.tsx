@@ -11,6 +11,7 @@ import App from './App';
 import { ToastProvider } from './components/Toast';
 import { FarmProvider } from './lib/data/farm';
 import { IS_DEMO } from './lib/env';
+import { startThemeClock } from './lib/theme';
 
 // The demo is published as a hosted page whose links only keep a bare #, so it routes on the hash.
 const Router = IS_DEMO ? HashRouter : BrowserRouter;
@@ -23,7 +24,7 @@ const queryClient = new QueryClient({
 });
 const persister = createSyncStoragePersister({ storage: window.localStorage, key: 'agri-it:cache' });
 
-if (localStorage.getItem('agri-it:sunlight') === '1') document.documentElement.classList.add('sunlight');
+startThemeClock();
 if (!IS_DEMO) registerSW({ immediate: true });
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

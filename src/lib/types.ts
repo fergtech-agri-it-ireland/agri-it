@@ -30,6 +30,8 @@ export interface Farm {
   opening_cash_date: ISODate | null;
   default_lead_time_days: number | null;
   forage_reserve_percent: number;
+  /** Farmer's own comfort level for bought-in feed; fills the Today Feed dial. */
+  feed_target_days: number;
   housing_start: ISODate | null;
   turnout_date: ISODate | null;
 }

@@ -1,4 +1,4 @@
-import { ChevronRight, ClipboardList, ListChecks, MessageCircleQuestion, Settings, Truck, Users, Warehouse, Wheat } from 'lucide-react';
+import { ChevronRight, ClipboardList, ListChecks, MessageCircleQuestion, Settings, Truck, Users, Warehouse, Wheat, BookOpen } from 'lucide-react';
 import { useFarmData } from '../lib/data/farm';
 import { useDerived } from '../lib/data/derived';
 import { fmtNum } from '../lib/format';
@@ -11,7 +11,7 @@ export default function FarmHub() {
   const open = b.jobs.filter((j) => !j.done_at).length;
   const unconfirmed = b.documents.filter((x) => x.state === 'unconfirmed').length + b.records.filter((r) => r.state === 'unconfirmed').length;
   const chev = <ChevronRight className="h-5 w-5 text-muted" aria-hidden />;
-  const icon = (I: typeof Users) => <I className="h-6 w-6 text-field" aria-hidden />;
+  const icon = (I: typeof Users) => <I className="h-6 w-6 text-accent" aria-hidden />;
   return (
     <Screen title="Farm" sub={`${b.farm.county}${b.farm.eircode ? `, ${b.farm.eircode}` : ''}`}>
       <List>
@@ -21,6 +21,7 @@ export default function FarmHub() {
         <Row to="/suppliers" icon={icon(Truck)} title="Suppliers" sub="Numbers, your rep, lead times" right={chev} />
       </List>
       <List>
+        <Row to="/diary" icon={icon(BookOpen)} title="Farm diary" sub="Everything recorded, and milk cheques by month" right={chev} />
         <Row to="/records" icon={icon(ClipboardList)} title="Records" sub={unconfirmed ? `${unconfirmed} waiting for you to confirm` : 'Dockets, fertiliser, medicines, movements'} right={chev} />
         <Row to="/farm/jobs" icon={icon(ListChecks)} title="Jobs" sub={open ? `${open} to do` : 'Nothing on the list'} right={chev} />
         <Row to="/ask" icon={icon(MessageCircleQuestion)} title="Ask Agri-It" sub="Answers from your own records" right={chev} />

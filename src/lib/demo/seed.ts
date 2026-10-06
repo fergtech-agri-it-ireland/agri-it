@@ -21,7 +21,7 @@ const TIRLAN = '10000000-0000-0000-0000-000000000001';
 
 /** Column defaults, mirroring the migration, applied to every insert. */
 export const DEFAULTS: Record<string, () => Row> = {
-  farms: () => ({ eircode: null, jurisdiction: 'ROI', enterprise: 'dairy', financial_year_start_month: 1, opening_cash_eur: null, opening_cash_date: null, default_lead_time_days: null, forage_reserve_percent: 15, housing_start: null, turnout_date: null }),
+  farms: () => ({ eircode: null, jurisdiction: 'ROI', enterprise: 'dairy', financial_year_start_month: 1, opening_cash_eur: null, opening_cash_date: null, default_lead_time_days: null, forage_reserve_percent: 15, feed_target_days: 30, housing_start: null, turnout_date: null }),
   animal_groups: () => ({ head_count: 0, head_count_updated_at: new Date().toISOString(), forage_t_per_head_month: null, housed: true, archived: false, sort_order: 0 }),
   head_count_history: () => ({ effective_on: todayISO(), reason: 'manual' }),
   suppliers: () => ({ farm_id: null, network: null, coverage: ['ROI'], central_phone: null, central_phone_label: null, secondary_phone: null, secondary_phone_label: null, website: null, local_contact_method: null, source_url: null, verified_on: null, needs_live_directory: false }),

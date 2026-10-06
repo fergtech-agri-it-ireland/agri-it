@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { clearPendingPhoto, peekPendingPhoto } from '../lib/pendingPhoto';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useFarmData, useFarmCtx, useSave } from '../lib/data/farm';
 import { COST_LABEL, type Cost, type CostCategory } from '../lib/types';
@@ -13,13 +14,16 @@ export default function CostForm() {
   const { farmId } = useFarmCtx();
   const save = useSave();
   const nav = useNavigate();
-  const [category, setCategory] = useState<CostCategory | null>((params.get('category') as CostCategory) ?? null);
-  const [amount, setAmount] = useState('');
+  // "Same as last time" passes ?repeat=<cost id>: everything but the date is copied
+  const repeat = b.costs.find((c) => c.id === params.get('repeat'));
+  const [category, setCategory] = useState<CostCategory | null>(repeat?.category ?? (params.get('category') as CostCategory) ?? null);
+  const [amount, setAmount] = useState(repeat ? String(repeat.amount_eur) : '');
   const [date, setDate] = useState(todayISO());
-  const [payee, setPayee] = useState('');
-  const [otherLabel, setOtherLabel] = useState('');
-  const [note, setNote] = useState('');
-  const [photo, setPhoto] = useState<File | null>(null);
+  const [payee, setPayee] = useState(repeat?.supplier_name ?? '');
+  const [otherLabel, setOtherLabel] = useState(repeat?.other_label ?? '');
+  const [note, setNote] = useState(repeat?.description ?? '');
+  const [photo, setPhoto] = useState<File | null>(() => peekPendingPhoto());
+  useEffect(() => () => clearPendingPhoto(), []);
   // Recent payees for this category first: less typing
   const payees = [...new Set(b.costs.filter((c) => !category || c.category === category).map((c) => c.supplier_name).filter(Boolean) as string[])].slice(0, 6);
 
@@ -50,7 +54,7 @@ export default function CostForm() {
           <TextInput label="Paid to" value={payee} onChange={setPayee} list="payees" />
           {payees.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-2">
-              {payees.map((p) => <button key={p} type="button" onClick={() => setPayee(p)} className="min-h-[2.75rem] rounded-full border-2 border-line bg-white px-3 font-bold">{p}</button>)}
+              {payees.map((p) => <button key={p} type="button" onClick={() => setPayee(p)} className="min-h-[2.75rem] rounded-full border-2 border-line bg-card px-3 font-bold">{p}</button>)}
             </div>
           )}
           <datalist id="payees">{payees.map((p) => <option key={p} value={p} />)}</datalist>

@@ -25,7 +25,7 @@ export default function OrderForm() {
   const initial = params.get('feed') ?? (products.length === 1 ? products[0].id : null);
   const [feedId, setFeedId] = useState<string | null>(initial);
   const [supplierId, setSupplierId] = useState<string | null>(b.products.find((p) => p.id === initial)?.supplier_id ?? null);
-  const [kg, setKg] = useState('');
+  const [kg, setKg] = useState(params.get('kg') ?? '');
   const [unit, setUnit] = useState<'kg' | 't'>('t');
   const [expected, setExpected] = useState(expectedFor(initial, supplierId));
   if (!products.length) return <Screen title="Ordered feed" back><Empty title="Add a feed first" action={<LinkButton to="/feed/new">Add a feed</LinkButton>} /></Screen>;

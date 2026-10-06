@@ -27,11 +27,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       <div aria-live="polite" className="pointer-events-none fixed inset-x-0 z-50 flex justify-center px-3" style={{ bottom: 'calc(6rem + env(safe-area-inset-bottom))' }}>
         {toast && (
           <div key={toast.key} role={toast.tone === 'error' ? 'alert' : 'status'}
-            className={`anim-toast pointer-events-auto flex w-full max-w-md items-center gap-3 rounded-2xl px-4 py-3 text-white shadow-lg ${toast.tone === 'error' ? 'bg-danger' : 'bg-ink'}`}>
+            className={`anim-toast pointer-events-auto flex w-full max-w-md items-center gap-3 rounded-2xl px-4 py-3 text-oninverse shadow-lg ${toast.tone === 'error' ? 'bg-danger' : 'bg-inverse'}`}>
             <Icon aria-hidden className="h-6 w-6 shrink-0" />
             <p className="flex-1 font-bold leading-snug">{toast.message}</p>
             {toast.action && (
-              <button className="min-h-tap rounded-xl px-4 font-bold text-hivis underline-offset-4 hover:underline"
+              <button className="min-h-tap rounded-xl px-4 font-bold underline underline-offset-4"
                 onClick={async () => { setToast(null); await toast.action!.run(); }}>
                 {toast.action.label}
               </button>

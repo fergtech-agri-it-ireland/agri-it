@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Banknote, CalendarRange, ClipboardList, CloudOff, Home, Milk, Package, PackageCheck, Plus, RefreshCw, Receipt, Ruler, Tractor, Beef } from 'lucide-react';
+import { Link, NavLink, Navigate, Outlet, useLocation } from 'react-router-dom';
+import { Banknote, CalendarRange, CloudOff, Home, Plus, RefreshCw, Tractor } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useBundle, useFarmCtx } from '../lib/data/farm';
 import { useDerived, useSnapshotRecorder } from '../lib/data/derived';
@@ -16,13 +16,13 @@ function DemoBanner() {
   const [confirm, setConfirm] = useState(false);
   return (
     <div className="no-print mx-auto flex max-w-xl items-center gap-3 px-3 pt-2">
-      <p className="min-w-0 flex-1 rounded-xl bg-hivis px-3 py-2 text-sm font-bold leading-snug text-ink">
+      <p className="min-w-0 flex-1 rounded-xl bg-hivis px-3 py-2 text-sm font-bold leading-snug text-onhivis">
         Demo farm with sample data. Changes stay on this device only.
       </p>
       {confirm ? (
-        <button onClick={resetDemo} className="min-h-tap shrink-0 rounded-xl bg-ink px-3 text-sm font-bold text-white">Reset now</button>
+        <button onClick={resetDemo} className="min-h-tap shrink-0 rounded-xl bg-inverse px-3 text-sm font-bold text-oninverse">Reset now</button>
       ) : (
-        <button onClick={() => setConfirm(true)} className="min-h-tap shrink-0 rounded-xl border-2 border-ink/80 bg-white px-3 text-sm font-bold">Reset</button>
+        <button onClick={() => setConfirm(true)} className="min-h-tap shrink-0 rounded-xl border-2 border-ink/80 bg-card px-3 text-sm font-bold">Reset</button>
       )}
     </div>
   );
@@ -35,35 +35,6 @@ const tabs = [
   { to: '/money', label: 'Money', Icon: Banknote },
   { to: '/farm', label: 'Farm', Icon: Tractor }
 ] as const;
-
-/** Farmer intents from spec section 8, each one tap from anywhere. */
-const quick = [
-  { to: '/record/delivery', label: 'Feed arrived', Icon: PackageCheck },
-  { to: '/record/milk', label: 'Milk cheque', Icon: Milk },
-  { to: '/record/sale', label: 'Sold animals', Icon: Beef },
-  { to: '/record/cost', label: 'Paid a bill', Icon: Receipt },
-  { to: '/record/order', label: 'Ordered feed', Icon: Package },
-  { to: '/record/count', label: 'Stock count', Icon: Ruler },
-  { to: '/records/new', label: 'Farm record', Icon: ClipboardList },
-  { to: '/record/income', label: 'Other income', Icon: Banknote }
-];
-
-export function RecordSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const nav = useNavigate();
-  return (
-    <Sheet open={open} onClose={onClose} title="Record">
-      <div className="grid grid-cols-2 gap-3 pb-2">
-        {quick.map(({ to, label, Icon }) => (
-          <button key={to} onClick={() => { onClose(); nav(to); }}
-            className="flex min-h-[5.5rem] flex-col items-start justify-between rounded-2xl border-2 border-line bg-pasture p-3 text-left hover:border-field active:bg-field-light">
-            <Icon className="h-7 w-7 text-field" aria-hidden />
-            <span className="text-lg font-bold leading-tight">{label}</span>
-          </button>
-        ))}
-      </div>
-    </Sheet>
-  );
-}
 
 function SyncStatus() {
   const [online, setOnline] = useState(navigator.onLine);
@@ -82,7 +53,7 @@ function SyncStatus() {
   if (online && queue.length === 0) return null;
   return (
     <>
-      <button onClick={() => setOpen(true)} className="no-print fixed left-1/2 top-2 z-30 flex -translate-x-1/2 items-center gap-2 rounded-full bg-ink px-4 py-2 text-sm font-bold text-white shadow-lg" style={{ marginTop: 'env(safe-area-inset-top)' }}>
+      <button onClick={() => setOpen(true)} className="no-print fixed left-1/2 top-2 z-30 flex -translate-x-1/2 items-center gap-2 rounded-full bg-inverse px-4 py-2 text-sm font-bold text-oninverse shadow-lg" style={{ marginTop: 'env(safe-area-inset-top)' }}>
         {online ? <RefreshCw className="h-4 w-4" aria-hidden /> : <CloudOff className="h-4 w-4" aria-hidden />}
         {!online ? `Offline${queue.length ? `, ${queue.length} to sync` : ''}` : failed.length ? `${failed.length} couldn't save` : `${queue.length} waiting to sync`}
       </button>
@@ -105,22 +76,22 @@ function SyncStatus() {
   );
 }
 
-function BottomNav({ onRecord }: { onRecord: () => void }) {
+function BottomNav() {
   return (
-    <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-white" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+    <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-card" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
       <ul className="mx-auto grid max-w-xl grid-cols-5">
         {tabs.map((t, i) =>
           t === null ? (
             <li key="rec" className="flex justify-center">
-              <button onClick={onRecord} aria-label="Record something"
-                className="-mt-6 flex h-[4.5rem] w-[4.5rem] flex-col items-center justify-center rounded-full border-4 border-white bg-hivis text-ink shadow-lg active:bg-hivis-dark">
+              <Link to="/record" aria-label="Record something"
+                className="-mt-6 flex h-[4.5rem] w-[4.5rem] flex-col items-center justify-center rounded-full border-4 border-card bg-hivis text-onhivis shadow-lg active:bg-hivis-dark">
                 <Plus className="h-9 w-9" strokeWidth={3} aria-hidden />
-              </button>
+              </Link>
             </li>
           ) : (
             <li key={i}>
               <NavLink to={t.to} end={'end' in t ? t.end : false}
-                className={({ isActive }) => `flex min-h-[4.25rem] flex-col items-center justify-center gap-0.5 text-[0.8rem] font-bold ${isActive ? 'text-field' : 'text-muted'}`}>
+                className={({ isActive }) => `flex min-h-[4.25rem] flex-col items-center justify-center gap-0.5 text-[0.8rem] font-bold ${isActive ? 'text-accent' : 'text-muted'}`}>
                 {({ isActive }) => (
                   <>
                     <span className={`flex h-8 w-14 items-center justify-center rounded-full ${isActive ? 'bg-field-light' : ''}`}><t.Icon className="h-6 w-6" aria-hidden /></span>
@@ -143,7 +114,6 @@ function Recorder({ bundle }: { bundle: FarmBundle }) {
 }
 
 export function AppShell() {
-  const [recordOpen, setRecordOpen] = useState(false);
   const { data } = useBundle();
   const loc = useLocation();
   const hideNav = loc.pathname.startsWith('/record') || /\/(new|count|edit)$/.test(loc.pathname) || loc.pathname.includes('/rule/');
@@ -153,8 +123,7 @@ export function AppShell() {
       {data && <Recorder bundle={data} />}
       {IS_DEMO && <DemoBanner />}
       <Outlet />
-      {!hideNav && <BottomNav onRecord={() => setRecordOpen(true)} />}
-      <RecordSheet open={recordOpen} onClose={() => setRecordOpen(false)} />
+      {!hideNav && <BottomNav />}
     </>
   );
 }
@@ -183,7 +152,7 @@ export function RequireFarm() {
 export function Splash() {
   return (
     <div className="flex min-h-[100dvh] items-center justify-center">
-      <div className="flex items-center gap-3 text-field">
+      <div className="flex items-center gap-3 text-accent">
         <Logo className="h-10 w-10 animate-pulse" />
         <span className="h-display text-3xl">Agri-It</span>
       </div>

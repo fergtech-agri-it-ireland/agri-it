@@ -142,20 +142,26 @@ export interface SaveOptions {
   patch?: (b: FarmBundle) => FarmBundle; // optimistic update so forecasts move instantly
   undo?: Op[];
   undoLabel?: string;
+  /** Skip the success toast: the caller shows its own summary (the Saved screen). Errors still toast. */
+  quiet?: boolean;
 }
+
+/** false = not saved (an error was shown); otherwise whether it reached the server or is queued offline. */
+export type SaveResult = false | 'saved' | 'queued';
 
 export function useSave() {
   const qc = useQueryClient();
   const { farmId } = useFarmCtx();
   const toast = useToast();
 
-  return useCallback(async (ops: Op[], opts: SaveOptions) => {
+  return useCallback(async (ops: Op[], opts: SaveOptions): Promise<SaveResult> => {
     const key = ['bundle', farmId];
     const previous = qc.getQueryData<FarmBundle>(key);
     if (opts.patch && previous) qc.setQueryData<FarmBundle>(key, opts.patch(previous));
     try {
       const { queued } = await execute(ops, opts.label);
       if (!queued) await qc.invalidateQueries({ queryKey: key });
+      if (opts.quiet) return queued ? 'queued' : 'saved';
       toast.show({
         message: queued ? `${opts.label}. Will sync when you have signal.` : opts.label,
         tone: queued ? 'info' : 'success',
@@ -170,7 +176,7 @@ export function useSave() {
             }
           : undefined
       });
-      return true;
+      return queued ? 'queued' : 'saved';
     } catch (e) {
       if (previous) qc.setQueryData(key, previous);
       toast.show({ message: (e as Error).message || 'Could not save. Check the details and try again.', tone: 'error' });

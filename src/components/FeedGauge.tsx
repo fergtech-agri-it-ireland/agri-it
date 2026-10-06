@@ -26,7 +26,7 @@ export function FeedGauge({ product, f, phone, compact }: { product: FeedProduct
   const days = f.daysRemaining !== null ? Math.floor(f.daysRemaining) : null;
 
   return (
-    <article className="overflow-hidden rounded-2xl bg-white shadow-lift">
+    <article className="overflow-hidden rounded-2xl bg-card shadow-lift">
       <Link to={`/feed/${product.id}`} className="flex gap-4 p-4 pb-3 hover:bg-pasture/60">
         <div className="h-[6.5rem]"><SiloBar f={f} /></div>
         <div className="min-w-0 flex-1">
@@ -55,7 +55,7 @@ export function FeedGauge({ product, f, phone, compact }: { product: FeedProduct
       </Link>
 
       {(f.status === 'order_now' || f.status === 'order_soon' || f.status === 'ok') && (
-        <div className={`flex items-center gap-3 px-4 py-3 ${f.status === 'ok' || f.openOrders.length > 0 ? 'border-t border-line bg-white' : 'bg-hivis'}`}>
+        <div className={`flex items-center gap-3 px-4 py-3 ${f.status === 'ok' || f.openOrders.length > 0 ? 'border-t border-line bg-card' : 'bg-hivis'}`}>
           <ToneIcon tone={tone} className="h-6 w-6 shrink-0" />
           <div className="min-w-0 flex-1 leading-tight">
             {f.openOrders.length > 0 ? (

@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { ChevronRight, FileText, Target } from 'lucide-react';
+import { ChevronRight, FileText, Target, BookOpen } from 'lucide-react';
 import { useFarmData } from '../lib/data/farm';
 import { useDerived } from '../lib/data/derived';
 import { monthlyFlows, monthsBetween } from '../lib/forecast/money';
@@ -20,7 +20,8 @@ export default function Money() {
   ].filter((r) => r.date <= d.today).sort((a, c) => c.date.localeCompare(a.date)).slice(0, 12);
 
   return (
-    <Screen title="Money" sub={`Financial year ${ye.fy.label}`}>
+    <Screen title="Money" sub={`Financial year ${ye.fy.label}`}
+      right={<Link to="/diary" className="flex min-h-tap items-center gap-1.5 rounded-full bg-card px-4 font-bold text-accent shadow-lift"><BookOpen className="h-5 w-5" aria-hidden />Diary</Link>}>
       <Card>
         <div className="grid grid-cols-3 gap-2">
           <div><p className="text-sm text-muted">In</p><p className="numeral text-3xl">{eur(ye.totalIncome)}</p></div>
@@ -42,9 +43,9 @@ export default function Money() {
       </Card>
 
       <List>
-        <Row to="/money/year-end" icon={<FileText className="h-6 w-6 text-field" />} title="Year-end pack for your accountant"
+        <Row to="/money/year-end" icon={<FileText className="h-6 w-6 text-accent" />} title="Year-end pack for your accountant"
           sub={ye.missing.length ? `${ye.missing.length} gaps to fill first` : 'No gaps flagged'} right={<ChevronRight className="h-5 w-5 text-muted" />} />
-        <Row to="/money/budget" icon={<Target className="h-6 w-6 text-field" />} title="Budget" sub={b.budget.length ? 'Compare plan with actual' : 'Not set yet'} right={<ChevronRight className="h-5 w-5 text-muted" />} />
+        <Row to="/money/budget" icon={<Target className="h-6 w-6 text-accent" />} title="Budget" sub={b.budget.length ? 'Compare plan with actual' : 'Not set yet'} right={<ChevronRight className="h-5 w-5 text-muted" />} />
       </List>
 
       {d.budget.rows.length > 0 && (
@@ -73,7 +74,7 @@ export default function Money() {
         </>
       )}
 
-      <SectionTitle action={<Link to="/record/cost" className="min-h-tap px-2 py-3 font-bold text-field">Add</Link>}>Recent</SectionTitle>
+      <SectionTitle action={<Link to="/record/cost" className="min-h-tap px-2 py-3 font-bold text-accent">Add</Link>}>Recent</SectionTitle>
       {recent.length === 0 ? (
         <Card><p className="text-muted">Nothing recorded yet.</p><div className="mt-3 flex gap-2"><LinkButton to="/record/milk" variant="secondary">Milk cheque</LinkButton><LinkButton to="/record/cost" variant="secondary">Paid a bill</LinkButton></div></Card>
       ) : (

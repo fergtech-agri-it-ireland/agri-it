@@ -29,7 +29,7 @@ function GroupCard({ g }: { g: AnimalGroup }) {
           patch: (x) => ({ ...x, groups: x.groups.map((y) => (y.id === g.id ? { ...y, head_count_updated_at: new Date().toISOString() } : y)) })
         })}>Still {g.head_count}: confirm</Button>
       )}
-      <button type="button" className="min-h-tap font-bold text-field underline" onClick={() => setMore(!more)}>{more ? 'Hide' : 'Winter and housing details'}</button>
+      <button type="button" className="min-h-tap font-bold text-accent underline" onClick={() => setMore(!more)}>{more ? 'Hide' : 'Winter and housing details'}</button>
       {more && (
         <div className="space-y-3">
           <label className="flex min-h-tap items-center gap-3 font-bold">

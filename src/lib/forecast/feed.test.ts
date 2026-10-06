@@ -23,7 +23,7 @@ const txn = (p: Partial<FeedTransaction>): FeedTransaction => ({
 const rule = (p: Partial<FeedingRule>): FeedingRule => ({
   id: Math.random().toString(36), farm_id: 'f', feed_product_id: 'p', animal_group_id: 'cows',
   head_count_override: null, kg_per_head_per_feed: 1, feeds_per_day: 1, start_date: '2026-01-01',
-  end_date: null, is_temporary: false, label: null, ...p
+  end_date: null, is_temporary: false, label: null, confirm_daily: true, ...p
 });
 
 const groups = [group('cows', 'Dairy cows', 120), group('heifers', 'Heifers', 40)];

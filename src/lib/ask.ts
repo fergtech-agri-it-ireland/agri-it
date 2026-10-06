@@ -9,6 +9,7 @@ import { COST_LABEL, type CostCategory } from './types';
 import type { useDerived } from './data/derived';
 import { eur, fmtDay, fmtKg, fmtNum } from './format';
 import { primaryRoute } from './suppliers';
+import { buildChecklist } from './routines';
 
 export interface Answer {
   text: string;
@@ -27,7 +28,8 @@ export const SUGGESTED = [
   'What is my cash position?',
   'How much have I spent on feed this year?',
   'What is my milk price this year?',
-  'What does my accountant need?'
+  'What does my accountant need?',
+  'What is left to do today?'
 ];
 
 const has = (q: string, ...words: string[]) => words.some((w) => q.includes(w));
@@ -41,6 +43,19 @@ export function ask(question: string, b: FarmBundle, d: Derived): Answer {
       text: 'Agri-It does not recommend feeding rates. It works out stock and run-out dates from the plan you set.',
       details: ['For rates, talk to your nutritionist or advisor with your silage analysis.', 'You can record their advice as a feeding plan and Agri-It will forecast from it.'],
       confidence: null, basis: 'Product rule: farmer controls feeding decisions', links: [{ label: 'Open feed', to: '/forecast' }]
+    };
+  }
+
+  // What's still to tick off today (the checklist)
+  if (has(q, 'to do', 'jobs', 'checklist', 'tick', 'left to do', 'routine')) {
+    const items = buildChecklist(b, d.today);
+    const open = items.filter((i) => i.status === 'pending');
+    const todayOpen = open.filter((i) => i.date === d.today);
+    const earlier = open.filter((i) => i.date < d.today);
+    return {
+      text: open.length === 0 ? 'Everything due today is ticked off.' : `${todayOpen.length} still to tick off today${earlier.length ? `, and ${earlier.length} from earlier` : ''}.`,
+      details: [...todayOpen, ...earlier].slice(0, 8).map((i) => `${i.date < d.today ? `${fmtDay(i.date)}: ` : ''}${i.title}${i.sub ? ` (${i.sub})` : ''}`),
+      confidence: null, basis: 'Your feeding plans and routines', links: [{ label: 'Open Today', to: '/' }, { label: 'Routines', to: '/routines' }]
     };
   }
 

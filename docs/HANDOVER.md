@@ -1,6 +1,6 @@
 # Agri-It MVP: Handover
 
-**Last updated:** 6 October 2026 (UI redesign: dials, dawn mode, Record, Saved, feed sum, diary)
+**Last updated:** 6 October 2026 (routines and tick-off checklist; earlier: UI redesign)
 **Owner:** Feargal
 **Status:** MVP code complete, builds clean, tests pass. Not yet pushed to GitHub or deployed.
 
@@ -24,8 +24,8 @@ It is not a herd, grassland or accounting system. It does not prescribe rations,
 | --- | --- |
 | Code | Complete for P0 scope, plus the UI redesign based on WHOOP, MyFitnessPal and Strava patterns (6 Oct 2026) |
 | Typecheck | Clean (`tsc -b --noEmit`) |
-| Unit tests | 43/43 passing (forecast engines, run-out steps, Today dials) |
-| Browser test | 82/82 checks on the demo build at phone size: every new flow, numbers on each screen, no sideways scroll at 360px in day and dawn mode, no console errors (script not in the repo) |
+| Unit tests | 56/56 passing (forecast engines, run-out steps, Today dials, routine schedules, checklist, actual-vs-planned feeding) |
+| Browser test | 123/123 checks on the demo build at phone size: UI flows (82) and routine tick-offs (41), exact stock/money numbers after each tick, no sideways scroll at 360px in day and dawn mode, no console errors (scripts not in the repo) |
 | Production build | Clean, PWA service worker generated |
 | Database | All three migrations + seed validated against real Postgres 16 with Supabase auth/storage stubs; RLS isolation tested |
 | GitHub | `fergtech-ireland/agri-it` (private), CI green |
@@ -82,6 +82,7 @@ supabase/
     20260929000100_schema.sql     tables, enums, indexes
     20260929000200_security_and_functions.sql   RLS, storage policies, RPCs
     20261006000100_feed_target.sql              farms.feed_target_days (fills the Feed dial)
+    20261006000200_routines.sql                 routines, routine_completions, feed_use_logs, feeding_rules.confirm_daily
   seed.sql                        evidence sources, Teagasc allowances, suppliers, DEMO user + farm
 src/
   main.tsx, App.tsx               providers, routes
@@ -135,6 +136,10 @@ Feed is always stored in **kg**. Money is `numeric(12,2)` euro.
 | `farm_records`, `documents`, `jobs` | records with confirmation state, uploads, simple jobs |
 | `evidence_sources`, `forage_benchmarks` | published sources (S1 to S6) and Teagasc allowances with dates |
 | `forecast_snapshots` | governance: inputs, inputs hash, output, confidence, rule version, timestamp |
+| `routines` | recurring work: kind `expense`/`income`/`job`/`count`/`order`/`silage`, frequency `daily`/`weekly`/`monthly`/`every_n_days` (weekday, day of month, interval), start/end, usual amount, category, counterparty, feed/silage/supplier links, active |
+| `routine_completions` | one row per routine per due date: `done`/`skipped`, actual amount, link to the record it created (`costs`/`income`/`feed_transactions`); unique (routine, due date) |
+| `feed_use_logs` | ticked-off feeding: rule, product, group, day, planned kg, actual kg, `fed`/`changed`/`skipped`; unique (rule, day) |
+| `feeding_rules.confirm_daily` | show this rule on Today's checklist (default on) |
 
 **RPCs** (all take a client-generated id and are idempotent on retry): `create_farm`, `record_feed_delivery`, `undo_feed_delivery`, `set_head_count`, `record_animal_sale`, `undo_animal_sale`.
 
@@ -167,7 +172,13 @@ Feed is always stored in **kg**. Money is `numeric(12,2)` euro.
 - Budget vs actual only raises alerts when ≥75% of elapsed months have data.
 - Year-end pack: income/costs by type, monthly flows, supplier totals, milk litres, livestock head, missing-data checklist. Labelled "management summary, not statutory accounts or a tax calculation". CSV export + print.
 
-**Ask Agri-It** (`ask.ts`): keyword rules over farm data only. Refuses ration recommendations. Unknown questions get "I can only answer from your farm records".
+**Routines** (`routines.ts`, `routineActions.ts`, rule versions unchanged)
+- Reminder model: nothing is recorded until ticked. Monthly on the 31st falls on the last day of short months.
+- Checklist = everything due today (pending and done) + unticked items from earlier: 7 days for routines, 3 days for feeding. Nothing before a rule/routine was created.
+- Feeding: one tick per active rule per day (temporary rules replace the normal one). A log's actual kg replaces the plan in `stockAt`; skip = 0; unticked days use the plan. "In the bin now" = start-of-day stock less what was ticked today (a count taken today only loses ticks made after it). Once a farm uses ticking, 3+ unticked days in the last week drops confidence to Medium with a reason.
+- Ticks write the real record in the same save: bill → cost, income → income, order → open order (expected = due + lead time), count → opens the count form and completes on save, silage → amount comes off the store via `silageWithFedOut()`. Unticking deletes the completion and its record.
+
+**Ask Agri-It** (`ask.ts`): keyword rules over farm data only. Also answers "what is left to do today?" from the checklist. Refuses ration recommendations. Unknown questions get "I can only answer from your farm records".
 
 ---
 
@@ -175,7 +186,9 @@ Feed is always stored in **kg**. Money is `numeric(12,2)` euro.
 
 Today `/` (three dials, Do next, Feeding today, quick tiles, feed cards) · Record `/record` (photo a docket, same as last time, something new) · Saved `/record/done` (after delivery, sale, milk cheque) · Forecast `/forecast` (tabs feed, forage, cash) · Feed: new, detail (the sum, who eats it, call, order again), edit, count, rule new/edit · Record forms: delivery, order (`?feed=&kg=`), count, milk, sale, cost (`?repeat=<cost id>`), income · Money `/money`, year-end, budget · Farm diary `/diary` · Farm hub, groups, silage (+form), jobs · Suppliers + detail · Records + new (`?type=`) · Ask · Settings (dawn mode, sunlight, feed target) · Login · Onboarding (3 steps).
 
-New modules: `lib/theme.ts` (dawn/sunlight modes), `lib/dials.ts` (+tests), `runoutSteps()` in `lib/forecast/feed.ts` (+tests), `lib/saved.ts` (Saved screen contract), `lib/pendingPhoto.ts` (photo hand-off), `components/Dial.tsx`. Colours are CSS variables in `src/index.css`; use `text-accent` for green text and `bg-field` for green fills, `bg-card` for surfaces, `text-onhivis` on yellow, `bg-inverse`/`text-oninverse` for toasts.
+Today `/` now opens on the dials then **Today's jobs** checklist (dawn mode: "Before milking" / "Evening jobs"). Routines `/routines` (feeding plans with tick-off switches, money, stock and feed, jobs) and `/routines/new`, `/routines/:id`. Bill, milk and other-income forms have "Does this repeat?". Count form accepts `?routine=&due=`.
+
+New modules: `lib/routines.ts` (+tests), `lib/routineActions.ts`, `components/Checklist.tsx`, `components/RepeatChips.tsx`, `lib/theme.ts` (dawn/sunlight modes), `lib/dials.ts` (+tests), `runoutSteps()` in `lib/forecast/feed.ts` (+tests), `lib/saved.ts` (Saved screen contract), `lib/pendingPhoto.ts` (photo hand-off), `components/Dial.tsx`. Colours are CSS variables in `src/index.css`; use `text-accent` for green text and `bg-field` for green fills, `bg-card` for surfaces, `text-onhivis` on yellow, `bg-inverse`/`text-oninverse` for toasts.
 
 Navigation: bottom bar Today / Forecast / **Record (hi-vis centre button)** / Money / Farm. Record opens a sheet of 8 intent tiles (spec section 8).
 
@@ -188,7 +201,8 @@ Navigation: bottom bar Today / Forecast / **Record (hi-vis centre button)** / Mo
 - Record screen: photo a docket first, then "same as last time" repeats, then new entries.
 - Saved screen after delivery/sale/milk: before and after, then Done / add photo / another / Undo.
 - Feed screen shows the run-out as a sum in kg that matches the forecast exactly.
-- Farm diary: milk cheques by month (best month marked) and one timeline.
+- Farm diary: milk cheques by month (best month marked) and one timeline, including ticked-off feeding per day, jobs done and skips.
+- Routines: anything recurring is ticked off on Today; ticks record what actually happened and update stock, costs and cash. Nothing is auto-posted.
 - Answer first; formulas behind "How this is worked out".
 - Touch targets ≥ 56px; save button pinned to the bottom (thumb reach).
 - Steppers, Today/Yesterday chips, numeric keypads, tap-to-choose chips, voice dictation; forms prefill from the last entry.
@@ -221,7 +235,7 @@ Navigation: bottom bar Today / Forecast / **Record (hi-vis centre button)** / Mo
 3. Re-verify supplier numbers; decide on Arrabawn Tipperary contact.
 4. Create a Supabase cloud project, `supabase link`, `supabase db push`, load reference data only.
 5. Deploy `dist/` (Vercel, Netlify or Cloudflare Pages) with env vars; set auth redirect URLs.
-6. P1 from spec: docket/invoice OCR with farmer confirmation, recurring costs/income, supplier price history, budget variance alerts, accountant pack export polish, notifications.
+6. P1 from spec: docket/invoice OCR with farmer confirmation, supplier price history, budget variance alerts, accountant pack export polish, push notifications for due routines (recurring costs/income are done as routines).
 7. Farm sharing: invite screen for family members and advisors (database already supports roles).
 8. P2: integrations (ICBF, AgFood, Herdwatch, PastureBase, co-op, accounting) where available.
 

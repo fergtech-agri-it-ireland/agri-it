@@ -1,4 +1,4 @@
-import { ChevronRight, ClipboardList, ListChecks, MessageCircleQuestion, Settings, Truck, Users, Warehouse, Wheat, BookOpen } from 'lucide-react';
+import { ChevronRight, ClipboardList, ListChecks, MessageCircleQuestion, Settings, Truck, Users, Warehouse, Wheat, BookOpen, Repeat } from 'lucide-react';
 import { useFarmData } from '../lib/data/farm';
 import { useDerived } from '../lib/data/derived';
 import { fmtNum } from '../lib/format';
@@ -21,6 +21,7 @@ export default function FarmHub() {
         <Row to="/suppliers" icon={icon(Truck)} title="Suppliers" sub="Numbers, your rep, lead times" right={chev} />
       </List>
       <List>
+        <Row to="/routines" icon={icon(Repeat)} title="Routines" sub={`${b.routines.filter((r) => r.active).length} routines, plus daily feeding`} right={chev} />
         <Row to="/diary" icon={icon(BookOpen)} title="Farm diary" sub="Everything recorded, and milk cheques by month" right={chev} />
         <Row to="/records" icon={icon(ClipboardList)} title="Records" sub={unconfirmed ? `${unconfirmed} waiting for you to confirm` : 'Dockets, fertiliser, medicines, movements'} right={chev} />
         <Row to="/farm/jobs" icon={icon(ListChecks)} title="Jobs" sub={open ? `${open} to do` : 'Nothing on the list'} right={chev} />

@@ -1,6 +1,6 @@
 import { useState, type ComponentType } from 'react';
 import { Link } from 'react-router-dom';
-import { Banknote, Beef, ClipboardList, Milk, Package, Receipt, Ruler, Trophy, Truck } from 'lucide-react';
+import { Banknote, Beef, Briefcase, ClipboardCheck, ClipboardList, Milk, Minus, Package, Receipt, Ruler, Trophy, Truck, Warehouse } from 'lucide-react';
 import { useFarmData } from '../lib/data/farm';
 import { fyRange, monthsBetween } from '../lib/forecast/money';
 import { COST_LABEL, INCOME_LABEL, RECORD_LABEL } from '../lib/types';
@@ -63,6 +63,33 @@ export default function Diary() {
   }
   for (const c of b.costs.filter((x) => !x.feed_transaction_id)) {
     entries.push({ id: c.id, date: c.occurred_on, amount: -Number(c.amount_eur), tone: 'out', to: '/money', Icon: Receipt, title: c.description ?? c.other_label ?? COST_LABEL[c.category], sub: [COST_LABEL[c.category], c.supplier_name].filter(Boolean).join(', ') });
+  }
+  // Feeding ticked off on Today: one line per day, what actually went out
+  const feedDays = new Map<string, typeof b.feedLogs>();
+  for (const l of b.feedLogs) feedDays.set(l.used_on, [...(feedDays.get(l.used_on) ?? []), l]);
+  for (const [day, logs] of feedDays) {
+    const total = logs.reduce((s, l) => s + Number(l.actual_kg), 0);
+    const byFeed = new Map<string, number>();
+    for (const l of logs) byFeed.set(l.feed_product_id, (byFeed.get(l.feed_product_id) ?? 0) + Number(l.actual_kg));
+    const changed = logs.filter((l) => l.status === 'changed').length;
+    const skipped = logs.filter((l) => l.status === 'skipped').length;
+    const extras = [changed ? `${changed} changed from plan` : '', skipped ? `${skipped} skipped` : ''].filter(Boolean).join(', ');
+    entries.push({
+      id: `feedday-${day}`, date: day, amount: null, tone: 'feed', to: '/forecast', Icon: ClipboardCheck,
+      title: `Feeding ticked off: ${fmtKg(total)}`,
+      sub: [...byFeed].map(([pid, kg]) => `${b.products.find((p) => p.id === pid)?.name ?? 'Feed'} ${fmtKg(kg)}`).join(', ') + (extras ? `. ${extras}` : '')
+    });
+  }
+  // Routine ticks that don't create their own record (jobs, silage feed-out, skips)
+  for (const c of b.completions) {
+    const r = b.routines.find((x) => x.id === c.routine_id);
+    if (!r || (c.status === 'done' && c.record_table)) continue;
+    entries.push({
+      id: `done-${c.id}`, date: c.due_date, amount: null, tone: 'record', to: `/routines/${r.id}`,
+      Icon: c.status === 'skipped' ? Minus : r.kind === 'silage' ? Warehouse : Briefcase,
+      title: c.status === 'skipped' ? `Skipped: ${r.title}` : r.kind === 'silage' && c.amount !== null ? `Fed out ${fmtNum(Number(c.amount))} t silage` : `Done: ${r.title}`,
+      sub: c.status === 'skipped' ? 'Nothing recorded' : 'Routine'
+    });
   }
   for (const r of b.records) {
     entries.push({ id: r.id, date: r.occurred_on, amount: null, tone: 'record', to: '/records', Icon: ClipboardList, title: r.title, sub: RECORD_LABEL[r.record_type] });

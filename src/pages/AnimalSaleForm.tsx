@@ -47,7 +47,7 @@ export default function AnimalSaleForm() {
     const remaining = Math.max(0, group.head_count - count);
     const groupsAfter = b.groups.map((g) => (g.id === group.id ? { ...g, head_count: remaining } : g));
     const feedRows: SavedRow[] = reduce ? b.products.filter((p) => !p.archived && b.rules.some((r) => r.feed_product_id === p.id && r.animal_group_id === group.id)).flatMap((p) => {
-      const input = { product: p, txns: b.txns.filter((t) => t.feed_product_id === p.id), rules: b.rules.filter((r) => r.feed_product_id === p.id), supplierSetting: b.supplierSettings.find((s) => s.supplier_id === p.supplier_id), farmLeadTimeDays: b.farm.default_lead_time_days, today };
+      const input = { product: p, txns: b.txns.filter((t) => t.feed_product_id === p.id), rules: b.rules.filter((r) => r.feed_product_id === p.id), supplierSetting: b.supplierSettings.find((s) => s.supplier_id === p.supplier_id), farmLeadTimeDays: b.farm.default_lead_time_days, today, logs: b.feedLogs.filter((l) => l.feed_product_id === p.id) };
       const before = forecastFeed({ ...input, groups: b.groups });
       const after = forecastFeed({ ...input, groups: groupsAfter });
       return after.runOutDate ? [{ label: `${p.name} lasts to`, before: before.runOutDate ? fmtDay(before.runOutDate) : null, after: fmtDay(after.runOutDate) }] : [];

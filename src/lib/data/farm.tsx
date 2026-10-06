@@ -94,7 +94,7 @@ async function fetchBundle(farmId: string): Promise<FarmBundle> {
   const q = <T,>(p: PromiseLike<{ data: T | null; error: { message: string } | null }>) =>
     Promise.resolve(p).then((r) => { if (r.error) throw new Error(r.error.message); return (r.data ?? []) as T; });
 
-  const [farm, groups, suppliers, branches, supplierSettings, products, txns, rules, silage, benchmarks, evidence, income, costs, budget, records, documents, jobs] =
+  const [farm, groups, suppliers, branches, supplierSettings, products, txns, rules, silage, benchmarks, evidence, income, costs, budget, records, documents, jobs, routines, completions, feedLogs] =
     await Promise.all([
       q(supabase.from('farms').select('*').eq('id', farmId).single()),
       q(supabase.from('animal_groups').select('*').eq('farm_id', farmId).order('sort_order').order('name')),
@@ -112,9 +112,12 @@ async function fetchBundle(farmId: string): Promise<FarmBundle> {
       q(supabase.from('budget_lines').select('*').eq('farm_id', farmId)),
       q(supabase.from('farm_records').select('*').eq('farm_id', farmId).order('occurred_on', { ascending: false })),
       q(supabase.from('documents').select('*').eq('farm_id', farmId).order('created_at', { ascending: false })),
-      q(supabase.from('jobs').select('*').eq('farm_id', farmId).order('due_on'))
+      q(supabase.from('jobs').select('*').eq('farm_id', farmId).order('due_on')),
+      q(supabase.from('routines').select('*').eq('farm_id', farmId).order('created_at')),
+      q(supabase.from('routine_completions').select('*').eq('farm_id', farmId).gte('due_date', since).order('due_date')),
+      q(supabase.from('feed_use_logs').select('*').eq('farm_id', farmId).gte('used_on', since).order('used_on'))
     ]);
-  return { farm, groups, suppliers, branches, supplierSettings, products, txns, rules, silage, benchmarks, evidence, income, costs, budget, records, documents, jobs } as unknown as FarmBundle;
+  return { farm, groups, suppliers, branches, supplierSettings, products, txns, rules, silage, benchmarks, evidence, income, costs, budget, records, documents, jobs, routines, completions, feedLogs } as unknown as FarmBundle;
 }
 
 export function useBundle() {

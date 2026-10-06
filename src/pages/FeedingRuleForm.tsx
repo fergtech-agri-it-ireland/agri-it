@@ -30,6 +30,7 @@ export default function FeedingRuleForm() {
   const [start, setStart] = useState(existing?.start_date && existing.start_date > today ? existing.start_date : today);
   const [end, setEnd] = useState(existing?.end_date ?? addDays(today, 14));
   const [label, setLabel] = useState(existing?.label ?? '');
+  const [confirmDaily, setConfirmDaily] = useState(existing?.confirm_daily ?? true);
 
   if (!product) return <Screen title="Feeding plan" back><Empty title="Feed not found" /></Screen>;
   if (b.groups.filter((g) => !g.archived).length === 0) {
@@ -42,7 +43,7 @@ export default function FeedingRuleForm() {
   async function submit() {
     const base = {
       farm_id: farmId, feed_product_id: product!.id, animal_group_id: groupId, head_count_override: useGroupCount ? null : heads,
-      kg_per_head_per_feed: kg, feeds_per_day: Number(feeds), is_temporary: temporary, label: label || null,
+      kg_per_head_per_feed: kg, feeds_per_day: Number(feeds), is_temporary: temporary, label: label || null, confirm_daily: confirmDaily,
       end_date: temporary ? end : null
     };
     const ops: Op[] = [];
@@ -89,6 +90,10 @@ export default function FeedingRuleForm() {
         {!useGroupCount && <Stepper label="How many get it?" value={heads} step={5} onChange={setHeads} unit="head" />}
         <Stepper label="kg per head per feed" value={kg} step={0.5} decimals={2} onChange={setKg} unit="kg" />
         <Chips label="Feeds per day" columns={3} value={feeds} onChange={setFeeds} options={[{ value: '1', label: 'Once' }, { value: '2', label: 'Twice' }, { value: '3', label: '3 times' }]} />
+        <label className="flex min-h-tap items-center gap-3 rounded-xl bg-pasture px-3 py-2 font-bold">
+          <input type="checkbox" className="h-6 w-6 shrink-0 accent-field" checked={confirmDaily} onChange={(e) => setConfirmDaily(e.target.checked)} />
+          <span>Tick it off on Today each day<span className="block text-sm font-normal text-muted">What you tick replaces the plan, so stock left stays right. Off: Agri-It assumes the plan was fed.</span></span>
+        </label>
       </Card>
       <Card className="space-y-4">
         <label className="flex min-h-tap items-center gap-3 font-bold">

@@ -33,13 +33,13 @@ export default function FeedDetail() {
 
   const rules = b.rules.filter((r) => r.feed_product_id === product.id).sort((a, c) => Number(a.is_temporary) - Number(c.is_temporary));
   const txns = b.txns.filter((t) => t.feed_product_id === product.id).sort((a, c) => c.effective_on.localeCompare(a.effective_on));
-  const variances = countVariances(txns, rules, b.groups);
+  const variances = countVariances(txns, rules, b.groups, b.feedLogs.filter((l) => l.feed_product_id === product.id));
   const supplier = b.suppliers.find((s) => s.id === product.supplier_id);
   const contacts = supplier ? resolveContacts(supplier, b.branches, b.supplierSettings.find((s) => s.supplier_id === supplier.id), b.farm) : null;
   const prev = (snaps.data ?? []).find((s) => s.output.run_out !== f.runOutDate);
 
   // The sum (after MyFitnessPal's remaining-calories equation): stock minus each stretch of planned use
-  const steps = f.stockKg !== null && f.stockKg > 0 ? runoutSteps(f.stockKg, rules, b.groups, d.today) : [];
+  const steps = f.stockKg !== null && f.stockKg > 0 ? runoutSteps(f.stockKg, rules, b.groups, d.today, f.confirmedTodayKg > 0 ? f.remainingTodayKg : undefined) : [];
   const lastCount = [...txns].find((t) => t.txn_type === 'count' || t.txn_type === 'opening');
   const deliveredSince = lastCount ? txns.filter((t) => t.txn_type === 'delivery' && t.effective_on > lastCount.effective_on).reduce((s, t) => s + Number(t.quantity_kg), 0) : 0;
   const stockBasis = lastCount

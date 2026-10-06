@@ -1,3 +1,5 @@
+import { RepeatChips } from '../components/RepeatChips';
+import { routineFromEntry, type RepeatChoice } from '../lib/routines';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useFarmData, useFarmCtx, useSave } from '../lib/data/farm';
@@ -24,6 +26,7 @@ export default function MilkSaleForm() {
   const [date, setDate] = useState(todayISO());
   const [buyer, setBuyer] = useState(last?.counterparty ?? '');
   const [photo, setPhoto] = useState<File | null>(() => peekPendingPhoto());
+  const [repeat, setRepeat] = useState<RepeatChoice>('none');
   useEffect(() => () => clearPendingPhoto(), []);
   const cpl = amount && litres ? (Number(amount) / Number(litres)) * 100 : null;
 
@@ -34,10 +37,17 @@ export default function MilkSaleForm() {
       milk_litres: litres ? Number(litres) : null, fat_kg: fat ? Number(fat) : null, protein_kg: protein ? Number(protein) : null,
       description: 'Milk cheque', document_id: documentId
     };
-    const result = await save([{ kind: 'insert', table: 'income', row }], {
+    const rep = repeat === 'none' ? null : routineFromEntry({
+      farmId: farmId!, kind: 'income', title: 'Milk cheque', date, amount: Number(amount), category: 'milk',
+      counterparty: buyer || null, repeat, recordTable: 'income', recordId: row.id, routineId: uuid()
+    });
+    const result = await save([{ kind: 'insert', table: 'income', row }, ...(rep?.ops ?? [])], {
       label: 'Milk cheque saved',
       quiet: true,
-      patch: (x) => ({ ...x, income: [{ ...row, animal_group_id: null, head_count: null } as Income, ...x.income] }),
+      patch: (x) => ({
+        ...x, income: [{ ...row, animal_group_id: null, head_count: null } as Income, ...x.income],
+        routines: rep ? [...x.routines, rep.routine] : x.routines, completions: rep ? [...x.completions, rep.completion] : x.completions
+      }),
       undo: [{ kind: 'delete', table: 'income', match: { id: row.id } }]
     });
     if (!result) return;
@@ -59,8 +69,8 @@ export default function MilkSaleForm() {
         ...(cash && row.occurred_on <= today ? [{ label: 'Cash recorded', before: eur(cash.balance), after: eur(cash.balance + row.amount_eur) }] : []),
         ...(cpl !== null ? [{ label: 'This cheque', after: `${fmtNum(cpl)} c/L`, sub: litresYear > 0 ? `Year average ${fmtNum((litresWithPrice / litresYear) * 100)} c/L` : undefined }] : [])
       ],
-      note: 'Added to income, cash flow and the year-end pack.',
-      undo: [{ kind: 'delete', table: 'income', match: { id: row.id } }],
+      note: `Added to income, cash flow and the year-end pack.${rep ? ` Repeats ${repeat}: the next one shows on Today, ready to tick off with the real amount.` : ''}`,
+      undo: [...(rep ? [{ kind: 'delete' as const, table: 'routines', match: { id: rep.routine.id } }] : []), { kind: 'delete', table: 'income', match: { id: row.id } }],
       undoLabel: 'Milk cheque removed',
       photo: documentId ? undefined : { table: 'income', id: row.id, recordType: 'invoice' },
       again: { label: 'Another cheque', to: '/record/milk' }
@@ -82,6 +92,7 @@ export default function MilkSaleForm() {
         )}
         <DateChips label="Paid on" value={date} onChange={setDate} />
         <TextInput label="Processor" value={buyer} onChange={setBuyer} placeholder="e.g. your co-op" />
+        <RepeatChips value={repeat} onChange={setRepeat} date={date} />
         <PhotoInput file={photo} onFile={setPhoto} />
       </Card>
       <SaveBar><Button block disabled={!amount} onClick={submit}>Save milk cheque</Button></SaveBar>

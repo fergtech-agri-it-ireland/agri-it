@@ -6,9 +6,13 @@ Irish farm intelligence for day-to-day decisions: purchased feed run-out and reo
 
 Built from the *Agri-It MVP Overview* (September 2026). Mobile-first, installable, and works offline.
 
-| Today | Dawn mode | Record | Saved | Feed sum | Farm diary |
-| --- | --- | --- | --- | --- | --- |
-| ![Today](docs/screenshots/today.png) | ![Dawn mode](docs/screenshots/today-dawn.png) | ![Record](docs/screenshots/record.png) | ![Saved](docs/screenshots/saved.png) | ![Feed](docs/screenshots/feed-detail.png) | ![Diary](docs/screenshots/diary.png) |
+| Today | Tick-off checklist | Routines | Dawn mode |
+| --- | --- | --- | --- |
+| ![Today](docs/screenshots/today.png) | ![Checklist](docs/screenshots/checklist.png) | ![Routines](docs/screenshots/routines.png) | ![Dawn mode](docs/screenshots/today-dawn.png) |
+
+| Record | Saved | Feed sum | Farm diary |
+| --- | --- | --- | --- |
+| ![Record](docs/screenshots/record.png) | ![Saved](docs/screenshots/saved.png) | ![Feed](docs/screenshots/feed-detail.png) | ![Diary](docs/screenshots/diary.png) |
 
 ---
 
@@ -129,6 +133,8 @@ src/
 | Feed shared across groups at different rates | `FeedingRuleForm`, `feeding_rules` |
 | Recalculates on delivery, count, head count or rule change | Forecast is derived live from the ledger |
 | Temporary feeding plans | Replace a group's normal rate for a date window, then revert |
+| Recurring costs and income (P1), plus recurring jobs, counts, orders and silage feed-out | Routines, ticked off on Today: `routines`, `routine_completions` |
+| Actual vs planned feeding | `feed_use_logs`: ticked amounts replace the plan in the stock ledger |
 | Predicted vs actual, never silently changing the farmer's rate | `countVariances()`, shown on the feed screen |
 | Confidence: High, Medium, Low, Scenario, with reasons | `forecastFeed()`, `forecastForage()` |
 | Lead time, price and rep never invented | No lead time means no order-by date; no named reps seeded |
@@ -150,6 +156,7 @@ Designed for someone standing in a yard with gloves, glare, a patchy signal and 
 - **The sum shown (from MyFitnessPal's calories-remaining equation).** The feed screen shows the run-out date as a sum in kg: stock, minus each stretch of planned use (including a temporary higher rate), equals days left. It always matches the forecast because it uses the same rules.
 - **What changed, then a next step (from Strava's post-activity summary).** After a delivery, sale or milk cheque, a Saved screen shows before and after (days of feed, run-out, order-by, spend against budget, head counts, cash) with clear next steps: Done, add the docket photo, record another, or Undo.
 - **Farm diary (Strava's progress chart and feed).** Milk cheques by month with your best month marked, then everything recorded as one timeline.
+- **Tick it off, and what's left updates (routines).** Anything that repeats shows on Today when due, as a checklist with big round ticks: each feeding plan every day, plus bills, income, jobs, stock counts, standing feed orders and silage feed-out. Like accounting software's "reminder" transactions, nothing is recorded until it's ticked. A tick records what actually happened: a feeding tick replaces the plan for that group and day, a bill tick creates the cost, an order tick creates an open order, a count opens the count form. **Change** records a different amount; **Skip this time** records nothing. **All fed as planned** ticks every feed in one tap. Missed items stay under "From earlier" for a few days, then drop off so a busy week never piles up. Bill, milk and income forms ask "Does this repeat?" so one entry becomes a routine.
 - **Thumb reach.** The bottom tab bar has a central hi-vis **Record** button. Save buttons are pinned to the bottom of the screen.
 - **Big targets, little typing.** Touch targets are at least 56px (above Material's 48dp minimum). Forms use −/+ steppers, Today/Yesterday date chips, numeric keypads and tap-to-choose options instead of dropdowns, plus voice dictation for notes. Forms prefill from the last entry: the last quantity, price, supplier and milk processor.
 - **Readable in sunlight.** Near-black on white, an Atkinson Hyperlegible body font designed for legibility, and a **Sunlight mode** in Settings. Status is always shown with an icon and words, never by colour alone.
@@ -164,7 +171,7 @@ Designed for someone standing in a yard with gloves, glare, a patchy signal and 
 
 - **Supplier numbers need re-verifying before launch.** They come from the MVP Overview and are stamped verified on 1 Sep 2026 to match it. Arrabawn Tipperary is deliberately left without a number until its merged directory is confirmed. Branch and territory data (`supplier_branches`) is empty until verified data is loaded.
 - **OCR on dockets** (P1). Photos are stored and must be confirmed by the farmer; nothing is extracted yet.
-- **Not yet built:** notifications, recurring income and costs, supplier price history, and inviting other people to a farm (the database supports members and advisors; the invite screen isn't built).
+- **Not yet built:** push notifications for due routines (the checklist is in-app only), supplier price history, and inviting other people to a farm (the database supports members and advisors; the invite screen isn't built).
 - **Data volume.** The app loads one farm's last ~2 years in a single cached query, which is simple and fast at family-farm scale. Move to paged queries if a farm has tens of thousands of rows.
 - **Voice input** uses the browser's speech recognition (Chrome, Edge, Safari). It is hidden where it isn't supported.
 

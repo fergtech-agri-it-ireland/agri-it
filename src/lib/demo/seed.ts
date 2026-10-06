@@ -18,6 +18,10 @@ const G_CALF = '40000000-0000-0000-0000-000000000004';
 const P_NUT = '50000000-0000-0000-0000-000000000001';
 const P_CALF = '50000000-0000-0000-0000-000000000002';
 const TIRLAN = '10000000-0000-0000-0000-000000000001';
+const R_COWS = '60000000-0000-0000-0000-000000000001';
+const R_HEIF = '60000000-0000-0000-0000-000000000002';
+const R_CALF = '60000000-0000-0000-0000-000000000003';
+const S_PIT = '70000000-0000-0000-0000-000000000001';
 
 /** Column defaults, mirroring the migration, applied to every insert. */
 export const DEFAULTS: Record<string, () => Row> = {
@@ -29,7 +33,10 @@ export const DEFAULTS: Record<string, () => Row> = {
   documents: () => ({ record_type: 'other', storage_path: null, file_name: null, mime_type: null, extracted: null, state: 'unconfirmed' }),
   feed_products: () => ({ supplier_id: null, storage_location: null, safety_stock_mode: 'days', safety_stock_value: 3, lead_time_days: null, analysis: null, archived: false }),
   feed_transactions: () => ({ order_date: null, delivery_date: null, expected_delivery_date: null, order_status: null, linked_order_id: null, supplier_id: null, total_price_eur: null, price_per_tonne_eur: null, evidence: 'farmer_estimate', document_id: null, notes: null }),
-  feeding_rules: () => ({ head_count_override: null, start_date: todayISO(), end_date: null, is_temporary: false, label: null }),
+  feeding_rules: () => ({ head_count_override: null, start_date: todayISO(), end_date: null, is_temporary: false, label: null, confirm_daily: true }),
+  routines: () => ({ interval_days: null, weekday: null, day_of_month: null, start_date: todayISO(), end_date: null, amount: null, category: null, counterparty: null, feed_product_id: null, silage_store_id: null, supplier_id: null, active: true }),
+  routine_completions: () => ({ amount: null, record_table: null, record_id: null, done_on: todayISO() }),
+  feed_use_logs: () => ({}),
   silage_stores: () => ({ acreage: null, yield_t_per_acre: null, length_m: null, width_m: null, avg_height_m: null, density_kg_m3: null, bale_count: null, bale_weight_kg: null, measured_tonnes: null, dm_percent: null, dmd_percent: null, crude_protein_percent: null, ph: null, measured_on: todayISO(), fed_out_tonnes: 0, notes: null }),
   income: () => ({ counterparty: null, milk_litres: null, fat_kg: null, protein_kg: null, animal_group_id: null, head_count: null, description: null, document_id: null }),
   costs: () => ({ other_label: null, supplier_id: null, supplier_name: null, feed_transaction_id: null, description: null, document_id: null }),
@@ -108,14 +115,16 @@ export function buildSeed(): DB {
     { farm_id: F, feed_product_id: P_CALF, txn_type: 'order', quantity_kg: 1000, order_date: D(-1), expected_delivery_date: D(2), effective_on: D(2), order_status: 'open', supplier_id: TIRLAN, evidence: 'unconfirmed' },
     { farm_id: F, feed_product_id: P_CALF, txn_type: 'opening', quantity_kg: 500, effective_on: D(-6), evidence: 'farmer_estimate', notes: 'Roughly 20 bags' }
   ]);
+  // Rules were set up two mornings ago (when ticking began), so the checklist only reaches back that far
+  const setUp = `${D(-2)}T06:00:00Z`;
   put('feeding_rules', [
-    { farm_id: F, feed_product_id: P_NUT, animal_group_id: G_COWS, kg_per_head_per_feed: 1.0, feeds_per_day: 2, start_date: D(-30) },
-    { farm_id: F, feed_product_id: P_NUT, animal_group_id: G_HEIF, kg_per_head_per_feed: 1.0, feeds_per_day: 1, start_date: D(-30) },
-    { farm_id: F, feed_product_id: P_CALF, animal_group_id: G_CALF, kg_per_head_per_feed: 1.5, feeds_per_day: 1, start_date: D(-30) },
+    { id: R_COWS, farm_id: F, feed_product_id: P_NUT, animal_group_id: G_COWS, kg_per_head_per_feed: 1.0, feeds_per_day: 2, start_date: D(-30), created_at: setUp },
+    { id: R_HEIF, farm_id: F, feed_product_id: P_NUT, animal_group_id: G_HEIF, kg_per_head_per_feed: 1.0, feeds_per_day: 1, start_date: D(-30), created_at: setUp },
+    { id: R_CALF, farm_id: F, feed_product_id: P_CALF, animal_group_id: G_CALF, kg_per_head_per_feed: 1.5, feeds_per_day: 1, start_date: D(-30), created_at: setUp },
     { farm_id: F, feed_product_id: P_NUT, animal_group_id: G_COWS, kg_per_head_per_feed: 1.5, feeds_per_day: 2, start_date: D(3), end_date: D(12), is_temporary: true, label: 'Higher rate while grass is short' }
   ]);
   put('silage_stores', [
-    { farm_id: F, name: 'Main pit', method: 'pit_dimensions', length_m: 40, width_m: 12, avg_height_m: 2.2, density_kg_m3: 700, dm_percent: 28, dmd_percent: 72, measured_on: D(-25) },
+    { id: S_PIT, farm_id: F, name: 'Main pit', method: 'pit_dimensions', length_m: 40, width_m: 12, avg_height_m: 2.2, density_kg_m3: 700, dm_percent: 28, dmd_percent: 72, measured_on: D(-25) },
     { farm_id: F, name: 'Round bales (haggard)', method: 'bale_count', bale_count: 220, bale_weight_kg: 750, measured_on: D(-25) }
   ]);
 
@@ -151,6 +160,32 @@ export function buildSeed(): DB {
     { farm_id: F, record_type: 'movement', occurred_on: D(-60), title: '12 weanlings to mart', details: { direction: 'out', animals: 12 } }
   ]);
   put('jobs', [{ farm_id: F, title: 'Book vet for TB test', due_on: D(5) }, { farm_id: F, title: 'Check silage pit cover', due_on: D(1) }]);
+  // Feeding ticked off on the last two days; calves got a little extra yesterday
+  put('feed_use_logs', [
+    ...[D(-2), D(-1)].flatMap((day) => [
+      { farm_id: F, feeding_rule_id: R_COWS, feed_product_id: P_NUT, animal_group_id: G_COWS, used_on: day, planned_kg: 240, actual_kg: 240, status: 'fed' },
+      { farm_id: F, feeding_rule_id: R_HEIF, feed_product_id: P_NUT, animal_group_id: G_HEIF, used_on: day, planned_kg: 40, actual_kg: 40, status: 'fed' }
+    ]),
+    { farm_id: F, feeding_rule_id: R_CALF, feed_product_id: P_CALF, animal_group_id: G_CALF, used_on: D(-2), planned_kg: 27, actual_kg: 27, status: 'fed' },
+    { farm_id: F, feeding_rule_id: R_CALF, feed_product_id: P_CALF, animal_group_id: G_CALF, used_on: D(-1), planned_kg: 27, actual_kg: 30, status: 'changed' }
+  ]);
+
+  // Routines: dates are relative so the demo always has something due, overdue and done
+  const dow = (iso: string) => new Date(iso + 'T00:00:00Z').getUTCDay();
+  const dom = (iso: string) => Number(iso.slice(8, 10));
+  const since = D(-60);
+  const routineCreated = new Date(Date.now() - 60 * 86_400_000).toISOString();
+  const ROUT_COUNT = '80000000-0000-0000-0000-000000000001';
+  const ROUT_WATER = '80000000-0000-0000-0000-000000000002';
+  put('routines', [
+    { farm_id: F, kind: 'expense', title: 'Loan repayment', frequency: 'monthly', day_of_month: dom(D(-5)), start_date: since, amount: 5200, category: 'other', counterparty: 'Bank', created_at: routineCreated },
+    { farm_id: F, kind: 'expense', title: 'ESB bill', frequency: 'monthly', day_of_month: dom(D(14)), start_date: since, amount: 640, category: 'utilities', counterparty: 'Electricity supplier', created_at: routineCreated },
+    { farm_id: F, kind: 'income', title: 'Milk cheque', frequency: 'monthly', day_of_month: dom(D(9)), start_date: since, amount: 27000, category: 'milk', counterparty: 'Tirlán', created_at: routineCreated },
+    { id: ROUT_COUNT, farm_id: F, kind: 'count', title: 'Dip the nut bin', frequency: 'weekly', weekday: dow(D(-1)), start_date: since, feed_product_id: P_NUT, created_at: routineCreated },
+    { id: ROUT_WATER, farm_id: F, kind: 'job', title: 'Check water troughs', frequency: 'weekly', weekday: dow(D(-2)), start_date: since, created_at: routineCreated },
+    { farm_id: F, kind: 'silage', title: 'Feed out silage', frequency: 'daily', start_date: `${year}-11-01`, amount: 6, silage_store_id: S_PIT, created_at: routineCreated }
+  ]);
+  put('routine_completions', [{ farm_id: F, routine_id: ROUT_WATER, due_date: D(-2), status: 'done', done_on: D(-2) }]);
   for (const t of ['documents', 'forecast_snapshots']) db[t] = db[t] ?? [];
   return db;
 }

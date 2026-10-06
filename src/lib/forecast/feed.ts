@@ -12,7 +12,7 @@
  *   A temporary rule replaces that group's normal rule(s) for its date window.
  */
 import type {
-  AnimalGroup, Confidence, Evidence, FarmSupplierSetting, FeedProduct, FeedTransaction, FeedingRule, ISODate
+  AnimalGroup, Confidence, Evidence, FarmSupplierSetting, FeedProduct, FeedTransaction, FeedUseLog, FeedingRule, ISODate
 } from '../types';
 import { addDays, daysBetween, hashString } from '../format';
 
@@ -49,8 +49,15 @@ export interface FeedForecast {
   productId: string;
   today: ISODate;
   status: FeedStatus;
+  /** What's in the bin now: start-of-day stock less anything ticked off as fed today. */
   stockKg: number | null;
   dailyUseKg: number;
+  /** Fed today and ticked off on the checklist. */
+  confirmedTodayKg: number;
+  /** Planned for today but not ticked off yet. */
+  remainingTodayKg: number;
+  /** Days in the last week with feeding not ticked off (only counted once you use ticking). */
+  unconfirmedDays: number;
   activeRules: RuleUse[];
   upcomingChanges: { date: ISODate; dailyUseKg: number; reason: string }[];
   daysRemaining: number | null;
@@ -83,6 +90,8 @@ export interface FeedForecastInput {
   farmLeadTimeDays: number | null;
   today: ISODate;
   now?: Date; // for staleness checks (defaults to today)
+  /** Ticked-off feeding (Today checklist). Confirmed amounts replace the plan for that day and group. */
+  logs?: FeedUseLog[];
 }
 
 function ruleActive(r: FeedingRule, day: ISODate) {
@@ -108,6 +117,55 @@ export function dailyUse(rules: FeedingRule[], groups: Map<string, AnimalGroup>,
   );
 }
 
+/**
+ * Usage model. A confirmed log replaces the planned amount for its rule and day (a skip is 0);
+ * days nobody ticked off still use the plan, so forecasts never stall.
+ */
+export interface UsageModel {
+  /** Total use on a past or future day: confirmed where ticked, planned elsewhere. */
+  use(day: ISODate): number;
+  /** Planned use still to come on `day` (rules not yet ticked off). */
+  remaining(day: ISODate): number;
+  /** Confirmed use on `day`. */
+  confirmed(day: ISODate): number;
+  /** Whether every confirm-daily rule active on `day` was ticked off. */
+  allConfirmed(day: ISODate): boolean;
+  hasLogs: boolean;
+}
+
+export function usageModel(rules: FeedingRule[], groups: Map<string, AnimalGroup>, logs: FeedUseLog[] = []): UsageModel {
+  const byDay = new Map<string, Map<string, number>>();
+  for (const l of logs) {
+    const m = byDay.get(l.used_on) ?? new Map<string, number>();
+    m.set(l.feeding_rule_id, Number(l.actual_kg));
+    byDay.set(l.used_on, m);
+  }
+  const planned = (r: FeedingRule) => headsFor(r, groups) * Number(r.kg_per_head_per_feed) * Number(r.feeds_per_day);
+  return {
+    hasLogs: logs.length > 0,
+    use(day) {
+      const m = byDay.get(day);
+      const active = rulesForDay(rules, day);
+      let t = active.reduce((s, r) => s + (m?.has(r.id) ? m.get(r.id)! : planned(r)), 0);
+      if (m) for (const [rid, kg] of m) if (!active.some((r) => r.id === rid)) t += kg; // fed outside the plan
+      return t;
+    },
+    remaining(day) {
+      const m = byDay.get(day);
+      return rulesForDay(rules, day).reduce((s, r) => s + (m?.has(r.id) ? 0 : planned(r)), 0);
+    },
+    confirmed(day) {
+      let t = 0;
+      for (const kg of byDay.get(day)?.values() ?? []) t += kg;
+      return t;
+    },
+    allConfirmed(day) {
+      const m = byDay.get(day);
+      return rulesForDay(rules, day).filter((r) => r.confirm_daily !== false && planned(r) > 0).every((r) => m?.has(r.id));
+    }
+  };
+}
+
 /** Latest count/opening on or before `day`: the measured anchor for the ledger. */
 export function findBaseline(txns: FeedTransaction[], day: ISODate): FeedTransaction | null {
   const anchors = txns
@@ -119,8 +177,9 @@ export function findBaseline(txns: FeedTransaction[], day: ISODate): FeedTransac
 /** Stock at the start of `day` from the ledger, or null if nothing to anchor on. */
 export function stockAt(
   txns: FeedTransaction[], rules: FeedingRule[], groups: Map<string, AnimalGroup>, day: ISODate,
-  ledger?: LedgerLine[]
+  ledger?: LedgerLine[], logs: FeedUseLog[] = []
 ): { stock: number | null; baseline: FeedTransaction | null; firstDate: ISODate | null } {
+  const usage = usageModel(rules, groups, logs);
   const baseline = findBaseline(txns, day);
   const moves = txns
     .filter((t) => (t.txn_type === 'delivery' || t.txn_type === 'adjustment') && t.effective_on <= day)
@@ -140,6 +199,7 @@ export function stockAt(
     });
   }
   let used = 0;
+  let confirmedUsed = 0;
   let mi = 0;
   for (let d = start; d < day; d = addDays(d, 1)) {
     while (mi < moves.length && moves[mi].effective_on <= d) {
@@ -152,22 +212,25 @@ export function stockAt(
         evidence: m.evidence
       });
     }
-    const u = dailyUse(rules, groups, d);
+    const u = usage.use(d);
+    const c = usage.confirmed(d);
     stock -= u;
-    used += u;
+    used += u - c;
+    confirmedUsed += c;
   }
   while (mi < moves.length && moves[mi].effective_on <= day) {
     const m = moves[mi++];
     stock += Number(m.quantity_kg);
     ledger?.push({ date: m.effective_on, label: m.txn_type === 'delivery' ? 'Delivery' : 'Adjustment', kg: Number(m.quantity_kg), evidence: m.evidence });
   }
-  if (ledger && used > 0) ledger.push({ date: day, label: `Planned use since ${start}`, kg: -used });
+  if (ledger && confirmedUsed > 0) ledger.push({ date: day, label: `Feeding you ticked off since ${start}`, kg: -confirmedUsed });
+  if (ledger && used > 0) ledger.push({ date: day, label: `Planned use since ${start}${confirmedUsed > 0 ? ' (days not ticked off)' : ''}`, kg: -used });
   return { stock, baseline, firstDate: start };
 }
 
 /** Walk forward day by day. Returns fractional days until stock reaches `floorKg`. */
 function daysUntil(
-  startStock: number, rules: FeedingRule[], groups: Map<string, AnimalGroup>, today: ISODate, floorKg: number,
+  startStock: number, usage: UsageModel, today: ISODate, floorKg: number,
   extra: { date: ISODate; kg: number }[] = []
 ): number | null {
   let stock = startStock;
@@ -175,7 +238,8 @@ function daysUntil(
   for (let i = 0; i < HORIZON_DAYS; i++) {
     const d = addDays(today, i);
     for (const e of extra) if (e.date === d && i > 0) stock += e.kg;
-    const use = dailyUse(rules, groups, d);
+    // Starting stock is "now", already net of anything ticked off today
+    const use = i === 0 ? usage.remaining(d) : usage.use(d);
     if (use > 0 && stock - use <= floorKg) return i + (stock - floorKg) / use;
     stock -= use;
   }
@@ -198,7 +262,18 @@ export function forecastFeed(input: FeedForecastInput): FeedForecast {
   const reasons: string[] = [];
   const ledger: LedgerLine[] = [];
 
-  const { stock, baseline } = stockAt(txns, rules, groups, today, ledger);
+  const logs = input.logs ?? [];
+  const usage = usageModel(rules, groups, logs);
+  const { stock: startOfDay, baseline } = stockAt(txns, rules, groups, today, ledger, logs);
+  const confirmedTodayKg = usage.confirmed(today);
+  const remainingTodayKg = usage.remaining(today);
+  // A count taken today already reflects feeding ticked off before it: only take off what was ticked after
+  const countedToday = baseline && baseline.effective_on === today;
+  const takenOffNow = countedToday
+    ? logs.filter((l) => l.used_on === today && l.created_at > baseline!.created_at).reduce((s, l) => s + Number(l.actual_kg), 0)
+    : confirmedTodayKg;
+  const stock = startOfDay === null ? null : startOfDay - takenOffNow;
+  if (takenOffNow > 0) ledger.push({ date: today, label: 'Fed today (ticked off)', kg: -takenOffNow });
   const todays = rulesForDay(rules, today);
   const dailyUseKg = dailyUse(rules, groups, today);
 
@@ -257,16 +332,16 @@ export function forecastFeed(input: FeedForecastInput): FeedForecast {
   const hasPlan = rules.some((r) => ruleActive(r, today) || r.start_date > today);
 
   if (stock !== null && dailyUseKg + upcomingChanges.reduce((s, c) => s + c.dailyUseKg, 0) > 0) {
-    daysRemaining = daysUntil(stock, rules, groups, today, 0);
+    daysRemaining = daysUntil(stock, usage, today, 0);
     if (daysRemaining !== null) runOutDate = addDays(today, Math.floor(daysRemaining));
-    const toReorder = daysUntil(stock, rules, groups, today, safetyKg);
+    const toReorder = daysUntil(stock, usage, today, safetyKg);
     if (toReorder !== null) {
       reorderDate = addDays(today, Math.floor(toReorder));
       if (lead.days !== null) orderByDate = addDays(reorderDate, -lead.days);
     }
     if (openOrders.length) {
       const extra = openOrders.filter((o) => o.expected).map((o) => ({ date: o.expected as ISODate, kg: o.kg }));
-      const d = daysUntil(stock, rules, groups, today, 0, extra);
+      const d = daysUntil(stock, usage, today, 0, extra);
       if (d !== null) runOutWithOpenOrders = addDays(today, Math.floor(d));
     }
   }
@@ -308,6 +383,17 @@ export function forecastFeed(input: FeedForecastInput): FeedForecast {
     .filter((g): g is AnimalGroup => !!g && (now.getTime() - new Date(g.head_count_updated_at).getTime()) / 86_400_000 > STALE_COUNT_DAYS);
   if (staleGroups.length) lower(1, `Head count not updated in over ${STALE_COUNT_DAYS} days: ${staleGroups.map((g) => g.name).join(', ')}.`);
   if (lead.days === null) reasons.push('No lead time set, so there is no order-by date.');
+  // Once the farmer ticks feeding off, days left unticked fall back to the plan: say so
+  let unconfirmedDays = 0;
+  if (usage.hasLogs) {
+    const firstLog = logs.reduce((m, l) => (l.used_on < m ? l.used_on : m), today);
+    for (let i = 1; i <= 7; i++) {
+      const day = addDays(today, -i);
+      if (day < firstLog || (baseline && day < baseline.effective_on)) break;
+      if (usage.use(day) > 0 && !usage.allConfirmed(day)) unconfirmedDays++;
+    }
+    if (unconfirmedDays >= 3) lower(1, `Feeding not ticked off on ${unconfirmedDays} of the last 7 days. Those days use your plan.`);
+  }
   const confidence = rank[level];
 
   // ---- economics
@@ -326,7 +412,8 @@ export function forecastFeed(input: FeedForecastInput): FeedForecast {
     product: { id: product.id, safety: [product.safety_stock_mode, Number(product.safety_stock_value)], lead: lead },
     baseline: baseline ? { id: baseline.id, kg: Number(baseline.quantity_kg), on: baseline.effective_on, evidence: baseline.evidence } : null,
     moves: txns.filter((t) => t.txn_type !== 'order').map((t) => [t.id, t.txn_type, Number(t.quantity_kg), t.effective_on, t.evidence]),
-    rules: rules.map((r) => [r.id, r.animal_group_id, headsFor(r, groups), Number(r.kg_per_head_per_feed), Number(r.feeds_per_day), r.start_date, r.end_date, r.is_temporary])
+    rules: rules.map((r) => [r.id, r.animal_group_id, headsFor(r, groups), Number(r.kg_per_head_per_feed), Number(r.feeds_per_day), r.start_date, r.end_date, r.is_temporary]),
+    logs: logs.map((l) => [l.feeding_rule_id, l.used_on, Number(l.actual_kg)])
   };
 
   return {
@@ -334,6 +421,9 @@ export function forecastFeed(input: FeedForecastInput): FeedForecast {
     today,
     status,
     stockKg: stock,
+    confirmedTodayKg,
+    remainingTodayKg,
+    unconfirmedDays,
     dailyUseKg,
     activeRules,
     upcomingChanges,
@@ -365,14 +455,14 @@ export function forecastFeed(input: FeedForecastInput): FeedForecast {
  * We show the variance; we never silently change the farmer's feeding rate.
  */
 export function countVariances(
-  txns: FeedTransaction[], rules: FeedingRule[], groups: AnimalGroup[]
+  txns: FeedTransaction[], rules: FeedingRule[], groups: AnimalGroup[], logs: FeedUseLog[] = []
 ): { date: ISODate; predictedKg: number; countedKg: number; varianceKg: number; variancePct: number | null }[] {
   const gm = new Map(groups.map((g) => [g.id, g]));
   const counts = txns.filter((t) => t.txn_type === 'count').sort((a, b) => a.effective_on.localeCompare(b.effective_on));
   const out = [];
   for (const c of counts) {
     const prior = txns.filter((t) => t.id !== c.id && !(t.txn_type === 'count' && t.effective_on >= c.effective_on));
-    const { stock } = stockAt(prior, rules, gm, c.effective_on);
+    const { stock } = stockAt(prior, rules, gm, c.effective_on, undefined, logs);
     if (stock === null) continue;
     const counted = Number(c.quantity_kg);
     out.push({
@@ -402,14 +492,18 @@ export interface RunoutStep {
  * A new step starts whenever the feeding plan changes (e.g. a temporary higher rate).
  * Uses the same daily-use rules as forecastFeed, so the steps always add up to its answer.
  */
-export function runoutSteps(stockKg: number, rules: FeedingRule[], groups: AnimalGroup[], today: ISODate): RunoutStep[] {
+export function runoutSteps(
+  stockKg: number, rules: FeedingRule[], groups: AnimalGroup[], today: ISODate,
+  /** Today's use still to come, when part of today is already ticked off. */
+  todayRemainingKg?: number
+): RunoutStep[] {
   const gm = new Map(groups.map((g) => [g.id, g]));
   const steps: RunoutStep[] = [];
   let stock = stockKg;
   let idle = 0;
   for (let i = 0; i < HORIZON_DAYS && stock > 0; i++) {
     const day = addDays(today, i);
-    const use = dailyUse(rules, gm, day);
+    const use = i === 0 && todayRemainingKg !== undefined ? todayRemainingKg : dailyUse(rules, gm, day);
     if (use <= 0) {
       if (++idle > 60) break; // nothing planned for two months: no run-out to explain
       continue;

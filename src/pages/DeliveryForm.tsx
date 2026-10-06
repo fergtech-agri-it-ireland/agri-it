@@ -67,7 +67,7 @@ export default function DeliveryForm() {
   const preview = useMemo(() => {
     if (!draft) return null;
     const p = b.products.find((x) => x.id === feedId)!;
-    const input = { product: p, rules: b.rules.filter((r) => r.feed_product_id === feedId), groups: b.groups, supplierSetting: b.supplierSettings.find((s) => s.supplier_id === supplierId), farmLeadTimeDays: b.farm.default_lead_time_days, today };
+    const input = { product: p, rules: b.rules.filter((r) => r.feed_product_id === feedId), groups: b.groups, supplierSetting: b.supplierSettings.find((s) => s.supplier_id === supplierId), farmLeadTimeDays: b.farm.default_lead_time_days, today, logs: b.feedLogs.filter((l) => l.feed_product_id === feedId) };
     const txns = b.txns.filter((t) => t.feed_product_id === feedId);
     return { before: forecastFeed({ ...input, txns }), after: forecastFeed({ ...input, txns: [...txns, draft] }) };
   }, [draft?.quantity_kg, draft?.effective_on, feedId, supplierId, b]); // eslint-disable-line

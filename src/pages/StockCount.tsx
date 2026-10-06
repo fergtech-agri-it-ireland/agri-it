@@ -28,12 +28,25 @@ export default function StockCount() {
       id: uuid(), farm_id: farmId!, feed_product_id: feedId!, txn_type: 'count' as const, quantity_kg: Number(kg), effective_on: date, evidence,
       notes: evidence === 'measured' ? 'Counted on farm' : 'Estimated'
     };
-    const ok = await save([{ kind: 'insert', table: 'feed_transactions', row }], {
+    // Opened from a "count the bin" routine on Today: tick that off with the count
+    const routineId = params.get('routine');
+    const due = params.get('due');
+    const completion = routineId && due ? {
+      farm_id: farmId!, routine_id: routineId, due_date: due, status: 'done' as const, amount: Number(kg),
+      record_table: 'feed_transactions', record_id: row.id, done_on: todayISO()
+    } : null;
+    const ok = await save([
+      { kind: 'insert', table: 'feed_transactions', row },
+      ...(completion ? [{ kind: 'upsert' as const, table: 'routine_completions', row: completion, onConflict: 'routine_id,due_date' }] : [])
+    ], {
       label: 'Stock count saved',
-      patch: (x) => ({ ...x, txns: [...x.txns, { ...row, order_date: null, delivery_date: null, expected_delivery_date: null, order_status: null, linked_order_id: null, supplier_id: null, total_price_eur: null, price_per_tonne_eur: null, document_id: null, created_at: new Date().toISOString() } as FeedTransaction] }),
-      undo: [{ kind: 'delete', table: 'feed_transactions', match: { id: row.id } }]
+      patch: (x) => ({ ...x, completions: completion ? [...x.completions, { ...completion, id: uuid(), created_at: new Date().toISOString() }] : x.completions, txns: [...x.txns, { ...row, order_date: null, delivery_date: null, expected_delivery_date: null, order_status: null, linked_order_id: null, supplier_id: null, total_price_eur: null, price_per_tonne_eur: null, document_id: null, created_at: new Date().toISOString() } as FeedTransaction] }),
+      undo: [
+        { kind: 'delete', table: 'feed_transactions', match: { id: row.id } },
+        ...(completion ? [{ kind: 'delete' as const, table: 'routine_completions', match: { routine_id: completion.routine_id, due_date: completion.due_date } }] : [])
+      ]
     });
-    if (ok) nav(`/feed/${feedId}`, { replace: true });
+    if (ok) nav(completion ? '/' : `/feed/${feedId}`, { replace: true });
   }
 
   return (

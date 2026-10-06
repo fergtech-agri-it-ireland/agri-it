@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useFarmData } from '../lib/data/farm';
-import { useDerived } from '../lib/data/derived';
+import { useDerived, silageWithFedOut } from '../lib/data/derived';
 import { forecastForage } from '../lib/forecast/forage';
 import { eur, fmtDay, fmtMonth, fmtNum, todayISO } from '../lib/format';
 import { primaryRoute } from '../lib/suppliers';
@@ -45,7 +45,7 @@ function ForageTab() {
   const [extra, setExtra] = useState<Record<string, number>>({});
   const f = scenario
     ? forecastForage({
-        farm: b.farm, stores: b.silage, benchmarks: b.benchmarks, evidence: b.evidence, today: todayISO(), reserveOverride: reserve, scenario: true,
+        farm: b.farm, stores: silageWithFedOut(b), benchmarks: b.benchmarks, evidence: b.evidence, today: todayISO(), reserveOverride: reserve, scenario: true,
         groups: b.groups.map((g) => ({ ...g, head_count: Math.max(0, g.head_count + (extra[g.id] ?? 0)) }))
       })
     : d.forage;

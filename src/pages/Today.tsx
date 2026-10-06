@@ -1,4 +1,4 @@
-import { useState, type ComponentType } from 'react';
+import { useMemo, useState, type ComponentType } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Banknote, Beef, CalendarCheck, ChevronRight, MessageCircleQuestion, Milk, Moon, Package, PackageCheck, Receipt, Sun, Truck, Users, Warehouse
@@ -7,6 +7,8 @@ import { useFarmData } from '../lib/data/farm';
 import { useDerived, type Priority } from '../lib/data/derived';
 import { cashDial, feedDial, silageDial } from '../lib/dials';
 import { useTheme } from '../lib/theme';
+import { buildChecklist } from '../lib/routines';
+import { Checklist } from '../components/Checklist';
 import { addDays, fmtDay, fmtKg, todayISO } from '../lib/format';
 import { primaryRoute } from '../lib/suppliers';
 import { Card, LinkButton, Screen, SectionTitle } from '../components/ui';
@@ -31,7 +33,6 @@ const tileTone: Record<Priority['tone'], string> = {
   info: 'bg-field-light text-accent',
   ok: 'bg-ok-bg text-ok'
 };
-const timesADay = (n: number) => (n === 1 ? 'once a day' : n === 2 ? 'twice a day' : `${n} times a day`);
 
 export default function Today() {
   const b = useFarmData();
@@ -49,12 +50,9 @@ export default function Today() {
   ];
   const shown = showAll ? d.priorities : d.priorities.slice(0, 3);
 
-  // What goes in the trough today: straight from the farmer's own feeding plan
-  const feeding = products.flatMap(({ p, f }) => f.activeRules.map((r) => ({
-    key: r.ruleId, title: `${r.groupName}: ${fmtKg(r.dailyKg)} ${p.name}`,
-    sub: `${r.heads} head, ${r.kgPerHeadPerFeed} kg ${timesADay(r.feedsPerDay)}${r.temporary && r.endDate ? `, until ${fmtDay(r.endDate)}` : ''}`,
-    to: `/feed/${p.id}`
-  })));
+  // Today's checklist: feeding from the plan, bills, income, jobs, counts, orders, silage feed-out
+  const today = todayISO();
+  const checklist = useMemo(() => buildChecklist(b, today), [b, today]);
   const changes = products.flatMap(({ p, f }) => f.upcomingChanges.filter((c) => c.date <= addDays(todayISO(), 7)).slice(0, 1).map((c) => ({
     key: `${p.id}-${c.date}`, text: `${p.name}: ${c.reason} ${fmtDay(c.date)}, ${fmtKg(c.dailyUseKg)} a day`, to: `/feed/${p.id}`
   })));
@@ -92,23 +90,19 @@ export default function Today() {
     </section>
   );
 
-  const feedingToday = feeding.length > 0 && (
-    <section aria-labelledby="feeding" className="space-y-2">
-      <SectionTitle><span id="feeding">{theme.dawn ? 'Before milking' : 'Feeding today'}</span></SectionTitle>
-      <div className="divide-y divide-line overflow-hidden rounded-[1.375rem] bg-card shadow-lift">
-        {feeding.map((r) => (
-          <Link key={r.key} to={r.to} className="flex min-h-[4.25rem] items-center gap-3.5 px-4 py-2 hover:bg-pasture">
-            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[0.875rem] bg-field-light text-accent"><Package className="h-7 w-7" aria-hidden /></span>
-            <span className="min-w-0 flex-1"><b className="block leading-snug">{r.title}</b><span className="text-[0.95rem] text-muted">{r.sub}</span></span>
-          </Link>
-        ))}
-        {changes.map((c) => (
-          <Link key={c.key} to={c.to} className="flex min-h-tap items-center gap-2 px-4 py-2 text-[0.95rem] font-bold text-warn hover:bg-pasture">
-            <CalendarCheck className="h-5 w-5 shrink-0" aria-hidden />{c.text}
-          </Link>
-        ))}
-      </div>
-    </section>
+  const checks = (
+    <>
+      <Checklist b={b} items={checklist} today={today} feed={d.feed} title={theme.dawn ? (new Date().getHours() < 12 ? 'Before milking' : 'Evening jobs') : "Today's jobs"} />
+      {changes.length > 0 && (
+        <div className="space-y-1">
+          {changes.map((c) => (
+            <Link key={c.key} to={c.to} className="flex min-h-tap items-center gap-2 rounded-xl px-2 text-[0.95rem] font-bold text-warn hover:bg-warn-bg">
+              <CalendarCheck className="h-5 w-5 shrink-0" aria-hidden />{c.text}
+            </Link>
+          ))}
+        </div>
+      )}
+    </>
   );
 
   return (
@@ -129,7 +123,8 @@ export default function Today() {
         {dials.map(({ id, ...x }) => <Dial key={id} {...x} />)}
       </section>
 
-      {theme.dawn ? <>{feedingToday}{doNext}</> : <>{doNext}{feedingToday}</>}
+      {checks}
+      {doNext}
 
       <div className="grid grid-cols-4 gap-2" aria-label="Quick record">
         {[

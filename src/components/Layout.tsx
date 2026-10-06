@@ -116,7 +116,7 @@ function Recorder({ bundle }: { bundle: FarmBundle }) {
 export function AppShell() {
   const { data } = useBundle();
   const loc = useLocation();
-  const hideNav = loc.pathname.startsWith('/record') || /\/(new|count|edit)$/.test(loc.pathname) || loc.pathname.includes('/rule/');
+  const hideNav = loc.pathname.startsWith('/record') || /^\/routines\/.+/.test(loc.pathname) || /\/(new|count|edit)$/.test(loc.pathname) || loc.pathname.includes('/rule/');
   return (
     <>
       <SyncStatus />

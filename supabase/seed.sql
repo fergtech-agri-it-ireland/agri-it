@@ -134,18 +134,19 @@ begin
   insert into public.feed_transactions (farm_id, feed_product_id, txn_type, quantity_kg, effective_on, evidence, notes)
   values (f, p_calf, 'opening', 500, d - 6, 'farmer_estimate', 'Roughly 20 bags');
 
-  insert into public.feeding_rules (farm_id, feed_product_id, animal_group_id, kg_per_head_per_feed, feeds_per_day, start_date, label)
-  values (f, p_nut, g_cows, 1.0, 2, d - 30, null),
-         (f, p_nut, g_heif, 1.0, 1, d - 30, null),
-         (f, p_calf, g_calf, 1.5, 1, d - 30, null);
+  -- Rules set up two mornings ago (when ticking began), so Today's checklist only reaches back that far
+  insert into public.feeding_rules (id, farm_id, feed_product_id, animal_group_id, kg_per_head_per_feed, feeds_per_day, start_date, label, created_at)
+  values ('60000000-0000-0000-0000-000000000001', f, p_nut, g_cows, 1.0, 2, d - 30, null, (d - 2)::timestamptz + interval '6 hours'),
+         ('60000000-0000-0000-0000-000000000002', f, p_nut, g_heif, 1.0, 1, d - 30, null, (d - 2)::timestamptz + interval '6 hours'),
+         ('60000000-0000-0000-0000-000000000003', f, p_calf, g_calf, 1.5, 1, d - 30, null, (d - 2)::timestamptz + interval '6 hours');
   -- temporary plan: replaces the cows' normal rate for 10 days, then reverts automatically
   insert into public.feeding_rules (farm_id, feed_product_id, animal_group_id, kg_per_head_per_feed, feeds_per_day,
     start_date, end_date, is_temporary, label)
   values (f, p_nut, g_cows, 1.5, 2, d + 3, d + 12, true, 'Higher rate while grass is short');
 
   -- Silage: pit measured, bales counted
-  insert into public.silage_stores (farm_id, name, method, length_m, width_m, avg_height_m, density_kg_m3, dm_percent, dmd_percent, measured_on)
-  values (f, 'Main pit', 'pit_dimensions', 40, 12, 2.2, 700, 28, 72, d - 25);
+  insert into public.silage_stores (id, farm_id, name, method, length_m, width_m, avg_height_m, density_kg_m3, dm_percent, dmd_percent, measured_on)
+  values ('70000000-0000-0000-0000-000000000001', f, 'Main pit', 'pit_dimensions', 40, 12, 2.2, 700, 28, 72, d - 25);
   insert into public.silage_stores (farm_id, name, method, bale_count, bale_weight_kg, measured_on)
   values (f, 'Round bales (haggard)', 'bale_count', 220, 750, d - 25);
 
@@ -182,4 +183,25 @@ begin
   insert into public.jobs (farm_id, title, due_on) values
     (f, 'Book vet for TB test', d + 5),
     (f, 'Check silage pit cover', d + 1);
+
+  -- Feeding ticked off on the last two days; calves got a little extra yesterday
+  insert into public.feed_use_logs (farm_id, feeding_rule_id, feed_product_id, animal_group_id, used_on, planned_kg, actual_kg, status)
+  select f, r.id, r.feed_product_id, r.animal_group_id, day, r.planned, r.planned, 'fed'
+  from (values ('60000000-0000-0000-0000-000000000001'::uuid, p_nut, g_cows, 240),
+               ('60000000-0000-0000-0000-000000000002'::uuid, p_nut, g_heif, 40)) as r(id, feed_product_id, animal_group_id, planned),
+       (values (d - 2), (d - 1)) as days(day);
+  insert into public.feed_use_logs (farm_id, feeding_rule_id, feed_product_id, animal_group_id, used_on, planned_kg, actual_kg, status) values
+    (f, '60000000-0000-0000-0000-000000000003', p_calf, g_calf, d - 2, 27, 27, 'fed'),
+    (f, '60000000-0000-0000-0000-000000000003', p_calf, g_calf, d - 1, 27, 30, 'changed');
+
+  -- Routines: relative dates so there is always something due, overdue and done
+  insert into public.routines (id, farm_id, kind, title, frequency, weekday, day_of_month, start_date, amount, category, counterparty, feed_product_id, silage_store_id, created_at) values
+    (gen_random_uuid(), f, 'expense', 'Loan repayment', 'monthly', null, extract(day from d - 5)::int, d - 60, 5200, 'other', 'Bank', null, null, now() - interval '60 days'),
+    (gen_random_uuid(), f, 'expense', 'ESB bill', 'monthly', null, extract(day from d + 14)::int, d - 60, 640, 'utilities', 'Electricity supplier', null, null, now() - interval '60 days'),
+    (gen_random_uuid(), f, 'income', 'Milk cheque', 'monthly', null, extract(day from d + 9)::int, d - 60, 27000, 'milk', 'Tirlán', null, null, now() - interval '60 days'),
+    ('80000000-0000-0000-0000-000000000001', f, 'count', 'Dip the nut bin', 'weekly', extract(dow from d - 1)::int, null, d - 60, null, null, null, p_nut, null, now() - interval '60 days'),
+    ('80000000-0000-0000-0000-000000000002', f, 'job', 'Check water troughs', 'weekly', extract(dow from d - 2)::int, null, d - 60, null, null, null, null, null, now() - interval '60 days'),
+    (gen_random_uuid(), f, 'silage', 'Feed out silage', 'daily', null, null, make_date(extract(year from d)::int, 11, 1), 6, null, null, null, '70000000-0000-0000-0000-000000000001', now() - interval '60 days');
+  insert into public.routine_completions (farm_id, routine_id, due_date, status, done_on)
+  values (f, '80000000-0000-0000-0000-000000000002', d - 2, 'done', d - 2);
 end $$;

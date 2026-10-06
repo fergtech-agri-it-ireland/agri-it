@@ -32,6 +32,8 @@ import Settings from './pages/Settings';
 import Record from './pages/Record';
 import Saved from './pages/Saved';
 import Diary from './pages/Diary';
+import Routines from './pages/Routines';
+import RoutineForm from './pages/RoutineForm';
 
 export default function App() {
   if (!supabaseConfigured) return <MissingConfig />;
@@ -60,6 +62,9 @@ export default function App() {
         <Route path="money" element={<Money />} />
         <Route path="money/year-end" element={<YearEnd />} />
         <Route path="diary" element={<Diary />} />
+        <Route path="routines" element={<Routines />} />
+        <Route path="routines/new" element={<RoutineForm />} />
+        <Route path="routines/:id" element={<RoutineForm />} />
         <Route path="money/budget" element={<Budget />} />
         <Route path="farm" element={<FarmHub />} />
         <Route path="farm/groups" element={<Groups />} />

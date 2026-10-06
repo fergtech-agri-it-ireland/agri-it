@@ -134,7 +134,71 @@ export interface FeedingRule {
   end_date: ISODate | null;
   is_temporary: boolean;
   label: string | null;
+  /** Show on Today's checklist to tick off each day (default on). */
+  confirm_daily: boolean;
+  created_at?: string;
 }
+
+export type RoutineKind = 'expense' | 'income' | 'job' | 'count' | 'order' | 'silage';
+export type RoutineFrequency = 'daily' | 'weekly' | 'monthly' | 'every_n_days';
+
+/** Recurring farm work the farmer ticks off. Nothing is recorded until it is confirmed. */
+export interface Routine {
+  id: string;
+  farm_id: string;
+  kind: RoutineKind;
+  title: string;
+  frequency: RoutineFrequency;
+  interval_days: number | null;
+  weekday: number | null; // 0 = Sunday
+  day_of_month: number | null;
+  start_date: ISODate;
+  end_date: ISODate | null;
+  amount: number | null; // € for money, kg for orders, tonnes for silage
+  category: string | null;
+  counterparty: string | null;
+  feed_product_id: string | null;
+  silage_store_id: string | null;
+  supplier_id: string | null;
+  active: boolean;
+  created_at: string;
+}
+
+export interface RoutineCompletion {
+  id: string;
+  farm_id: string;
+  routine_id: string;
+  due_date: ISODate;
+  status: 'done' | 'skipped';
+  amount: number | null;
+  record_table: string | null;
+  record_id: string | null;
+  done_on: ISODate;
+  created_at: string;
+}
+
+/** A confirmed day of feeding for one feeding rule: actual replaces planned in the stock ledger. */
+export interface FeedUseLog {
+  id: string;
+  farm_id: string;
+  feeding_rule_id: string;
+  feed_product_id: string;
+  animal_group_id: string;
+  used_on: ISODate;
+  planned_kg: number;
+  actual_kg: number;
+  status: 'fed' | 'changed' | 'skipped';
+  created_at: string;
+}
+
+export const ROUTINE_KIND_LABEL: Record<RoutineKind, string> = {
+  expense: 'Bill',
+  income: 'Income',
+  job: 'Job',
+  count: 'Stock count',
+  order: 'Feed order',
+  silage: 'Silage feed-out'
+};
 
 export interface SilageStore {
   id: string;
@@ -264,6 +328,9 @@ export interface FarmBundle {
   records: FarmRecord[];
   documents: DocumentRow[];
   jobs: Job[];
+  routines: Routine[];
+  completions: RoutineCompletion[];
+  feedLogs: FeedUseLog[];
 }
 
 export const ANIMAL_CLASS_LABEL: Record<AnimalClass, string> = {

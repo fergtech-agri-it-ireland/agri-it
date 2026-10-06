@@ -9,7 +9,7 @@ import { todayISO } from '../format';
 
 const DB_KEY = 'agri-it:demo-db';
 const SIGNED_OUT_KEY = 'agri-it:demo-signed-out';
-const VERSION = 1;
+const VERSION = 2; // bump when the seed's shape changes so stored demo data is rebuilt
 
 function store(): Storage | null {
   try { return window.localStorage; } catch { return null; }
@@ -66,11 +66,25 @@ function cascade(t: string, removed: Row[]) {
   if (t === 'feed_products') {
     const tx = table('feed_transactions').filter((x) => ids.has(x.feed_product_id));
     db.feed_transactions = table('feed_transactions').filter((x) => !ids.has(x.feed_product_id));
+    const rules = table('feeding_rules').filter((x) => ids.has(x.feed_product_id));
     db.feeding_rules = table('feeding_rules').filter((x) => !ids.has(x.feed_product_id));
     cascade('feed_transactions', tx);
+    cascade('feeding_rules', rules);
+    const rt = table('routines').filter((x) => ids.has(x.feed_product_id));
+    db.routines = table('routines').filter((x) => !ids.has(x.feed_product_id));
+    cascade('routines', rt);
+  }
+  if (t === 'feeding_rules') db.feed_use_logs = table('feed_use_logs').filter((x) => !ids.has(x.feeding_rule_id));
+  if (t === 'routines') db.routine_completions = table('routine_completions').filter((x) => !ids.has(x.routine_id));
+  if (t === 'silage_stores') {
+    const rt = table('routines').filter((x) => ids.has(x.silage_store_id));
+    db.routines = table('routines').filter((x) => !ids.has(x.silage_store_id));
+    cascade('routines', rt);
   }
   if (t === 'animal_groups') {
+    const rules = table('feeding_rules').filter((x) => ids.has(x.animal_group_id));
     db.feeding_rules = table('feeding_rules').filter((x) => !ids.has(x.animal_group_id));
+    cascade('feeding_rules', rules);
     for (const x of table('income')) if (ids.has(x.animal_group_id)) x.animal_group_id = null;
   }
   if (t === 'documents') {

@@ -1,3 +1,5 @@
+import { RepeatChips } from '../components/RepeatChips';
+import { routineFromEntry, type RepeatChoice } from '../lib/routines';
 import { useEffect, useState } from 'react';
 import { clearPendingPhoto, peekPendingPhoto } from '../lib/pendingPhoto';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -23,6 +25,7 @@ export default function CostForm() {
   const [otherLabel, setOtherLabel] = useState(repeat?.other_label ?? '');
   const [note, setNote] = useState(repeat?.description ?? '');
   const [photo, setPhoto] = useState<File | null>(() => peekPendingPhoto());
+  const [repeats, setRepeats] = useState<RepeatChoice>('none');
   useEffect(() => () => clearPendingPhoto(), []);
   // Recent payees for this category first: less typing
   const payees = [...new Set(b.costs.filter((c) => !category || c.category === category).map((c) => c.supplier_name).filter(Boolean) as string[])].slice(0, 6);
@@ -33,10 +36,20 @@ export default function CostForm() {
       id: uuid(), farm_id: farmId!, category: category!, other_label: category === 'other' ? otherLabel || null : null, occurred_on: date,
       amount_eur: Number(amount), supplier_name: payee || null, description: note || null, document_id: documentId
     };
-    const ok = await save([{ kind: 'insert', table: 'costs', row }], {
-      label: 'Cost saved',
-      patch: (x) => ({ ...x, costs: [{ ...row, supplier_id: null, feed_transaction_id: null } as Cost, ...x.costs] }),
-      undo: [{ kind: 'delete', table: 'costs', match: { id: row.id } }]
+    const rep = repeats === 'none' ? null : routineFromEntry({
+      farmId: farmId!, kind: 'expense', title: note || (category === 'other' && otherLabel ? otherLabel : COST_LABEL[category!]), date, amount: Number(amount),
+      category: category!, counterparty: payee || null, repeat: repeats, recordTable: 'costs', recordId: row.id, routineId: uuid()
+    });
+    const ok = await save([{ kind: 'insert', table: 'costs', row }, ...(rep?.ops ?? [])], {
+      label: rep ? `Cost saved. Repeats ${repeats}, shows on Today when due` : 'Cost saved',
+      patch: (x) => ({
+        ...x, costs: [{ ...row, supplier_id: null, feed_transaction_id: null } as Cost, ...x.costs],
+        routines: rep ? [...x.routines, rep.routine] : x.routines, completions: rep ? [...x.completions, rep.completion] : x.completions
+      }),
+      undo: [
+        ...(rep ? [{ kind: 'delete' as const, table: 'routines', match: { id: rep.routine.id } }] : []),
+        { kind: 'delete', table: 'costs', match: { id: row.id } }
+      ]
     });
     if (ok) nav('/money', { replace: true });
   }
@@ -60,6 +73,7 @@ export default function CostForm() {
           <datalist id="payees">{payees.map((p) => <option key={p} value={p} />)}</datalist>
         </div>
         <TextInput label="Note (optional)" value={note} onChange={setNote} voice />
+        <RepeatChips value={repeats} onChange={setRepeats} date={date} />
         <PhotoInput file={photo} onFile={setPhoto} />
       </Card>
       <SaveBar><Button block disabled={!category || !amount} onClick={submit}>Save cost</Button></SaveBar>

@@ -16,10 +16,25 @@ export function feedForecasts(b: FarmBundle, today: ISODate): Map<string, FeedFo
       groups: b.groups,
       supplierSetting: b.supplierSettings.find((s) => s.supplier_id === p.supplier_id),
       farmLeadTimeDays: b.farm.default_lead_time_days,
-      today
+      today,
+      logs: b.feedLogs.filter((l) => l.feed_product_id === p.id)
     }));
   }
   return out;
+}
+
+/**
+ * Silage stores with ticked-off feed-out applied: each "Feed out silage" tick after a store
+ * was measured comes off what's left in it.
+ */
+export function silageWithFedOut(b: Pick<FarmBundle, 'silage' | 'routines' | 'completions'>) {
+  return b.silage.map((s) => {
+    const fed = b.completions
+      .filter((c) => c.status === 'done' && c.amount !== null && c.due_date >= s.measured_on)
+      .filter((c) => b.routines.find((r) => r.id === c.routine_id)?.silage_store_id === s.id)
+      .reduce((t, c) => t + Number(c.amount), 0);
+    return fed ? { ...s, fed_out_tonnes: Number(s.fed_out_tonnes ?? 0) + fed } : s;
+  });
 }
 
 export type Tone = 'urgent' | 'warn' | 'info' | 'ok';
@@ -38,7 +53,7 @@ export function useDerived(b: FarmBundle) {
   const today = todayISO();
   return useMemo(() => {
     const feed = feedForecasts(b, today);
-    const forage = forecastForage({ farm: b.farm, stores: b.silage, groups: b.groups, benchmarks: b.benchmarks, evidence: b.evidence, today });
+    const forage = forecastForage({ farm: b.farm, stores: silageWithFedOut(b), groups: b.groups, benchmarks: b.benchmarks, evidence: b.evidence, today });
     const cash = cashPosition(b.farm, b.income, b.costs, today);
     const cash90 = cashForecast90(b.farm, b.income, b.costs, b.budget, today);
     const budget = budgetVsActual(b.farm, b, today);

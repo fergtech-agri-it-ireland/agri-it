@@ -1,8 +1,8 @@
 # Agri-It MVP: Handover
 
-**Last updated:** 6 October 2026 (routines and tick-off checklist; earlier: UI redesign)
+**Last updated:** 6 October 2026, late (white-page fix in the demo; earlier the same day: routines and tick-off checklist, UI redesign)
 **Owner:** Feargal
-**Status:** MVP code complete, builds clean, tests pass. Not yet pushed to GitHub or deployed.
+**Status:** MVP code complete and on GitHub (`fergtech-ireland/agri-it`, private, CI green, latest work on `main`). Browser demo live as a private Claude artifact. No Supabase cloud project and no hosting yet.
 
 Use this document to start a new chat. Paste or reference it, then say what you want to do next. The full product spec is in `docs/MVP-SPEC.md` (also saved in the Claude Project).
 
@@ -22,17 +22,24 @@ It is not a herd, grassland or accounting system. It does not prescribe rations,
 
 | Item | State |
 | --- | --- |
-| Code | Complete for P0 scope, plus the UI redesign based on WHOOP, MyFitnessPal and Strava patterns (6 Oct 2026) |
-| Typecheck | Clean (`tsc -b --noEmit`) |
+| Code | P0 scope complete, plus the WHOOP / MyFitnessPal / Strava inspired redesign and recurring routines with tick-offs (6 Oct 2026) |
+| Typecheck | Clean (`tsc -b`) |
 | Unit tests | 56/56 passing (forecast engines, run-out steps, Today dials, routine schedules, checklist, actual-vs-planned feeding) |
-| Browser test | 123/123 checks on the demo build at phone size: UI flows (82) and routine tick-offs (41), exact stock/money numbers after each tick, no sideways scroll at 360px in day and dawn mode, no console errors (scripts not in the repo) |
+| Browser tests | `scripts/e2e/` (Python + Playwright, run against the demo build at phone size): `ui.py` 82 checks, `routines.py` 41 checks, `stale_cache.py` 5 checks. All pass. One dawn-mode check in `ui.py` expects "Before milking" so fails if run after noon (the app correctly says "Evening jobs") |
 | Production build | Clean, PWA service worker generated |
-| Database | All three migrations + seed validated against real Postgres 16 with Supabase auth/storage stubs; RLS isolation tested |
-| GitHub | `fergtech-ireland/agri-it` (private), CI green |
-| Supabase cloud | Not created yet (local only) |
-| Deployed | No. A browser-only demo (sample data, no database) is published as a private Claude artifact; rebuild with `npm run build:demo` |
+| Database | All four migrations + seed validated against real Postgres 16 with Supabase auth/storage stubs (`scripts/e2e/supabase_stub.sql`); RLS isolation and unique constraints tested |
+| GitHub | `fergtech-ireland/agri-it` (private), CI green. The Claude GitHub app is installed, so a chat can push |
+| Supabase cloud | Not created. Feargal's Supabase org also holds `gauntlet` / `gauntlet-test` for another project with devs: do not pause or change those |
+| Deployed | No. Browser-only demo (sample farm, no database, data kept in the phone's browser) is a private artifact: https://claude.ai/artifact/PrDSDf2cB5EgRaDSMe7UJw (version 4). UI concept canvas: https://claude.ai/artifact/UkQ1sRPKTTE3QN9rX11QF8 |
 
-**Important:** the build sandbox resets between chats. The code lives at `fergtech-ireland/agri-it` on GitHub: attach that repo in a new chat. The Claude GitHub app is installed for that repo, so a chat can push to it.
+**Important:** the build sandbox resets between chats. Attach the GitHub repo `fergtech-ireland/agri-it` in a new chat and clone it.
+
+### Latest fix: demo showed a white page (6 Oct, commit after b0a30f0)
+Cause: the phone had cached farm data from the previous demo version, which lacked the new routines lists, so Today crashed and there was no error screen. Fixed by:
+- `CACHE_VERSION` in `src/main.tsx` (persisted query cache buster, now `v3-routines`). **Bump it whenever the shape of `FarmBundle` changes.**
+- `normalizeBundle()` in `src/lib/data/farm.tsx` (used as the query `select`): missing lists become empty arrays. Add any new bundle list to `LIST_KEYS`.
+- Demo DB `VERSION` in `src/lib/demo/client.ts` (now 3). Bump when the seed shape changes; a mismatch also clears the cache and outbox.
+- `src/components/ErrorBoundary.tsx` wraps the app: shows "Reload" (real app, keeps unsynced saves) or "Reset demo and reload" (demo).
 
 ---
 
@@ -65,6 +72,10 @@ npm run dev                     # http://localhost:5173
 Demo login (seeded): `demo@agri-it.local` / `agri-it-demo`, or tap **Open the demo farm** (dev builds only).
 
 Demo farm: Glenview Farm, Co. Tipperary, dairy. Four groups, two feeds (one with an open order and an estimated opening stock, one with a temporary feeding plan), a silage pit and bales, eight months of milk/cost history, budget, records and jobs. All dates are relative to the day of seeding.
+
+**Browser demo** (no Docker, no database): `npm run build:demo` writes one self-contained file, `dist-demo/index.html` (`VITE_DEMO=1`, hash routing, in-browser fake Supabase in `src/lib/demo/`). To republish the artifact, strip `<!doctype>/<html>/<head>/<body>` and keep title, theme-color meta, styles, `<div id="root">` and the script, then publish to the same artifact URL.
+
+**Browser tests:** serve `dist-demo` (`cd dist-demo && python3 -m http.server 4331`) then `python3 scripts/e2e/ui.py http://localhost:4331/ out/`, same for `routines.py` and `stale_cache.py` (one argument). Needs `pip install playwright` and a Chromium.
 
 Other commands: `npm run supabase:reset` (rebuild + reseed), `supabase:status`, `supabase:stop`, `npm test`, `npm run typecheck`, `npm run build`. Studio at http://127.0.0.1:54323.
 
@@ -109,6 +120,7 @@ src/
     Toast.tsx                     toast with Undo
     pickers.tsx                   feed/supplier/group pickers
   pages/                          28 screens (see section 8)
+scripts/e2e/                      browser test scripts (ui, routines, stale cache) + Postgres stub for auth/storage
 docs/screenshots/                 today, delivery, feed-detail, silage, record-sheet
 ```
 
@@ -230,12 +242,12 @@ Navigation: bottom bar Today / Forecast / **Record (hi-vis centre button)** / Mo
 
 ## 11. Next steps (suggested order)
 
-1. **Push to GitHub** (README has the commands). Confirm CI goes green.
-2. Run locally end to end on a phone; note friction points.
-3. Re-verify supplier numbers; decide on Arrabawn Tipperary contact.
-4. Create a Supabase cloud project, `supabase link`, `supabase db push`, load reference data only.
-5. Deploy `dist/` (Vercel, Netlify or Cloudflare Pages) with env vars; set auth redirect URLs.
-6. P1 from spec: docket/invoice OCR with farmer confirmation, supplier price history, budget variance alerts, accountant pack export polish, push notifications for due routines (recurring costs/income are done as routines).
+1. Try the demo on the phone end to end; note friction points.
+2. Re-verify supplier numbers; decide on Arrabawn Tipperary contact.
+3. Create a Supabase cloud project for Agri-It (separate from gauntlet), `supabase link`, `supabase db push`, load reference data only (not the demo user).
+4. Deploy `dist/` (Vercel, Netlify or Cloudflare Pages) with env vars; set auth redirect URLs; turn on email confirmation.
+5. Push notifications or daily reminders for due routines and feeding ticks.
+6. P1 from spec: docket/invoice OCR with farmer confirmation, supplier price history, budget variance alerts, accountant pack export polish.
 7. Farm sharing: invite screen for family members and advisors (database already supports roles).
 8. P2: integrations (ICBF, AgFood, Herdwatch, PastureBase, co-op, accounting) where available.
 
@@ -243,8 +255,10 @@ Navigation: bottom bar Today / Forecast / **Record (hi-vis centre button)** / Mo
 
 ## 12. How to start the next chat
 
-Upload `agri-it.zip` (or attach the GitHub repo once pushed) and say, for example:
+Start a new chat inside the **Agri-It** Project, attach the GitHub repo `fergtech-ireland/agri-it`, and paste the starter prompt (also kept in this Project as `Agri-It-New-Chat-Prompt.md`).
 
-> "Continue Agri-It from the handover doc in this Project. Here's the repo. Next I want to [task]."
-
-The new chat should read `Agri-It-Handover.md` and `Agri-It-MVP-Spec.md` from the Project first.
+Working rules for any chat on this project:
+- No em dashes anywhere (copy, docs, commit messages).
+- Commit to `main` only when asked or when finishing agreed work; keep CI green.
+- After changing the demo, rebuild, rerun the three browser scripts, and republish to the same artifact URL.
+- Bump `CACHE_VERSION` (and demo `VERSION`) whenever stored data changes shape.

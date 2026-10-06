@@ -14,3 +14,4 @@ coverage
 supabase/.branches
 supabase/.temp
 supabase/.env
+*.tsbuildinfo

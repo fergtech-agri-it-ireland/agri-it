@@ -22,7 +22,7 @@ function NotificationPreview({ title, body }: { title: string; body: string }) {
 }
 
 const STATUS: Record<NotifyState, string> = {
-  demo: 'Phone notifications work in the installed app. In this demo you can see the preview, or put the reminder times in your phone calendar.',
+  demo: 'Phone notifications and calendar alarms work in the installed app. This demo shows the preview only.',
   unsupported: 'This browser cannot show notifications. Put the reminder times in your phone calendar instead.',
   default: 'Allow notifications so Agri-It can buzz your phone at these times.',
   granted: 'Notifications are on for this phone. If Agri-It is closed, the phone checks in the background and can be a little late. For an exact alarm, add the times to your calendar too.',
@@ -63,9 +63,9 @@ export function RemindersCard({ b, urgentToday }: { b: FarmBundle; urgentToday: 
               <BellRing className="h-6 w-6" aria-hidden />Allow notifications
             </Button>
           )}
-          <Button variant="secondary" block onClick={() => downloadIcs(remindersIcs(prefs, location.origin + location.pathname, today, b.farm.id))}>
+          {state !== 'demo' && <Button variant="secondary" block onClick={() => downloadIcs(remindersIcs(prefs, location.origin + location.pathname, today, b.farm.id))}>
             <CalendarPlus className="h-6 w-6" aria-hidden />Add to phone calendar
-          </Button>
+          </Button>}
         </>
       )}
       <p className="hint">Only changes this phone. A reminder never records anything: tapping it opens Today, where you tick things off.</p>

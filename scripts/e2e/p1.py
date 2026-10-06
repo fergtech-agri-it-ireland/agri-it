@@ -18,7 +18,7 @@ def go(pg, h):
 
 with sync_playwright() as p:
     b = p.chromium.launch(executable_path='/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell')
-    ctx = b.new_context(viewport={'width': 390, 'height': 844}, device_scale_factor=2, is_mobile=True, has_touch=True, accept_downloads=True)
+    ctx = b.new_context(viewport={'width': 390, 'height': 844}, device_scale_factor=2, is_mobile=True, has_touch=True)
     pg = ctx.new_page()
     pg.on('console', lambda m: m.type == 'error' and errors.append(m.text))
     pg.on('pageerror', lambda e: errors.append(str(e)))
@@ -36,12 +36,10 @@ with sync_playwright() as p:
     check('Preview says when it goes off', 'it would say' in body and ('at 7am' in body or 'at 6pm' in body), body[:0])
     preview = pg.get_by_label('Preview of the reminder')
     check('Preview shows what is due', preview.count() == 1 and ('feeding tick' in preview.inner_text() or 'job' in preview.inner_text()), preview.inner_text() if preview.count() else '')
-    check('Demo explains notifications need the installed app', 'work in the installed app' in body)
-    with pg.expect_download() as dl:
-        pg.get_by_role('button', name='Add to phone calendar').click()
-    path = dl.value.path()
-    ics = open(path).read()
-    check('Calendar file has both daily alarms', dl.value.suggested_filename == 'agri-it-reminders.ics' and ics.count('BEGIN:VEVENT') == 2 and 'RRULE:FREQ=DAILY' in ics and 'T070000' in ics and 'T180000' in ics)
+    check('Demo explains notifications need the installed app', 'work in the installed app' in body and 'preview only' in body)
+    # Downloads are blocked inside the hosted demo page, so the calendar button only shows in the real app
+    # (the .ics file itself is covered by src/lib/reminders.test.ts)
+    check('Demo hides the calendar download', pg.get_by_role('button', name='Add to phone calendar').count() == 0)
     big = pg.evaluate("[...document.querySelectorAll('#reminders ~ section button, main button')].filter(b => b.offsetParent).every(b => b.getBoundingClientRect().height >= 44)")
     check('Reminder buttons are big enough to press', big)
     pg.screenshot(path=f'{OUT}/settings-reminders.png')

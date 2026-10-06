@@ -5,9 +5,12 @@ import { forecastFeed } from '../lib/forecast/feed';
 import type { Evidence, FeedTransaction } from '../lib/types';
 import { eur, fmtDay, fmtKg, fmtMonth, todayISO, uuid } from '../lib/format';
 import { budgetVsActual, fyRange } from '../lib/forecast/money';
-import { clearPendingPhoto, peekPendingPhoto } from '../lib/pendingPhoto';
+import { clearPendingPhoto, peekPendingPhoto, peekPendingQueueId, peekPendingRead } from '../lib/pendingPhoto';
+import { usable } from '../lib/docket/extract';
+import { extractedRecord, keepEvidence } from '../lib/docket/flow';
+import { dropToRead } from '../lib/docket/photoStore';
+import { NotReadTag, ReadSummary, ReadTag } from '../components/PhotoRead';
 import { showSaved } from '../lib/saved';
-import { uploadDocument } from '../lib/upload';
 import { useToast } from '../components/Toast';
 import { Button, Card, Chips, DateChips, Empty, LinkButton, NumberInput, SaveBar, Screen } from '../components/ui';
 import { FeedPicker, PhotoInput, QuantityInput, SupplierPicker } from '../components/pickers';
@@ -28,25 +31,42 @@ export default function DeliveryForm() {
   const openOrder = (pid: string | null, oid?: string | null) =>
     b.txns.find((t) => t.txn_type === 'order' && t.order_status === 'open' && (oid ? t.id === oid : t.feed_product_id === pid));
 
-  const initialFeed = params.get('feed') ?? (products.length === 1 ? products[0].id : null);
+  // Read from a photo: only what the photo showed is filled in, never last time's values
+  const [read] = useState(() => peekPendingRead());
+  const rFeed = usable(read?.product)?.feedProductId ?? null;
+  const rKg = usable(read?.quantity)?.kg;
+  const rDate = usable(read?.date);
+  const rSupplier = usable(read?.supplier)?.supplierId ?? null;
+  const rPerT = usable(read?.pricePerTonne);
+  const rTotal = usable(read?.total);
+
+  const initialFeed = read ? rFeed : params.get('feed') ?? (products.length === 1 ? products[0].id : null);
   const initialOrder = openOrder(initialFeed, params.get('order'));
-  const initialLast = lastDelivery(initialFeed);
+  const initialLast = read ? undefined : lastDelivery(initialFeed);
 
   const [feedId, setFeedId] = useState<string | null>(initialFeed);
   const [orderId, setOrderId] = useState<string | null>(initialOrder?.id ?? null);
-  const [supplierId, setSupplierId] = useState<string | null>(initialOrder?.supplier_id ?? b.products.find((p) => p.id === initialFeed)?.supplier_id ?? null);
-  const [kg, setKg] = useState(initialOrder ? String(initialOrder.quantity_kg) : initialLast ? String(initialLast.quantity_kg) : '');
+  const [supplierId, setSupplierId] = useState<string | null>(read ? rSupplier : initialOrder?.supplier_id ?? b.products.find((p) => p.id === initialFeed)?.supplier_id ?? null);
+  const [kg, setKg] = useState(read ? (rKg !== undefined ? String(rKg) : '') : initialOrder ? String(initialOrder.quantity_kg) : initialLast ? String(initialLast.quantity_kg) : '');
   const [unit, setUnit] = useState<'kg' | 't'>('t');
-  const [date, setDate] = useState(today);
-  const [priceMode, setPriceMode] = useState<'per_t' | 'total'>('per_t');
-  const [price, setPrice] = useState(initialLast?.price_per_tonne_eur ? String(initialLast.price_per_tonne_eur) : '');
-  const [evidence, setEvidence] = useState<Evidence>('confirmed_docket');
+  const [date, setDate] = useState(rDate ?? today);
+  const [priceMode, setPriceMode] = useState<'per_t' | 'total'>(read && rPerT === undefined && rTotal !== undefined ? 'total' : 'per_t');
+  const [price, setPrice] = useState(read ? String(rPerT ?? rTotal ?? '') : initialLast?.price_per_tonne_eur ? String(initialLast.price_per_tonne_eur) : '');
+  // A docket in hand is checked as you save; an invoice is not proof of what arrived until confirmed
+  const [evidence, setEvidence] = useState<Evidence>(!read ? 'confirmed_docket' : read.kind === 'docket' ? 'confirmed_docket' : read.kind === 'unknown' ? 'unconfirmed' : 'invoice_derived');
   const [photo, setPhoto] = useState<File | null>(() => peekPendingPhoto());
   useEffect(() => () => clearPendingPhoto(), []);
   const [busy, setBusy] = useState(false);
 
   function pickFeed(id: string) {
     setFeedId(id);
+    if (read) {
+      // Keep what the photo showed; only link an open order and fill a supplier the photo didn't show
+      const o = openOrder(id);
+      setOrderId(o?.id ?? null);
+      if (!supplierId) setSupplierId(o?.supplier_id ?? null);
+      return;
+    }
     const o = openOrder(id);
     const last = lastDelivery(id);
     setOrderId(o?.id ?? null);
@@ -54,6 +74,15 @@ export default function DeliveryForm() {
     setKg(o ? String(o.quantity_kg) : last ? String(last.quantity_kg) : '');
     setPrice(last?.price_per_tonne_eur ? String(last.price_per_tonne_eur) : '');
   }
+
+  const edited = {
+    feed: !!read?.product && feedId !== rFeed,
+    quantity: !!read?.quantity && rKg !== undefined && Number(kg) !== rKg,
+    date: !!read?.date && rDate !== undefined && date !== rDate,
+    supplier: !!read?.supplier && supplierId !== rSupplier,
+    price: (rPerT !== undefined || rTotal !== undefined) && price !== String(rPerT ?? rTotal)
+  };
+  const changed = Object.entries(edited).filter(([, v]) => v).map(([k]) => k);
 
   const qty = Number(kg);
   const total = price === '' ? null : priceMode === 'total' ? Number(price) : (Number(price) * qty) / 1000;
@@ -83,11 +112,9 @@ export default function DeliveryForm() {
   async function submit() {
     if (!draft) return;
     setBusy(true);
-    let documentId: string | null = null;
-    if (photo && navigator.onLine) {
-      try { documentId = await uploadDocument(photo, farmId!, 'feed_docket', evidence === 'confirmed_docket'); }
-      catch (e) { toast.show({ message: (e as Error).message, tone: 'error' }); }
-    }
+    const evidencePhoto = photo ? await keepEvidence(photo, farmId!, 'feed_docket', evidence === 'confirmed_docket', read ? extractedRecord(read, changed) : null) : null;
+    const documentId = evidencePhoto?.documentId ?? null;
+    const reference = usable(read?.docNumber);
     const id = uuid();
     const result = await save([{
       kind: 'rpc', fn: 'record_feed_delivery', args: {
@@ -95,7 +122,8 @@ export default function DeliveryForm() {
         p_order_date: orderId ? b.txns.find((t) => t.id === orderId)?.order_date ?? null : null,
         p_total_price_eur: priceMode === 'total' && price !== '' ? Number(price) : null,
         p_price_per_tonne_eur: priceMode === 'per_t' && price !== '' ? Number(price) : null,
-        p_evidence: evidence, p_linked_order_id: orderId, p_document_id: documentId, p_notes: null
+        p_evidence: evidence, p_linked_order_id: orderId, p_document_id: documentId,
+        p_notes: reference ? `${read?.kind === 'invoice' ? 'Invoice' : read?.kind === 'receipt' ? 'Receipt' : 'Docket'} ${reference}` : null
       }
     }], {
       label: 'Delivery saved',
@@ -109,6 +137,10 @@ export default function DeliveryForm() {
     });
     setBusy(false);
     if (!result) return;
+    const photoQueued = evidencePhoto ? await evidencePhoto.later({ table: 'feed_transactions', id }) : false;
+    if (photoQueued) toast.show({ message: 'Photo kept on this phone. It uploads when you have signal.', tone: 'info' });
+    const queueId = peekPendingQueueId();
+    if (queueId) dropToRead(queueId);
 
     // Before/after for the Saved screen, from the same engines the app uses everywhere
     const product = b.products.find((p) => p.id === feedId)!;
@@ -135,7 +167,7 @@ export default function DeliveryForm() {
         : 'No price entered, so costs and cash are unchanged. You can add the invoice later.',
       undo: [{ kind: 'rpc', fn: 'undo_feed_delivery', args: { p_id: id } }],
       undoLabel: 'Delivery removed',
-      photo: documentId ? undefined : { table: 'feed_transactions', id, recordType: 'feed_docket' },
+      photo: documentId || photoQueued ? undefined : { table: 'feed_transactions', id, recordType: 'feed_docket' },
       again: { label: 'Another delivery', to: '/record/delivery' }
     });
   }
@@ -143,16 +175,32 @@ export default function DeliveryForm() {
   const order = orderId ? b.txns.find((t) => t.id === orderId) : null;
   return (
     <Screen title="Feed arrived" back>
+      {read && <ReadSummary read={read} photo={photo} onUse={(f, v) => {
+        if (f === 'quantity') { setKg(String(v)); setUnit(Number(v) >= 1000 ? 't' : 'kg'); }
+        if (f === 'date') setDate(String(v));
+        if (f === 'pricePerTonne') { setPriceMode('per_t'); setPrice(String(v)); }
+        if (f === 'total') { setPriceMode('total'); setPrice(String(v)); }
+      }} />}
       <Card className="space-y-5">
-        <FeedPicker b={b} value={feedId} onChange={pickFeed} />
+        <div>
+          <FeedPicker b={b} value={feedId} onChange={pickFeed} />
+          {read?.product && <ReadTag field="feed" read={{ ...read.product, confidence: rFeed ? read.product.confidence : 'low', note: rFeed ? read.product.note : `Read "${read.product.value.text}". It isn't one of your feeds: pick the feed it is, or add it first` }} edited={edited.feed && !!rFeed} />}
+          {read && !read.product && <NotReadTag field="feed" what="which feed" />}
+        </div>
         {order && (
           <label className="flex min-h-tap items-center gap-3 rounded-xl bg-hivis/30 px-3 font-bold">
             <input type="checkbox" className="h-6 w-6 accent-field" checked={!!orderId} onChange={(e) => setOrderId(e.target.checked ? order.id : null)} />
             This is the {fmtKg(Number(order.quantity_kg))} ordered {fmtDay(order.order_date)}
           </label>
         )}
-        <QuantityInput label="How much came?" kg={kg} onKg={setKg} unit={unit} onUnit={setUnit} hint={lastDelivery(feedId) ? 'Filled in from your last delivery' : undefined} />
-        <DateChips label="Delivered" value={date} onChange={setDate} />
+        <div>
+          <QuantityInput label="How much came?" kg={kg} onKg={setKg} unit={unit} onUnit={setUnit} hint={!read && lastDelivery(feedId) ? 'Filled in from your last delivery' : undefined} />
+          {read && (read.quantity ? <ReadTag field="quantity" read={read.quantity} edited={edited.quantity} /> : <NotReadTag field="quantity" what="the quantity" />)}
+        </div>
+        <div>
+          <DateChips label="Delivered" value={date} onChange={setDate} />
+          {read && (read.date && rDate ? <ReadTag field="date" read={read.date} edited={edited.date} /> : <NotReadTag field="date" what="the date (today is filled in)" />)}
+        </div>
       </Card>
 
       {preview && preview.after.runOutDate && (
@@ -164,16 +212,26 @@ export default function DeliveryForm() {
       )}
 
       <Card className="space-y-5">
-        <SupplierPicker b={b} value={supplierId} onChange={setSupplierId} />
+        <div>
+          <SupplierPicker b={b} value={supplierId} onChange={setSupplierId} />
+          {read && (read.supplier
+            ? <ReadTag field="supplier" read={{ ...read.supplier, confidence: rSupplier ? read.supplier.confidence : 'low', note: rSupplier ? read.supplier.note : `Read "${read.supplier.value.text}". Not in your suppliers: pick one`, }} edited={edited.supplier && !!rSupplier} />
+            : <NotReadTag field="supplier" what="the supplier" />)}
+        </div>
         <Chips label="Price" columns={2} value={priceMode} onChange={setPriceMode} options={[{ value: 'per_t', label: '€ per tonne' }, { value: 'total', label: 'Total €' }]} />
         <NumberInput label={priceMode === 'per_t' ? 'Price per tonne' : 'Total price'} value={price} onChange={setPrice} unit="€"
           hint={total !== null && perT !== null
             ? `${priceMode === 'per_t' ? `Total ${eur(total, true)}` : `${eur(perT, true)} per tonne`}${samePrice ? `. Same as your last delivery (${fmtDay(check!.against.date)}): check the docket` : ''}`
             : 'Optional. Adds to feed costs and cash flow.'} />
+        {read && (rPerT !== undefined ? <ReadTag field="price" read={read.pricePerTonne} edited={edited.price} />
+          : rTotal !== undefined ? <ReadTag field="price" read={read.total} edited={edited.price} />
+          : <NotReadTag field="price" what="a price" />)}
         {!samePrice && <PriceCheckNote c={check} />}
         <Chips label="Quantity checked against" columns={3} value={evidence} onChange={setEvidence} options={[
           { value: 'confirmed_docket', label: 'Docket' }, { value: 'invoice_derived', label: 'Invoice' }, { value: 'unconfirmed', label: 'Not checked' }
-        ]} hint="Unchecked quantities lower forecast confidence until confirmed." />
+        ]} hint={read && read.kind !== 'docket'
+          ? 'Set to Invoice because this came from an invoice or receipt. Confirm it in Records once you\'ve checked what arrived.'
+          : 'Unchecked quantities lower forecast confidence until confirmed.'} />
         <PhotoInput file={photo} onFile={setPhoto} />
       </Card>
       <SaveBar><Button block disabled={!draft || busy} onClick={submit}>{busy ? 'Saving' : 'Save delivery'}</Button></SaveBar>

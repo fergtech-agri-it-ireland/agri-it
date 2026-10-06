@@ -10,6 +10,7 @@ import { useTheme } from '../lib/theme';
 import { buildChecklist } from '../lib/routines';
 import { Checklist } from '../components/Checklist';
 import { ReminderNudge } from '../components/Reminders';
+import { PhotoQueueNudge } from '../components/PhotoQueue';
 import { addDays, fmtDay, fmtKg, todayISO } from '../lib/format';
 import { primaryRoute } from '../lib/suppliers';
 import { Card, LinkButton, Screen, SectionTitle } from '../components/ui';
@@ -95,6 +96,7 @@ export default function Today() {
     <>
       <Checklist b={b} items={checklist} today={today} feed={d.feed} title={theme.dawn ? (new Date().getHours() < 12 ? 'Before milking' : 'Evening jobs') : "Today's jobs"} />
       {checklist.length > 0 && <ReminderNudge />}
+      <PhotoQueueNudge />
       {changes.length > 0 && (
         <div className="space-y-1">
           {changes.map((c) => (

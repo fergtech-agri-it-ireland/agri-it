@@ -170,7 +170,7 @@ Designed for someone standing in a yard with gloves, glare, a patchy signal and 
 ## Known limits and next steps (P1 from the spec)
 
 - **Supplier numbers need re-verifying before launch.** They come from the MVP Overview and are stamped verified on 1 Sep 2026 to match it. Arrabawn Tipperary is deliberately left without a number until its merged directory is confirmed. Branch and territory data (`supplier_branches`) is empty until verified data is loaded.
-- **OCR on dockets** (P1). Photos are stored and must be confirmed by the farmer; nothing is extracted yet.
+- **Photo reading** reads dockets, receipts and invoices on the phone (Tesseract) and prefills the form; the farmer checks and saves. It is weaker on handwriting and very poor photos, and PDFs are not read yet. A server reader is planned once hosted (see `docs/HANDOVER.md`).
 - **Not yet built:** push notifications for due routines (the checklist is in-app only), supplier price history, and inviting other people to a farm (the database supports members and advisors; the invite screen isn't built).
 - **Data volume.** The app loads one farm's last ~2 years in a single cached query, which is simple and fast at family-farm scale. Move to paged queries if a farm has tens of thousands of rows.
 - **Voice input** uses the browser's speech recognition (Chrome, Edge, Safari). It is hidden where it isn't supported.

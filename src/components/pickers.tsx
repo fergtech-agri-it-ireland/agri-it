@@ -1,5 +1,6 @@
 import type { FarmBundle } from '../lib/types';
 import { Chips } from './ui';
+import { IS_DEMO } from '../lib/env';
 
 /** Recent suppliers first (spec 4.1), then the rest of the directory, then "Other". */
 export function supplierOptions(b: FarmBundle) {
@@ -66,7 +67,7 @@ export function PhotoInput({ file, onFile }: { file: File | null; onFile: (f: Fi
     <div>
       <span className="label">Photo of docket or invoice (optional)</span>
       <label className="flex min-h-tap cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-line bg-pasture px-4 font-bold">
-        <input type="file" accept="image/*,application/pdf" capture="environment" className="sr-only" onChange={(e) => onFile(e.target.files?.[0] ?? null)} />
+        <input type="file" accept="image/*,application/pdf" {...(IS_DEMO ? {} : { capture: 'environment' as const })} className="sr-only" onChange={(e) => onFile(e.target.files?.[0] ?? null)} />
         {file ? `Attached: ${file.name}` : 'Take photo'}
       </label>
       {file && <button type="button" className="mt-1 text-sm font-bold text-accent underline" onClick={() => onFile(null)}>Remove photo</button>}

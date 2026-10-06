@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useFarmData, useSave } from '../lib/data/farm';
 import { documentUrl } from '../lib/upload';
 import { RECORD_LABEL, type RecordType } from '../lib/types';
-import { eur, fmtDate } from '../lib/format';
+import { eur, fmtDate, fmtKg } from '../lib/format';
 import { Button, Card, Chips, LinkButton, List, Row, Screen, SectionTitle, ToneIcon } from '../components/ui';
 
 export default function Records() {
@@ -29,13 +29,33 @@ export default function Records() {
           <SectionTitle>Confirm these</SectionTitle>
           <p className="px-1 text-sm text-muted">Values from photos are only trusted once you've checked them.</p>
           <List>
-            {unconfirmedDocs.map((d) => (
-              <Row key={d.id} title={d.file_name ?? RECORD_LABEL[d.record_type]} sub={`${RECORD_LABEL[d.record_type]}, ${fmtDate(d.created_at.slice(0, 10))}`}
-                right={<div className="flex gap-1">
-                  {d.storage_path && <Button variant="ghost" onClick={async () => { const u = await documentUrl(d.storage_path!); if (u) window.open(u, '_blank'); }}>View</Button>}
-                  <Button variant="secondary" onClick={() => save([{ kind: 'update', table: 'documents', match: { id: d.id }, patch: { state: 'confirmed' } }], { label: 'Confirmed', patch: (x) => ({ ...x, documents: x.documents.map((y) => (y.id === d.id ? { ...y, state: 'confirmed' } : y)) }) })}>Confirm</Button>
-                </div>} />
-            ))}
+            {unconfirmedDocs.map((d) => {
+              // A delivery whose quantity came from this invoice: confirming says what arrived matches
+              const fromInvoice = b.txns.filter((t) => t.document_id === d.id && t.evidence === 'invoice_derived');
+              const cost = b.costs.find((c) => c.document_id === d.id);
+              const ex = d.extracted as { fields?: { supplier?: { value: { payee?: string; text: string } } } } | null | undefined;
+              const who = ex?.fields?.supplier?.value.payee ?? ex?.fields?.supplier?.value.text;
+              const what = fromInvoice[0] ? `${fmtKg(Number(fromInvoice[0].quantity_kg))} delivered` : cost ? eur(Number(cost.amount_eur), true) : null;
+              const ops = [
+                { kind: 'update' as const, table: 'documents', match: { id: d.id }, patch: { state: 'confirmed' } },
+                ...fromInvoice.map((t) => ({ kind: 'update' as const, table: 'feed_transactions', match: { id: t.id }, patch: { evidence: 'confirmed_docket' } }))
+              ];
+              return (
+                <Row key={d.id} title={[who, what].filter(Boolean).join(', ') || d.file_name || RECORD_LABEL[d.record_type]}
+                  sub={`${ex ? 'Read from photo' : RECORD_LABEL[d.record_type]}, ${fmtDate(d.created_at.slice(0, 10))}${fromInvoice.length ? '. Confirm once what arrived matches' : ''}`}
+                  right={<div className="flex gap-1">
+                    {d.storage_path && <Button variant="ghost" onClick={async () => { const u = await documentUrl(d.storage_path!); if (u) window.open(u, '_blank'); }}>View</Button>}
+                    <Button variant="secondary" onClick={() => save(ops, {
+                      label: fromInvoice.length ? 'Confirmed. Forecast confidence updated' : 'Confirmed',
+                      patch: (x) => ({
+                        ...x,
+                        documents: x.documents.map((y) => (y.id === d.id ? { ...y, state: 'confirmed' } : y)),
+                        txns: x.txns.map((t) => (fromInvoice.some((f) => f.id === t.id) ? { ...t, evidence: 'confirmed_docket' } : t))
+                      })
+                    })}>Confirm</Button>
+                  </div>} />
+              );
+            })}
           </List>
         </>
       )}

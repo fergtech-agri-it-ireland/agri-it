@@ -37,7 +37,15 @@ export default defineConfig(({ mode }) => {
           navigateFallback: '/index.html',
           // Daily reminders (periodic sync), notification taps and future web push
           importScripts: ['reminder-sw.js'],
-          globPatterns: ['**/*.{js,css,html,svg,png,woff2}']
+          globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+          // The photo reader (about 7 MB) is not precached: it is cached the first time it
+          // loads (the Record screen warms it up with signal), then reads offline in the yard.
+          globIgnores: ['ocr/**'],
+          runtimeCaching: [{
+            urlPattern: ({ url }) => url.pathname.startsWith('/ocr/'),
+            handler: 'CacheFirst',
+            options: { cacheName: 'agri-it-ocr', expiration: { maxEntries: 12 } }
+          }]
         }
       }),
       ...(demo ? [viteSingleFile()] : [])

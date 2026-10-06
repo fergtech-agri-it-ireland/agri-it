@@ -297,6 +297,8 @@ export interface DocumentRow {
   storage_path: string | null;
   file_name: string | null;
   mime_type: string | null;
+  /** What was read from the photo (docket-read rules); never trusted until confirmed. */
+  extracted?: Record<string, unknown> | null;
   state: 'unconfirmed' | 'confirmed';
   created_at: string;
 }

@@ -2,7 +2,8 @@ import { supabase } from './supabase';
 import type { RecordType } from './types';
 
 /** Upload a docket/invoice photo to storage and create its document row. Online only. */
-export async function uploadDocument(file: File, farmId: string, recordType: RecordType, confirmed: boolean): Promise<string> {
+/** `extracted` is what was read from the photo (never trusted until confirmed). */
+export async function uploadDocument(file: File, farmId: string, recordType: RecordType, confirmed: boolean, extracted: unknown = null): Promise<string> {
   const docId = crypto.randomUUID();
   const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
   const path = `${farmId}/${docId}.${ext}`;
@@ -10,7 +11,7 @@ export async function uploadDocument(file: File, farmId: string, recordType: Rec
   if (up.error) throw new Error(`Photo upload failed: ${up.error.message}`);
   const { error } = await supabase.from('documents').insert({
     id: docId, farm_id: farmId, record_type: recordType, storage_path: path, file_name: file.name, mime_type: file.type,
-    state: confirmed ? 'confirmed' : 'unconfirmed'
+    state: confirmed ? 'confirmed' : 'unconfirmed', extracted
   });
   if (error) throw new Error(error.message);
   return docId;

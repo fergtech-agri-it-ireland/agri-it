@@ -19,3 +19,4 @@ supabase/.env
 # Browser test output (scripts/e2e)
 out/
 boundary.png
+public/ocr/

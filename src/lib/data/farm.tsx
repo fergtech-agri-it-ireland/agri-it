@@ -5,6 +5,7 @@ import { supabase } from '../supabase';
 import type { FarmBundle } from '../types';
 import { addDays, todayISO } from '../format';
 import { execute, flush, type Op } from '../offline/outbox';
+import { flushPhotoUploads, readWaiting } from '../docket/flow';
 import { useToast } from '../../components/Toast';
 
 // ---------------------------------------------------------------------------
@@ -65,11 +66,16 @@ export function FarmProvider({ children }: { children: ReactNode }) {
 
   // Replay offline writes whenever we come back online
   useEffect(() => {
-    const onOnline = () => { flush().then(({ sent }) => { if (sent) qc.invalidateQueries({ queryKey: ['bundle'] }); }); };
+    const onOnline = () => {
+      flush()
+        .then(async ({ sent }) => (await flushPhotoUploads()) + sent)
+        .then((n) => { if (n) qc.invalidateQueries({ queryKey: ['bundle'] }); });
+      if (farmId) readWaiting(farmId).catch(() => {});
+    };
     window.addEventListener('online', onOnline);
     if (navigator.onLine && userId) onOnline();
     return () => window.removeEventListener('online', onOnline);
-  }, [qc, userId]);
+  }, [qc, userId, farmId]);
 
   const value = useMemo<FarmCtx>(() => ({
     session, sessionLoading, farmId, farms, farmsLoading: farmsQ.isLoading, selectFarm,

@@ -1,5 +1,6 @@
 """End-to-end run of the redesigned Agri-It UI against the demo build (phone viewport)."""
 import re, sys, struct, zlib
+import datetime
 from playwright.sync_api import sync_playwright, expect
 
 URL = sys.argv[1]
@@ -17,6 +18,11 @@ def png(path):
     def chunk(t, d): return struct.pack('>I', len(d)) + t + d + struct.pack('>I', zlib.crc32(t + d) & 0xffffffff)
     data = b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', 1, 1, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b'')
     open(path, 'wb').write(data)
+
+def day(n):
+    # The demo's dates are relative to today, so the expected dates are too (as the app writes them)
+    d = datetime.date.today() + datetime.timedelta(days=n)
+    return f"{d.strftime('%a')}, {d.day} {'Sept' if d.month == 9 else d.strftime('%b')}"
 
 def go(pg, h, wait='main'):
     pg.goto(URL + h)
@@ -69,7 +75,7 @@ with sync_playwright() as p:
     check('Feed dial opens Calf ration', CALF in pg.url, pg.url)
     go(pg, f'#/feed/{NUT}')
     s = pg.get_by_label('How the run-out date is worked out').inner_text().replace('\n', ' | ')
-    for frag in ['8,600 kg', 'Today to Thu, 8 Oct', '−840 kg', 'Higher rate while grass is short: 400 kg a day for 10 days', '−4,000 kg', '3,760 kg at 280 kg a day', '13 days', 'Runs out Sun, 1 Nov', '26', 'Order by Mon, 26 Oct']:
+    for frag in ['8,600 kg', f'Today to {day(2)}', '−840 kg', 'Higher rate while grass is short: 400 kg a day for 10 days', '−4,000 kg', '3,760 kg at 280 kg a day', '13 days', f'Runs out {day(26)}', '26', f'Order by {day(20)}']:
         check(f'Feed sum shows "{frag}"', frag in s, s)
     w = pg.locator('main').inner_text()
     check('Who eats it rows with Change', 'Dairy cows, 240 kg a day' in w and 'Change' in w)
@@ -93,7 +99,7 @@ with sync_playwright() as p:
     pg.get_by_role('button', name='Save delivery').click()
     pg.get_by_role('heading', name='Delivery saved').wait_for(timeout=8000)
     sv = pg.locator('body').inner_text().replace('\n', ' | ')
-    for frag in ['Dairy nut 16%, 8 t from Tirlán', 'Days of Dairy nut 16% left', '26', '55', 'Mon, 30 Nov', 'Tue, 24 Nov', '€67,280', '€70,400', 'of €75,000 budget so far', 'Add the docket photo', 'Another delivery']:
+    for frag in ['Dairy nut 16%, 8 t from Tirlán', 'Days of Dairy nut 16% left', '26', '55', day(55), day(49), '€67,280', '€70,400', 'of €75,000 budget so far', 'Add the docket photo', 'Another delivery']:
         check(f'Saved delivery shows "{frag}"', frag in sv, sv)
     pg.screenshot(path=f'{OUT}/saved.png')
 
@@ -140,9 +146,11 @@ with sync_playwright() as p:
     png(f'{OUT}/docket.png')
     go(pg, '#/record')
     pg.locator('input[type=file]').first.set_input_files(f'{OUT}/docket.png')
-    pg.get_by_role('dialog', name='What is this?').wait_for()
+    # The photo is read first (scripts/e2e/ocr.py tests that); whatever it finds, the kinds are offered
+    dialog = pg.get_by_role('dialog')
+    dialog.get_by_role('button', name=re.compile('Feed docket')).wait_for(timeout=60000)
     pg.screenshot(path=f'{OUT}/record-photo.png')
-    pg.get_by_role('button', name=re.compile('Feed docket')).click()
+    dialog.get_by_role('button', name=re.compile('Feed docket')).click()
     pg.get_by_text('How much came?').wait_for()
     check('Photo carried into delivery form', pg.get_by_text('Attached: docket.png').count() > 0)
 

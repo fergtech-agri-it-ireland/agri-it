@@ -1,6 +1,6 @@
 # Agri-It MVP: Handover
 
-**Last updated:** 6 October 2026, night (daily reminders, supplier price history, budget variance alerts; earlier the same day: white-page fix, routines and tick-off checklist, UI redesign)
+**Last updated:** 7 October 2026, early morning (photo reading for dockets, receipts and invoices; 6 Oct: daily reminders, supplier price history, budget variance alerts, white-page fix, routines and tick-off checklist, UI redesign)
 **Owner:** Feargal
 **Status:** MVP code complete and on GitHub (`fergtech-ireland/agri-it`, private, CI green, latest work on `main`). Browser demo live as a private Claude artifact. No Supabase cloud project and no hosting yet.
 
@@ -24,17 +24,31 @@ It is not a herd, grassland or accounting system. It does not prescribe rations,
 | --- | --- |
 | Code | P0 scope complete, plus the redesign, recurring routines with tick-offs, and (6 Oct, night) daily reminders, supplier price history and budget variance alerts |
 | Typecheck | Clean (`tsc -b`) |
-| Unit tests | 75/75 passing (forecast engines, run-out steps, Today dials, routine schedules, checklist, actual-vs-planned feeding, reminders, price history, budget alerts) |
-| Browser tests | `scripts/e2e/` (Python + Playwright, run against the demo build at phone size): `ui.py` 82 checks, `routines.py` 41 checks, `stale_cache.py` 5 checks, `p1.py` 30 checks (reminders, prices, budget alerts). All pass at any time of day (the dawn check now follows the clock) |
+| Unit tests | 92/92 passing (forecast engines, run-out steps, Today dials, routine schedules, checklist, actual-vs-planned feeding, reminders, price history, budget alerts, docket reading and matching) |
+| Browser tests | `scripts/e2e/` (Python + Playwright, run against the demo build at phone size): `ui.py` 82 checks, `routines.py` 41 checks, `stale_cache.py` 5 checks, `p1.py` 30 checks (reminders, prices, budget alerts), `ocr.py` 53 checks (photo reading). All pass on any day and at any time (dates in `ui.py` are now relative to today) |
 | Production build | Clean, PWA service worker generated |
 | Database | All four migrations + seed validated against real Postgres 16 with Supabase auth/storage stubs (`scripts/e2e/supabase_stub.sql`); RLS isolation and unique constraints tested |
 | GitHub | `fergtech-ireland/agri-it` (private), CI green. The Claude GitHub app is installed, so a chat can push |
 | Supabase cloud | Not created. Feargal's Supabase org also holds `gauntlet` / `gauntlet-test` for another project with devs: do not pause or change those |
-| Deployed | No. Browser-only demo (sample farm, no database, data kept in the phone's browser) is a private artifact: https://claude.ai/artifact/PrDSDf2cB5EgRaDSMe7UJw (version 6). UI concept canvas: https://claude.ai/artifact/UkQ1sRPKTTE3QN9rX11QF8 |
+| Deployed | No. Browser-only demo (sample farm, no database, data kept in the phone's browser) is a private artifact: https://claude.ai/artifact/PrDSDf2cB5EgRaDSMe7UJw (version 7). UI concept canvas: https://claude.ai/artifact/UkQ1sRPKTTE3QN9rX11QF8 |
 
 **Important:** the build sandbox resets between chats. Attach the GitHub repo `fergtech-ireland/agri-it` in a new chat and clone it.
 
-### Latest work: reminders, price history, budget alerts (6 Oct, night)
+### Latest work: photo reading for dockets, receipts and invoices (7 Oct)
+**Where the reading happens (decided 7 Oct):** one pipeline with a swappable reader. Today the reader is open-source OCR (Tesseract.js 7, English `best_int` model) running **on the phone**: free, the photo never leaves the phone, works offline once its files (about 7 MB) are cached. Once Agri-It is hosted, add a better **server reader** (an AI vision model behind a Supabase edge function) for messy and handwritten dockets. Both readers return text lines only; the same tested rules turn lines into values, so a value can never appear that is not on the page.
+
+- **Rules** (`src/lib/docket/extract.ts`, rule `docket-read@1.0`, pure, tests in `extract.test.ts`): works out the kind (delivery docket, supplier invoice, bill or receipt) and whether it is feed; reads supplier, date (day first, skips due dates), product, quantity and unit (t, kg, "40 x 25kg"), €/t (labelled or the rate on the product line), total, net, VAT and rate, docket or invoice number, and the bill category. Matches suppliers by distinctive name words (accents ignored, one smudged letter allowed; counties and generic words like "Valley" or "Co-op" never match), past payees in the farmer's own spelling, and feeds by name with protein % that must agree (16% never matches 14%).
+- **Confidence per value:** high / medium / low from the reader's line confidence, raised or lowered by the document's own sums (quantity x €/t = total, net + VAT = total). A smudged unit is settled only by those sums. **Low values are never filled in**: they show as "tap to use" suggestions. Dates in the future or over four months old are suggestions only. Anything not read is left blank and labelled "Couldn't read".
+- **Cleanup on the phone** (`prepare.ts`): orientation, scale to about 2,000 px, evens out uneven light and crease shadows (divides by a background map), contrast stretch; the reader straightens crooked pages (`rotateAuto`). In testing, a very dim, 8 degree crooked, creased docket read nothing raw and read fully after cleanup. Do not set Tesseract's DPI or page mode: forcing them lost whole pages.
+- **Reader** (`reader.ts`): the app serves its own copies from `/ocr/` (`scripts/copy-ocr-assets.mjs`, runs before dev and build; `public/ocr/` is git-ignored); the service worker caches them on first use (`agri-it-ocr`, not precached); the Record screen warms the reader up while there is signal. A quick reachability check and a 30-second no-progress limit mean a blocked or offline reader fails fast instead of hanging. `currentReader()` is where the server reader slots in (contract in the file header).
+- **Flow:** Record > photo > "Reading the photo" steps > "Looks like: Feed delivery docket" with a one-line summary > **Check and save** opens Feed arrived (feed) or Paid a bill (not feed), or "Not right? It's a..." to pick the form. Forms open with a "Read from photo" card (thumbnail, the document's sums, suggestions, what couldn't be read, "Nothing is recorded until you tap Save") and a tag under each field: read, how sure, the line it came from, or "You changed this". Read mode never fills values from last time. Nothing is saved until Save.
+- **Evidence:** the photo is shrunk to about 2,000 px JPEG and kept as the document, with what was read, how sure, and what the farmer changed in `documents.extracted` (column already existed). Docket: evidence `confirmed_docket`, document confirmed on Save. Invoice or receipt for feed: evidence `invoice_derived` (forecast confidence drops to Medium) and the invoice document waits in Records > Confirm these; confirming there also upgrades the delivery to `confirmed_docket`. Bills: matched directory supplier sets `costs.supplier_id`; the receipt or invoice number and VAT go in the note.
+- **Offline:** reading itself works offline once the reader is cached. If the reader can't start, the farmer can keep the photo ("Read it when I have signal"); it waits in **Photos to check** on Record (IndexedDB `agri-it-photos`) and is read on reconnect or when Record opens; Today shows "1 photo read, ready to check". Evidence photos for records saved offline are queued and uploaded and linked (`document_id`) after the record syncs (`flushPhotoUploads`, after the outbox).
+- **PDFs** are not read yet: the farmer picks the form and the file is attached as before.
+- **Demo:** file picker instead of the camera, three sample photos marked SAMPLE (`src/lib/demo/samples/`, made by `scripts/samples/make_dockets.py`: crooked dim docket, creased vet receipt, dark feed invoice). The hosted artifact blocks the reader's downloads, so samples use the reader's own saved output (`sampleText.ts`, made from the same images) and say so; your own photos show that the demo page blocks the reader. In the real app every photo is read live.
+- `ocr.py` serves the reader's CDN files from `node_modules`, so the real reader runs in the test browser with no network, then blocks them to test the fallback and the read-later queue. `scripts/e2e/fixtures/very-dim-docket.jpg` is the hard case.
+
+### Earlier: reminders, price history, budget alerts (6 Oct, night)
 - **Daily reminders** (`lib/reminders.ts` pure + tests, `lib/reminderClock.ts` browser, `public/reminder-sw.js` service worker add-on via workbox `importScripts`, `components/Reminders.tsx`). Settings > Reminders: morning (6 to 9am) and evening check (5 to 8pm), per phone like dawn mode. Shows a preview of the exact notification. Delivery, best first: (1) app alive in the background, a minute clock notifies; (2) app closed, installed on Android Chrome, periodic background sync wakes the service worker, which reads a 7-day digest the app saves to IndexedDB (`agri-it-reminders`); (3) any phone, "Add to phone calendar" downloads an .ics with daily alarms (hidden in the demo, because the artifact viewer blocks downloads). No buzz while the app is on screen. A reminder only opens Today; it never records anything. Reminders fire within 3 hours of their time, once a day. The service worker also handles `push` (title/body/url JSON) and notification taps, ready for server push. Today shows a one-time "Get a nudge at milking time" link until reminders are set.
 - **Supplier price history** (`lib/forecast/prices.ts`, rule `price-history@1.0`, `components/Prices.tsx`). Built only from priced deliveries (orders are not prices paid). Feed screen: "Price paid" card with last 8 deliveries, change since the one before, 12-month tonnage-weighted average, lowest/highest, last price by supplier. Supplier screen: "Prices you've paid". Delivery form: compares the price as typed with the last price from the same supplier (else anyone); 3% or more is "up/down", otherwise "about the same (+€5/t)". Saved screen mentions the rise. Ask Agri-It answers "What did I pay for meal?".
 - **Budget variance alerts** (`budgetAlerts()` in `money.ts`, tests in `budget-alerts.test.ts`). Only when data coverage is adequate. One alert per category: year so far on completed months only (costs 10% and €250 over, income 10% and €500 behind), this month's budget already used up (10% and €250), or an info note that last month ran 25% over. Warnings go to Today's Do next; all show on Money. Money's budget bars now use completed months too (matching the alerts) with "October so far" underneath. `budgetVsActual()` rows gained `closed` and `thisMonth`; `budget`/`actual` are unchanged for the delivery and milk Saved screens.
@@ -81,7 +95,7 @@ Demo farm: Glenview Farm, Co. Tipperary, dairy. Four groups, two feeds (one with
 
 **Browser demo** (no Docker, no database): `npm run build:demo` writes one self-contained file, `dist-demo/index.html` (`VITE_DEMO=1`, hash routing, in-browser fake Supabase in `src/lib/demo/`). To republish the artifact, strip `<!doctype>/<html>/<head>/<body>` and keep the title (`Agri-It Demo`), theme-color meta, styles, `<div id="root">` and the script, then publish to the same artifact URL.
 
-**Browser tests:** serve `dist-demo` (`cd dist-demo && python3 -m http.server 4331`) then `python3 scripts/e2e/ui.py http://localhost:4331/ out/`, same for `routines.py` and `p1.py`, and `stale_cache.py` (one argument). Needs `pip install playwright` and a Chromium.
+**Browser tests:** serve `dist-demo` (`cd dist-demo && python3 -m http.server 4331`) then `python3 scripts/e2e/ui.py http://localhost:4331/ out/`, same for `routines.py`, `p1.py` and `ocr.py`, and `stale_cache.py` (one argument). Needs `pip install playwright` and a Chromium.
 
 Other commands: `npm run supabase:reset` (rebuild + reseed), `supabase:status`, `supabase:stop`, `npm test`, `npm run typecheck`, `npm run build`. Studio at http://127.0.0.1:54323.
 
@@ -126,7 +140,11 @@ src/
     Toast.tsx                     toast with Undo
     pickers.tsx                   feed/supplier/group pickers
   pages/                          28 screens (see section 8)
-scripts/e2e/                      browser test scripts (ui, routines, stale cache, p1) + Postgres stub for auth/storage
+scripts/e2e/                      browser test scripts (ui, routines, stale cache, p1, ocr) + Postgres stub + fixtures/
+scripts/samples/make_dockets.py   makes the demo's sample docket photos and the hard test photo
+scripts/copy-ocr-assets.mjs       copies the photo reader into public/ocr/ (before dev and build)
+src/lib/docket/                   photo reading: extract (rules, tested), prepare (cleanup), reader, flow, photoStore
+src/components/PhotoRead.tsx      Read from photo card and per-field tags; PhotoQueue.tsx: Photos to check
 public/reminder-sw.js             service worker add-on: reminders (periodic sync), push, notification taps
 docs/screenshots/                 today, delivery, feed-detail, silage, record-sheet
 ```
@@ -152,7 +170,7 @@ Feed is always stored in **kg**. Money is `numeric(12,2)` euro.
 | `silage_stores` | method `acreage` / `pit_dimensions` / `bale_count` / `measured_tonnes`, analysis fields, fed-out tonnes |
 | `income`, `costs` | typed income and cost categories; feed delivery cost links via `feed_transaction_id` (cascades on undo) |
 | `budget_lines` | monthly or annual budget per income/cost category |
-| `farm_records`, `documents`, `jobs` | records with confirmation state, uploads, simple jobs |
+| `farm_records`, `documents`, `jobs` | records with confirmation state, uploads (`documents.extracted` holds what was read from a photo, never trusted until confirmed), simple jobs |
 | `evidence_sources`, `forage_benchmarks` | published sources (S1 to S6) and Teagasc allowances with dates |
 | `forecast_snapshots` | governance: inputs, inputs hash, output, confidence, rule version, timestamp |
 | `routines` | recurring work: kind `expense`/`income`/`job`/`count`/`order`/`silage`, frequency `daily`/`weekly`/`monthly`/`every_n_days` (weekday, day of month, interval), start/end, usual amount, category, counterparty, feed/silage/supplier links, active |
@@ -224,6 +242,7 @@ Navigation: bottom bar Today / Forecast / **Record (hi-vis centre button)** / Mo
 - Routines: anything recurring is ticked off on Today; ticks record what actually happened and update stock, costs and cash. Nothing is auto-posted.
 - Reminders point at the checklist and never record anything; no buzz while the app is open; calendar alarms as the fallback that works on every phone.
 - Prices are only what the farmer paid; Agri-It never quotes or predicts a supplier price.
+- Photo reading fills in only what it read with reasonable confidence; everything else is blank or a "tap to use" suggestion, every value says it came from the photo, and nothing is recorded until Save.
 - Answer first; formulas behind "How this is worked out".
 - Touch targets ≥ 56px; save button pinned to the bottom (thumb reach).
 - Steppers, Today/Yesterday chips, numeric keypads, tap-to-choose chips, voice dictation; forms prefill from the last entry.
@@ -246,6 +265,7 @@ Navigation: bottom bar Today / Forecast / **Record (hi-vis centre button)** / Mo
 5. Whole-farm bundle loads ~2 years in one query. Fine at family-farm scale; page it later if needed.
 6. Supabase types are hand-written in `types.ts`; could switch to `supabase gen types`.
 7. `supabase/.temp/` slipped into the zip; it's git-ignored, so it won't be committed.
+8. Photo reading on the phone is weaker on handwritten dockets and very poor photos, and does not read PDFs. The first read on a phone downloads about 7 MB (once). The hosted demo blocks the reader, so the demo's samples use saved readings.
 
 ---
 
@@ -256,9 +276,10 @@ Navigation: bottom bar Today / Forecast / **Record (hi-vis centre button)** / Mo
 3. Create a Supabase cloud project for Agri-It (separate from gauntlet), `supabase link`, `supabase db push`, load reference data only (not the demo user).
 4. Deploy `dist/` (Vercel, Netlify or Cloudflare Pages) with env vars; set auth redirect URLs; turn on email confirmation.
 5. Server push for reminders once hosted (needed for iPhone with the app closed): VAPID keys, a `push_subscriptions` table, and a scheduled Supabase edge function that sends the same message the digest builds. The service worker already shows pushes.
-6. P1 from spec still open: docket/invoice OCR with farmer confirmation, accountant pack export polish. (Price history and budget alerts done.)
-7. Farm sharing: invite screen for family members and advisors (database already supports roles).
-8. P2: integrations (ICBF, AgFood, Herdwatch, PastureBase, co-op, accounting) where available.
+6. P1 from spec still open: accountant pack export polish. (Photo reading, price history and budget alerts done.)
+7. Photo reading next: try it on real dockets from the yard; add the server reader once hosted (better on handwriting and poor photos); read PDFs (e-invoices usually carry text, so pdf.js text first); consider `costs.vat_eur` and `reference` columns so VAT reaches the year-end pack as a figure, not a note.
+8. Farm sharing: invite screen for family members and advisors (database already supports roles).
+9. P2: integrations (ICBF, AgFood, Herdwatch, PastureBase, co-op, accounting) where available.
 
 ---
 

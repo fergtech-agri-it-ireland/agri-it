@@ -49,7 +49,9 @@ with sync_playwright() as p:
     pg.wait_for_timeout(300)
     check('Dawn class applied', pg.evaluate("document.documentElement.classList.contains('dawn')"))
     body = pg.locator('main').inner_text()
-    check('Dawn: Before milking comes first', 'Before milking' in body and body.index('Before milking') < body.index('Then'))
+    # The app says "Before milking" in the morning and "Evening jobs" after noon (phone's local time)
+    dawn_title = pg.evaluate("new Date().getHours() < 12") and 'Before milking' or 'Evening jobs'
+    check(f'Dawn: {dawn_title} comes first', dawn_title in body and body.index(dawn_title) < body.index('Then'))
     check('Dawn: theme-color meta updated', pg.evaluate("document.querySelector('meta[name=theme-color]').content") == '#0E1712')
     pg.screenshot(path=f'{OUT}/today-dawn.png')
     go(pg, f'#/feed/{NUT}')

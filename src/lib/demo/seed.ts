@@ -18,6 +18,7 @@ const G_CALF = '40000000-0000-0000-0000-000000000004';
 const P_NUT = '50000000-0000-0000-0000-000000000001';
 const P_CALF = '50000000-0000-0000-0000-000000000002';
 const TIRLAN = '10000000-0000-0000-0000-000000000001';
+const DAIRYGOLD = '10000000-0000-0000-0000-000000000002';
 const R_COWS = '60000000-0000-0000-0000-000000000001';
 const R_HEIF = '60000000-0000-0000-0000-000000000002';
 const R_CALF = '60000000-0000-0000-0000-000000000003';
@@ -80,7 +81,7 @@ export function buildSeed(): DB {
   const sup = (sid: string, r: Row) => ({ ...DEFAULTS.suppliers(), ...r, id: sid });
   db.suppliers = [
     sup(TIRLAN, { name: 'Tirlán FarmLife', network: 'GAIN Feeds', coverage: ['ROI'], central_phone: '0818 321 321', central_phone_label: 'Customer services', website: 'https://www.tirlanfarmlife.com', local_contact_method: 'Customer services can connect you to your local Business Manager. Use the Tirlán store finder with your Eircode or town.', source_url: 'https://www.tirlanfarmlife.com/about-us/contact-us/contact', verified_on: '2026-09-01' }),
-    sup('10000000-0000-0000-0000-000000000002', { name: 'Dairygold Agri Business', coverage: ['ROI'], central_phone: '025 24411', central_phone_label: 'Agri Business', secondary_phone: '022 31644', secondary_phone_label: 'Inside Sales', website: 'https://www.dairygoldagri.ie', local_contact_method: 'Regional dairy, beef and tillage advisory territories where current; otherwise Inside Sales.', source_url: 'https://www.dairygoldagri.ie/contact-us/', verified_on: '2026-09-01' }),
+    sup(DAIRYGOLD, { name: 'Dairygold Agri Business', coverage: ['ROI'], central_phone: '025 24411', central_phone_label: 'Agri Business', secondary_phone: '022 31644', secondary_phone_label: 'Inside Sales', website: 'https://www.dairygoldagri.ie', local_contact_method: 'Regional dairy, beef and tillage advisory territories where current; otherwise Inside Sales.', source_url: 'https://www.dairygoldagri.ie/contact-us/', verified_on: '2026-09-01' }),
     sup('10000000-0000-0000-0000-000000000003', { name: 'Lakeland Dairies Agribusiness', coverage: ['ROI', 'NI'], central_phone: '0818 474720', central_phone_label: 'ROI agribusiness', secondary_phone: '+44 28 3026 2311', secondary_phone_label: 'NI agribusiness', website: 'https://lakelanddairies.com', local_contact_method: 'Agribusiness and member-relations contacts. No named rep is publicly mapped, so use the central number.', source_url: 'https://lakelanddairies.com/contact-us', verified_on: '2026-09-01' }),
     sup('10000000-0000-0000-0000-000000000004', { name: 'Aurivo Agribusiness', network: 'Nutrias', coverage: ['ROI'], central_phone: '071 9186500', central_phone_label: 'Agribusiness', website: 'https://www.aurivo.ie', local_contact_method: 'Current Aurivo agribusiness contact or branch data; central number as fallback.', source_url: 'https://www.aurivo.ie/overview/', verified_on: '2026-09-01' }),
     sup('10000000-0000-0000-0000-000000000005', { name: 'Arrabawn Tipperary Co-op', network: "Dan O'Connor Feeds", coverage: ['ROI'], local_contact_method: "Arrabawn and Tipperary Co-op merged in Feb 2025. Contacts must come from the merged co-op's live directory, not legacy Arrabawn data.", source_url: 'https://www.rte.ie/news/business/2025/0228/1499516-arrabawn-tipperary-co-operative-society/', needs_live_directory: true }),
@@ -110,6 +111,11 @@ export function buildSeed(): DB {
     { ...DEFAULTS.feed_products(), id: P_CALF, farm_id: F, supplier_id: TIRLAN, name: 'Calf ration', storage_location: 'Shed store', safety_stock_mode: 'kg', safety_stock_value: 150, created_at: stamp() }
   ];
   put('feed_transactions', [
+    // Five months of priced deliveries (price history), then the count that the forecast starts from
+    { farm_id: F, feed_product_id: P_NUT, txn_type: 'count', quantity_kg: 8000, effective_on: D(-170), evidence: 'measured', notes: 'Bin dipped' },
+    ...([[-145, 372, TIRLAN], [-117, 378, TIRLAN], [-89, 376, DAIRYGOLD], [-61, 380, TIRLAN], [-33, 385, TIRLAN]] as const).map(([day, perT, sid]) => (
+      { farm_id: F, feed_product_id: P_NUT, txn_type: 'delivery', quantity_kg: 8000, order_date: D(day - 3), delivery_date: D(day), effective_on: D(day), supplier_id: sid, total_price_eur: perT * 8, price_per_tonne_eur: perT, evidence: 'confirmed_docket' }
+    )),
     { farm_id: F, feed_product_id: P_NUT, txn_type: 'count', quantity_kg: 6200, effective_on: D(-20), evidence: 'measured', notes: 'Bin dipped' },
     { farm_id: F, feed_product_id: P_NUT, txn_type: 'delivery', quantity_kg: 8000, order_date: D(-7), delivery_date: D(-4), effective_on: D(-4), supplier_id: TIRLAN, total_price_eur: 3120, price_per_tonne_eur: 390, evidence: 'confirmed_docket' },
     { farm_id: F, feed_product_id: P_CALF, txn_type: 'order', quantity_kg: 1000, order_date: D(-1), expected_delivery_date: D(2), effective_on: D(2), order_status: 'open', supplier_id: TIRLAN, evidence: 'unconfirmed' },
@@ -118,8 +124,8 @@ export function buildSeed(): DB {
   // Rules were set up two mornings ago (when ticking began), so the checklist only reaches back that far
   const setUp = `${D(-2)}T06:00:00Z`;
   put('feeding_rules', [
-    { id: R_COWS, farm_id: F, feed_product_id: P_NUT, animal_group_id: G_COWS, kg_per_head_per_feed: 1.0, feeds_per_day: 2, start_date: D(-30), created_at: setUp },
-    { id: R_HEIF, farm_id: F, feed_product_id: P_NUT, animal_group_id: G_HEIF, kg_per_head_per_feed: 1.0, feeds_per_day: 1, start_date: D(-30), created_at: setUp },
+    { id: R_COWS, farm_id: F, feed_product_id: P_NUT, animal_group_id: G_COWS, kg_per_head_per_feed: 1.0, feeds_per_day: 2, start_date: D(-170), created_at: setUp },
+    { id: R_HEIF, farm_id: F, feed_product_id: P_NUT, animal_group_id: G_HEIF, kg_per_head_per_feed: 1.0, feeds_per_day: 1, start_date: D(-170), created_at: setUp },
     { id: R_CALF, farm_id: F, feed_product_id: P_CALF, animal_group_id: G_CALF, kg_per_head_per_feed: 1.5, feeds_per_day: 1, start_date: D(-30), created_at: setUp },
     { farm_id: F, feed_product_id: P_NUT, animal_group_id: G_COWS, kg_per_head_per_feed: 1.5, feeds_per_day: 2, start_date: D(3), end_date: D(12), is_temporary: true, label: 'Higher rate while grass is short' }
   ]);

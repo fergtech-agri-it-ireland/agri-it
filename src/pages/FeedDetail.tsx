@@ -4,6 +4,8 @@ import { CalendarDays, Pencil, Phone } from 'lucide-react';
 import { useFarmData, useSave } from '../lib/data/farm';
 import { useDerived } from '../lib/data/derived';
 import { countVariances, rulesForDay, runoutSteps } from '../lib/forecast/feed';
+import { priceHistory } from '../lib/forecast/prices';
+import { PriceHistoryCard } from '../components/Prices';
 import { supabase } from '../lib/supabase';
 import { EVIDENCE_LABEL } from '../lib/types';
 import { eur, fmtDate, fmtDay, fmtKg, fmtNum } from '../lib/format';
@@ -31,6 +33,7 @@ export default function FeedDetail() {
 
   if (!product || !f) return <Screen title="Feed" back="/forecast"><Empty title="Feed not found" /></Screen>;
 
+  const prices = priceHistory(d.prices, product.id, d.today);
   const rules = b.rules.filter((r) => r.feed_product_id === product.id).sort((a, c) => Number(a.is_temporary) - Number(c.is_temporary));
   const txns = b.txns.filter((t) => t.feed_product_id === product.id).sort((a, c) => c.effective_on.localeCompare(a.effective_on));
   const variances = countVariances(txns, rules, b.groups, b.feedLogs.filter((l) => l.feed_product_id === product.id));
@@ -181,11 +184,13 @@ export default function FeedDetail() {
         {prev && <p className="pt-2">Previously forecast to run out {fmtDay(prev.output.run_out)} (at {fmtKg(prev.output.daily_use_kg)}/day, {fmtDate(prev.generated_at.slice(0, 10))}). It changed because stock or the feeding plan changed.</p>}
       </Explain>
 
+      <PriceHistoryCard h={prices} />
+
       {f.pricePerTonne !== null && (
         <Card>
-          <p className="font-bold">Cost</p>
+          <p className="font-bold">Feeding cost at that price</p>
           <div className="mt-2 grid grid-cols-2 gap-y-2">
-            <span className="text-muted">Last price</span><span className="text-right font-bold">{eur(f.pricePerTonne)}/t</span>
+            {!prices.latest && <><span className="text-muted">Last price</span><span className="text-right font-bold">{eur(f.pricePerTonne)}/t</span></>}
             <span className="text-muted">Per day</span><span className="text-right font-bold">{eur(f.costPerDay, true)}</span>
             <span className="text-muted">Per head per day</span><span className="text-right font-bold">{eur(f.costPerHeadPerDay, true)}</span>
             {f.costUntilReorder !== null && <><span className="text-muted">Until reorder</span><span className="text-right font-bold">{eur(f.costUntilReorder)}</span></>}

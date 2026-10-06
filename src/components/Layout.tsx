@@ -10,6 +10,7 @@ import type { FarmBundle } from '../lib/types';
 import { IS_DEMO } from '../lib/env';
 import { resetDemo } from '../lib/demo/client';
 import { Logo } from './Logo';
+import { useReminderClock } from '../lib/reminderClock';
 
 /** Demo build only: say plainly this is sample data, and offer a clean restart. */
 function DemoBanner() {
@@ -110,6 +111,7 @@ function BottomNav() {
 function Recorder({ bundle }: { bundle: FarmBundle }) {
   const d = useDerived(bundle);
   useSnapshotRecorder(bundle, d);
+  useReminderClock(bundle, d.priorities.filter((p) => p.tone === 'urgent').map((p) => p.title));
   return null;
 }
 

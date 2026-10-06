@@ -9,7 +9,7 @@ import { todayISO } from '../format';
 
 const DB_KEY = 'agri-it:demo-db';
 const SIGNED_OUT_KEY = 'agri-it:demo-signed-out';
-const VERSION = 3; // bump when the seed's shape changes so stored demo data is rebuilt
+const VERSION = 4; // bump when the seed's shape changes so stored demo data is rebuilt
 
 function store(): Storage | null {
   try { return window.localStorage; } catch { return null; }

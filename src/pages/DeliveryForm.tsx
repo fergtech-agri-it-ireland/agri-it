@@ -11,6 +11,8 @@ import { uploadDocument } from '../lib/upload';
 import { useToast } from '../components/Toast';
 import { Button, Card, Chips, DateChips, Empty, LinkButton, NumberInput, SaveBar, Screen } from '../components/ui';
 import { FeedPicker, PhotoInput, QuantityInput, SupplierPicker } from '../components/pickers';
+import { priceCheck, pricePoints } from '../lib/forecast/prices';
+import { PriceCheckNote } from '../components/Prices';
 
 /** "Feed arrived": feed → quantity → Save. Everything else is prefilled from history. */
 export default function DeliveryForm() {
@@ -56,6 +58,10 @@ export default function DeliveryForm() {
   const qty = Number(kg);
   const total = price === '' ? null : priceMode === 'total' ? Number(price) : (Number(price) * qty) / 1000;
   const perT = price === '' ? null : priceMode === 'per_t' ? Number(price) : qty > 0 ? Number(price) / (qty / 1000) : null;
+
+  const points = useMemo(() => pricePoints(b), [b]);
+  const check = feedId ? priceCheck(points, feedId, supplierId, perT) : null;
+  const samePrice = check !== null && Math.abs(check.diffPerT) < 0.005;
 
   const draft: FeedTransaction | null = feedId && qty > 0 ? {
     id: 'draft', farm_id: farmId!, feed_product_id: feedId, txn_type: 'delivery', quantity_kg: qty, order_date: null, delivery_date: date,
@@ -125,7 +131,7 @@ export default function DeliveryForm() {
         ...(total ? [{ label: 'Feed spend this year', before: eur(feedSpend), after: eur(feedSpend + total), sub: feedBudget > 0 ? `of ${eur(feedBudget)} budget so far` : undefined }] : [])
       ],
       note: total
-        ? `Also added ${eur(total)} to ${fmtMonth(date.slice(0, 7))} costs${supplierName ? ` and ${supplierName}'s history` : ''}.`
+        ? `Also added ${eur(total)} to ${fmtMonth(date.slice(0, 7))} costs${supplierName ? ` and ${supplierName}'s history` : ''}.${check && check.trend !== 'same' ? ` That's ${eur(Math.abs(check.diffPerT))}/t ${check.trend === 'up' ? 'more' : 'less'} than last time (${eur(check.against.eurPerT)}/t).` : ''}`
         : 'No price entered, so costs and cash are unchanged. You can add the invoice later.',
       undo: [{ kind: 'rpc', fn: 'undo_feed_delivery', args: { p_id: id } }],
       undoLabel: 'Delivery removed',
@@ -161,7 +167,10 @@ export default function DeliveryForm() {
         <SupplierPicker b={b} value={supplierId} onChange={setSupplierId} />
         <Chips label="Price" columns={2} value={priceMode} onChange={setPriceMode} options={[{ value: 'per_t', label: '€ per tonne' }, { value: 'total', label: 'Total €' }]} />
         <NumberInput label={priceMode === 'per_t' ? 'Price per tonne' : 'Total price'} value={price} onChange={setPrice} unit="€"
-          hint={total !== null && perT !== null ? (priceMode === 'per_t' ? `Total ${eur(total, true)}` : `${eur(perT, true)} per tonne`) : 'Optional. Adds to feed costs and cash flow.'} />
+          hint={total !== null && perT !== null
+            ? `${priceMode === 'per_t' ? `Total ${eur(total, true)}` : `${eur(perT, true)} per tonne`}${samePrice ? `. Same as your last delivery (${fmtDay(check!.against.date)}): check the docket` : ''}`
+            : 'Optional. Adds to feed costs and cash flow.'} />
+        {!samePrice && <PriceCheckNote c={check} />}
         <Chips label="Quantity checked against" columns={3} value={evidence} onChange={setEvidence} options={[
           { value: 'confirmed_docket', label: 'Docket' }, { value: 'invoice_derived', label: 'Invoice' }, { value: 'unconfirmed', label: 'Not checked' }
         ]} hint="Unchecked quantities lower forecast confidence until confirmed." />

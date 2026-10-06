@@ -2,7 +2,8 @@ import { useEffect, useMemo } from 'react';
 import type { FarmBundle, ISODate } from '../types';
 import { forecastFeed, type FeedForecast } from '../forecast/feed';
 import { forecastForage } from '../forecast/forage';
-import { budgetVsActual, cashForecast90, cashPosition, yearEndPack } from '../forecast/money';
+import { budgetAlerts, budgetVsActual, cashForecast90, cashPosition, yearEndPack } from '../forecast/money';
+import { pricePoints } from '../forecast/prices';
 import { daysBetween, fmtDay, fmtKg, todayISO, eur } from '../format';
 import { supabase } from '../supabase';
 
@@ -88,10 +89,10 @@ export function useDerived(b: FarmBundle) {
     if (forage.status === 'deficit') p.push({ id: 'forage', tone: 'urgent', title: 'Silage short for the winter', detail: `About ${Math.round(Math.abs((forage.needT ?? 0) - forage.availableT))} t short before reserve`, to: '/forecast?tab=forage' });
     else if (forage.status === 'tight') p.push({ id: 'forage', tone: 'warn', title: 'Winter silage is tight', detail: `Covers the winter but not your ${forage.reservePercent}% reserve`, to: '/forecast?tab=forage' });
     if (cash90.lowest && cash && cash90.lowest.closing < 0) p.push({ id: 'cash', tone: 'urgent', title: 'Cash may go overdrawn', detail: `Lowest point about ${eur(cash90.lowest.closing)} by the end of the period`, to: '/forecast?tab=cash' });
-    if (budget.adequate) {
-      for (const r of budget.rows.filter((x) => x.kind === 'cost' && x.budget > 0 && x.variance / x.budget > 0.1)) {
-        p.push({ id: `budget-${r.category}`, tone: 'warn', title: `${r.label} is over budget`, detail: `${eur(r.variance)} over so far this year`, to: '/money' });
-      }
+    // Budget variance: only the year-so-far and this-month alerts reach Today; last month's note stays on Money
+    const alerts = budgetAlerts(b.farm, b, today);
+    for (const a of alerts.filter((x) => x.tone === 'warn')) {
+      p.push({ id: a.id, tone: 'warn', title: a.title, detail: a.detail, to: '/money' });
     }
     for (const j of b.jobs.filter((x) => !x.done_at && x.due_on && daysBetween(today, x.due_on) <= 2)) {
       p.push({ id: `job-${j.id}`, tone: j.due_on! < today ? 'warn' : 'info', title: j.title, detail: j.due_on! < today ? `Overdue since ${fmtDay(j.due_on)}` : `Due ${fmtDay(j.due_on)}`, to: '/farm/jobs' });
@@ -101,7 +102,7 @@ export function useDerived(b: FarmBundle) {
     if (cash === null) p.push({ id: 'opening-cash', tone: 'info', title: 'Add your bank balance', detail: 'Unlocks the cash-flow forecast', to: '/settings' });
 
     p.sort((a, c) => toneRank[a.tone] - toneRank[c.tone]);
-    return { today, feed, forage, cash, cash90, budget, yearEnd, priorities: p };
+    return { today, feed, forage, cash, cash90, budget, budgetAlerts: alerts, prices: pricePoints(b), yearEnd, priorities: p };
   }, [b, today]);
 }
 

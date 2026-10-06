@@ -1,6 +1,6 @@
 # Agri-It MVP: Handover
 
-**Last updated:** 6 October 2026, late (white-page fix in the demo; earlier the same day: routines and tick-off checklist, UI redesign)
+**Last updated:** 6 October 2026, night (daily reminders, supplier price history, budget variance alerts; earlier the same day: white-page fix, routines and tick-off checklist, UI redesign)
 **Owner:** Feargal
 **Status:** MVP code complete and on GitHub (`fergtech-ireland/agri-it`, private, CI green, latest work on `main`). Browser demo live as a private Claude artifact. No Supabase cloud project and no hosting yet.
 
@@ -22,10 +22,10 @@ It is not a herd, grassland or accounting system. It does not prescribe rations,
 
 | Item | State |
 | --- | --- |
-| Code | P0 scope complete, plus the WHOOP / MyFitnessPal / Strava inspired redesign and recurring routines with tick-offs (6 Oct 2026) |
+| Code | P0 scope complete, plus the redesign, recurring routines with tick-offs, and (6 Oct, night) daily reminders, supplier price history and budget variance alerts |
 | Typecheck | Clean (`tsc -b`) |
-| Unit tests | 56/56 passing (forecast engines, run-out steps, Today dials, routine schedules, checklist, actual-vs-planned feeding) |
-| Browser tests | `scripts/e2e/` (Python + Playwright, run against the demo build at phone size): `ui.py` 82 checks, `routines.py` 41 checks, `stale_cache.py` 5 checks. All pass. One dawn-mode check in `ui.py` expects "Before milking" so fails if run after noon (the app correctly says "Evening jobs") |
+| Unit tests | 75/75 passing (forecast engines, run-out steps, Today dials, routine schedules, checklist, actual-vs-planned feeding, reminders, price history, budget alerts) |
+| Browser tests | `scripts/e2e/` (Python + Playwright, run against the demo build at phone size): `ui.py` 82 checks, `routines.py` 41 checks, `stale_cache.py` 5 checks, `p1.py` 30 checks (reminders, prices, budget alerts). All pass at any time of day (the dawn check now follows the clock) |
 | Production build | Clean, PWA service worker generated |
 | Database | All four migrations + seed validated against real Postgres 16 with Supabase auth/storage stubs (`scripts/e2e/supabase_stub.sql`); RLS isolation and unique constraints tested |
 | GitHub | `fergtech-ireland/agri-it` (private), CI green. The Claude GitHub app is installed, so a chat can push |
@@ -34,7 +34,13 @@ It is not a herd, grassland or accounting system. It does not prescribe rations,
 
 **Important:** the build sandbox resets between chats. Attach the GitHub repo `fergtech-ireland/agri-it` in a new chat and clone it.
 
-### Latest fix: demo showed a white page (6 Oct, commit after b0a30f0)
+### Latest work: reminders, price history, budget alerts (6 Oct, night)
+- **Daily reminders** (`lib/reminders.ts` pure + tests, `lib/reminderClock.ts` browser, `public/reminder-sw.js` service worker add-on via workbox `importScripts`, `components/Reminders.tsx`). Settings > Reminders: morning (6 to 9am) and evening check (5 to 8pm), per phone like dawn mode. Shows a preview of the exact notification. Delivery, best first: (1) app alive in the background, a minute clock notifies; (2) app closed, installed on Android Chrome, periodic background sync wakes the service worker, which reads a 7-day digest the app saves to IndexedDB (`agri-it-reminders`); (3) any phone, "Add to phone calendar" downloads an .ics with daily alarms. No buzz while the app is on screen. A reminder only opens Today; it never records anything. Reminders fire within 3 hours of their time, once a day. The service worker also handles `push` (title/body/url JSON) and notification taps, ready for server push. Today shows a one-time "Get a nudge at milking time" link until reminders are set.
+- **Supplier price history** (`lib/forecast/prices.ts`, rule `price-history@1.0`, `components/Prices.tsx`). Built only from priced deliveries (orders are not prices paid). Feed screen: "Price paid" card with last 8 deliveries, change since the one before, 12-month tonnage-weighted average, lowest/highest, last price by supplier. Supplier screen: "Prices you've paid". Delivery form: compares the price as typed with the last price from the same supplier (else anyone); 3% or more is "up/down", otherwise "about the same (+€5/t)". Saved screen mentions the rise. Ask Agri-It answers "What did I pay for meal?".
+- **Budget variance alerts** (`budgetAlerts()` in `money.ts`, tests in `budget-alerts.test.ts`). Only when data coverage is adequate. One alert per category: year so far on completed months only (costs 10% and €250 over, income 10% and €500 behind), this month's budget already used up (10% and €250), or an info note that last month ran 25% over. Warnings go to Today's Do next; all show on Money. Money's budget bars now use completed months too (matching the alerts) with "October so far" underneath. `budgetVsActual()` rows gained `closed` and `thisMonth`; `budget`/`actual` are unchanged for the delivery and milk Saved screens.
+- Demo seed: five months of priced Dairy nut deliveries (Tirlán and one from Dairygold), a measured count 170 days back, nut rules starting then. Demo `VERSION` is 4. `CACHE_VERSION` unchanged (bundle shape unchanged).
+
+### Earlier fix: demo showed a white page (6 Oct, commit after b0a30f0)
 Cause: the phone had cached farm data from the previous demo version, which lacked the new routines lists, so Today crashed and there was no error screen. Fixed by:
 - `CACHE_VERSION` in `src/main.tsx` (persisted query cache buster, now `v3-routines`). **Bump it whenever the shape of `FarmBundle` changes.**
 - `normalizeBundle()` in `src/lib/data/farm.tsx` (used as the query `select`): missing lists become empty arrays. Add any new bundle list to `LIST_KEYS`.
@@ -75,7 +81,7 @@ Demo farm: Glenview Farm, Co. Tipperary, dairy. Four groups, two feeds (one with
 
 **Browser demo** (no Docker, no database): `npm run build:demo` writes one self-contained file, `dist-demo/index.html` (`VITE_DEMO=1`, hash routing, in-browser fake Supabase in `src/lib/demo/`). To republish the artifact, strip `<!doctype>/<html>/<head>/<body>` and keep title, theme-color meta, styles, `<div id="root">` and the script, then publish to the same artifact URL.
 
-**Browser tests:** serve `dist-demo` (`cd dist-demo && python3 -m http.server 4331`) then `python3 scripts/e2e/ui.py http://localhost:4331/ out/`, same for `routines.py` and `stale_cache.py` (one argument). Needs `pip install playwright` and a Chromium.
+**Browser tests:** serve `dist-demo` (`cd dist-demo && python3 -m http.server 4331`) then `python3 scripts/e2e/ui.py http://localhost:4331/ out/`, same for `routines.py` and `p1.py`, and `stale_cache.py` (one argument). Needs `pip install playwright` and a Chromium.
 
 Other commands: `npm run supabase:reset` (rebuild + reseed), `supabase:status`, `supabase:stop`, `npm test`, `npm run typecheck`, `npm run build`. Studio at http://127.0.0.1:54323.
 
@@ -120,7 +126,8 @@ src/
     Toast.tsx                     toast with Undo
     pickers.tsx                   feed/supplier/group pickers
   pages/                          28 screens (see section 8)
-scripts/e2e/                      browser test scripts (ui, routines, stale cache) + Postgres stub for auth/storage
+scripts/e2e/                      browser test scripts (ui, routines, stale cache, p1) + Postgres stub for auth/storage
+public/reminder-sw.js             service worker add-on: reminders (periodic sync), push, notification taps
 docs/screenshots/                 today, delivery, feed-detail, silage, record-sheet
 ```
 
@@ -196,7 +203,7 @@ Feed is always stored in **kg**. Money is `numeric(12,2)` euro.
 
 ## 8. Screens and routes
 
-Today `/` (three dials, Do next, Feeding today, quick tiles, feed cards) · Record `/record` (photo a docket, same as last time, something new) · Saved `/record/done` (after delivery, sale, milk cheque) · Forecast `/forecast` (tabs feed, forage, cash) · Feed: new, detail (the sum, who eats it, call, order again), edit, count, rule new/edit · Record forms: delivery, order (`?feed=&kg=`), count, milk, sale, cost (`?repeat=<cost id>`), income · Money `/money`, year-end, budget · Farm diary `/diary` · Farm hub, groups, silage (+form), jobs · Suppliers + detail · Records + new (`?type=`) · Ask · Settings (dawn mode, sunlight, feed target) · Login · Onboarding (3 steps).
+Today `/` (three dials, Do next, Feeding today, quick tiles, feed cards) · Record `/record` (photo a docket, same as last time, something new) · Saved `/record/done` (after delivery, sale, milk cheque) · Forecast `/forecast` (tabs feed, forage, cash) · Feed: new, detail (the sum, who eats it, call, order again), edit, count, rule new/edit · Record forms: delivery, order (`?feed=&kg=`), count, milk, sale, cost (`?repeat=<cost id>`), income · Money `/money`, year-end, budget · Farm diary `/diary` · Farm hub, groups, silage (+form), jobs · Suppliers + detail · Records + new (`?type=`) · Ask · Settings (dawn mode, sunlight, reminders, feed target) · Login · Onboarding (3 steps).
 
 Today `/` now opens on the dials then **Today's jobs** checklist (dawn mode: "Before milking" / "Evening jobs"). Routines `/routines` (feeding plans with tick-off switches, money, stock and feed, jobs) and `/routines/new`, `/routines/:id`. Bill, milk and other-income forms have "Does this repeat?". Count form accepts `?routine=&due=`.
 
@@ -215,6 +222,8 @@ Navigation: bottom bar Today / Forecast / **Record (hi-vis centre button)** / Mo
 - Feed screen shows the run-out as a sum in kg that matches the forecast exactly.
 - Farm diary: milk cheques by month (best month marked) and one timeline, including ticked-off feeding per day, jobs done and skips.
 - Routines: anything recurring is ticked off on Today; ticks record what actually happened and update stock, costs and cash. Nothing is auto-posted.
+- Reminders point at the checklist and never record anything; no buzz while the app is open; calendar alarms as the fallback that works on every phone.
+- Prices are only what the farmer paid; Agri-It never quotes or predicts a supplier price.
 - Answer first; formulas behind "How this is worked out".
 - Touch targets ≥ 56px; save button pinned to the bottom (thumb reach).
 - Steppers, Today/Yesterday chips, numeric keypads, tap-to-choose chips, voice dictation; forms prefill from the last entry.
@@ -246,8 +255,8 @@ Navigation: bottom bar Today / Forecast / **Record (hi-vis centre button)** / Mo
 2. Re-verify supplier numbers; decide on Arrabawn Tipperary contact.
 3. Create a Supabase cloud project for Agri-It (separate from gauntlet), `supabase link`, `supabase db push`, load reference data only (not the demo user).
 4. Deploy `dist/` (Vercel, Netlify or Cloudflare Pages) with env vars; set auth redirect URLs; turn on email confirmation.
-5. Push notifications or daily reminders for due routines and feeding ticks.
-6. P1 from spec: docket/invoice OCR with farmer confirmation, supplier price history, budget variance alerts, accountant pack export polish.
+5. Server push for reminders once hosted (needed for iPhone with the app closed): VAPID keys, a `push_subscriptions` table, and a scheduled Supabase edge function that sends the same message the digest builds. The service worker already shows pushes.
+6. P1 from spec still open: docket/invoice OCR with farmer confirmation, accountant pack export polish. (Price history and budget alerts done.)
 7. Farm sharing: invite screen for family members and advisors (database already supports roles).
 8. P2: integrations (ICBF, AgFood, Herdwatch, PastureBase, co-op, accounting) where available.
 

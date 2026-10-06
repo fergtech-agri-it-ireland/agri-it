@@ -48,24 +48,45 @@ export default function Money() {
         <Row to="/money/budget" icon={<Target className="h-6 w-6 text-accent" />} title="Budget" sub={b.budget.length ? 'Compare plan with actual' : 'Not set yet'} right={<ChevronRight className="h-5 w-5 text-muted" />} />
       </List>
 
-      {d.budget.rows.length > 0 && (
-        <>
-          <SectionTitle>Budget so far</SectionTitle>
-          <Card className="space-y-3">
-            {!d.budget.adequate && <p className="rounded-xl bg-warn-bg p-3 text-warn">Some months have no records, so over-budget alerts are paused until more is entered.</p>}
-            {d.budget.rows.map((r) => {
-              const over = r.kind === 'cost' ? r.variance > 0 : r.variance < 0;
-              return (
-                <div key={r.kind + r.category}>
-                  <div className="flex justify-between font-bold"><span>{r.label}</span><span>{eur(r.actual)} of {eur(r.budget)}</span></div>
-                  <div className="mt-1 h-3 overflow-hidden rounded-full bg-pasture"><div className={`h-full ${over ? (r.kind === 'cost' ? 'bg-danger' : 'bg-hivis') : 'bg-field'}`} style={{ width: `${Math.min(100, (r.actual / Math.max(1, r.budget)) * 100)}%` }} /></div>
-                  <p className="flex items-center gap-1 text-sm">{over && <ToneIcon tone="warn" className="h-4 w-4" />}{r.variance >= 0 ? '+' : '−'}{eur(Math.abs(r.variance))} {r.kind === 'cost' ? (r.variance > 0 ? 'over' : 'under') : (r.variance >= 0 ? 'ahead' : 'behind')}</p>
-                </div>
-              );
-            })}
-          </Card>
-        </>
+      {d.budgetAlerts.length > 0 && (
+        <section aria-label="Budget alerts" className="space-y-2">
+          {d.budgetAlerts.map((a) => (
+            <Card key={a.id} className={`flex gap-3 ${a.tone === 'warn' ? 'bg-warn-bg' : 'bg-field-light'}`}>
+              <ToneIcon tone={a.tone} className="mt-0.5 h-6 w-6 shrink-0" />
+              <div><p className="font-bold">{a.title}</p><p className="text-[0.95rem]">{a.detail}</p></div>
+            </Card>
+          ))}
+        </section>
       )}
+
+      {d.budget.rows.length > 0 && (() => {
+        // Completed months, like the alerts: a bill paid on the 3rd isn't an overspend against a part-month budget
+        const closedLabel = d.budget.lastClosedMonth ? new Intl.DateTimeFormat('en-IE', { month: 'long', timeZone: 'UTC' }).format(new Date(`${d.budget.lastClosedMonth}-01T00:00:00Z`)) : null;
+        const thisMonthLabel = new Intl.DateTimeFormat('en-IE', { month: 'long', timeZone: 'UTC' }).format(new Date(`${d.today.slice(0, 7)}-01T00:00:00Z`));
+        return (
+          <>
+            <SectionTitle>{closedLabel ? `Budget to end of ${closedLabel}` : 'Budget this month'}</SectionTitle>
+            <Card className="space-y-4">
+              {!d.budget.adequate && <p className="rounded-xl bg-warn-bg p-3 text-warn">Some months have no records, so over-budget alerts are paused until more is entered.</p>}
+              {d.budget.rows.map((row) => {
+                const r = closedLabel ? row.closed : row.thisMonth;
+                const variance = r.actual - r.budget;
+                const over = row.kind === 'cost' ? variance > 0 : variance < 0;
+                return (
+                  <div key={row.kind + row.category}>
+                    <div className="flex justify-between gap-2 font-bold"><span>{row.label}</span><span>{eur(r.actual)} of {eur(r.budget)}</span></div>
+                    <div className="mt-1 h-3 overflow-hidden rounded-full bg-pasture"><div className={`h-full ${over ? (row.kind === 'cost' ? 'bg-danger' : 'bg-hivis') : 'bg-field'}`} style={{ width: `${Math.min(100, (r.actual / Math.max(1, r.budget)) * 100)}%` }} /></div>
+                    <p className="flex items-center gap-1 text-sm">{over && <ToneIcon tone="warn" className="h-4 w-4" />}{variance >= 0 ? '+' : '−'}{eur(Math.abs(variance))} {row.kind === 'cost' ? (variance > 0 ? 'over' : 'under') : (variance >= 0 ? 'ahead' : 'behind')}</p>
+                    {closedLabel && row.thisMonth.budget > 0 && (
+                      <p className="text-sm text-muted">{thisMonthLabel} so far: {eur(row.thisMonth.actual)} of {eur(row.thisMonth.budget)}</p>
+                    )}
+                  </div>
+                );
+              })}
+            </Card>
+          </>
+        );
+      })()}
 
       {ye.supplierTotals.length > 0 && (
         <>

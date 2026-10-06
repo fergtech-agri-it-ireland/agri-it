@@ -1,10 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useFarmData, useFarmCtx, useSave } from '../lib/data/farm';
 import { supabase } from '../lib/supabase';
 import { COUNTIES_NI, COUNTIES_ROI, type Farm } from '../lib/types';
 import { todayISO } from '../lib/format';
 import { Button, Card, Chips, DateChips, Field, NumberInput, Screen, SectionTitle, Stepper, TextInput } from '../components/ui';
 import { useTheme, type DawnPref } from '../lib/theme';
+import { useDerived } from '../lib/data/derived';
+import { RemindersCard } from '../components/Reminders';
 
 export default function Settings() {
   const b = useFarmData();
@@ -24,6 +27,12 @@ export default function Settings() {
   const [turnout, setTurnout] = useState(f.turnout_date ?? '');
   const [feedTarget, setFeedTarget] = useState(f.feed_target_days ?? 30);
   const theme = useTheme();
+  const d = useDerived(b);
+  const urgent = useMemo(() => d.priorities.filter((p) => p.tone === 'urgent').map((p) => p.title), [d.priorities]);
+  const [params] = useSearchParams();
+  useEffect(() => {
+    if (params.get('section') === 'reminders') document.getElementById('reminders')?.scrollIntoView({ block: 'start' });
+  }, [params]);
 
   async function submit() {
     const patch: Partial<Farm> = {
@@ -46,6 +55,9 @@ export default function Settings() {
           Sunlight mode (maximum contrast outdoors)
         </label>
       </Card>
+
+      <div id="reminders" className="scroll-mt-20"><SectionTitle>Reminders</SectionTitle></div>
+      <RemindersCard b={b} urgentToday={urgent} />
 
       <SectionTitle>Farm</SectionTitle>
       <Card className="space-y-4">

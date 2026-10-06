@@ -3,8 +3,10 @@ import { useParams } from 'react-router-dom';
 import { ExternalLink } from 'lucide-react';
 import { useFarmData, useFarmCtx, useSave } from '../lib/data/farm';
 import { resolveContacts } from '../lib/suppliers';
-import { eur, fmtDate } from '../lib/format';
-import { Button, CallButton, Card, Empty, Screen, SectionTitle, Stepper, TextInput } from '../components/ui';
+import { eur, fmtDate, fmtDay } from '../lib/format';
+import { Button, CallButton, Card, Empty, List, Row, Screen, SectionTitle, Stepper, TextInput } from '../components/ui';
+import { pricePoints, supplierPrices } from '../lib/forecast/prices';
+import { PriceTrend } from '../components/Prices';
 
 export default function SupplierDetail() {
   const { id } = useParams();
@@ -19,6 +21,7 @@ export default function SupplierDetail() {
   const [knowLead, setKnowLead] = useState(setting?.lead_time_days !== null && setting?.lead_time_days !== undefined);
   const [lead, setLead] = useState<number>(setting?.lead_time_days ?? 3);
   if (!supplier) return <Screen title="Supplier" back="/suppliers"><Empty title="Not found" /></Screen>;
+  const paid = supplierPrices(pricePoints(b), supplier.id);
   const c = resolveContacts(supplier, b.branches, setting, b.farm);
   const spend = b.costs.filter((x) => x.supplier_id === supplier.id || x.supplier_name === supplier.name).reduce((s, x) => s + Number(x.amount_eur), 0);
 
@@ -45,6 +48,18 @@ export default function SupplierDetail() {
         {supplier.source_url && <a href={supplier.source_url} target="_blank" rel="noreferrer" className="inline-flex min-h-tap items-center gap-1 font-bold text-accent underline">Check the supplier's own contact page <ExternalLink className="h-4 w-4" /></a>}
         {spend > 0 && <p className="text-sm">You've spent {eur(spend)} with them in the last two years.</p>}
       </Card>
+      {paid.length > 0 && (
+        <>
+          <SectionTitle>Prices you've paid</SectionTitle>
+          <List>
+            {paid.map((r) => (
+              <Row key={r.latest.productId} to={`/feed/${r.latest.productId}`} title={r.latest.productName}
+                sub={<>Last delivery {fmtDay(r.latest.date)}{r.changePct !== null && r.previous ? <>, <PriceTrend pct={r.changePct} diff={r.latest.eurPerT - r.previous.eurPerT} /></> : ''}</>}
+                right={<span className="font-bold">{eur(r.latest.eurPerT)}/t</span>} />
+            ))}
+          </List>
+        </>
+      )}
       <SectionTitle>My rep</SectionTitle>
       <Card className="space-y-4">
         <p className="hint">Territories don't always follow the nearest branch. Your own contact always shows first.</p>

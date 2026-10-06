@@ -10,6 +10,7 @@ import type { useDerived } from './data/derived';
 import { eur, fmtDay, fmtKg, fmtNum } from './format';
 import { primaryRoute } from './suppliers';
 import { buildChecklist } from './routines';
+import { priceHistory } from './forecast/prices';
 
 export interface Answer {
   text: string;
@@ -27,6 +28,7 @@ export const SUGGESTED = [
   'Am I okay for silage this winter?',
   'What is my cash position?',
   'How much have I spent on feed this year?',
+  'What did I pay for meal?',
   'What is my milk price this year?',
   'What does my accountant need?',
   'What is left to do today?'
@@ -59,8 +61,27 @@ export function ask(question: string, b: FarmBundle, d: Derived): Answer {
     };
   }
 
-  // Feed run-out / ordering
   const product = b.products.find((p) => !p.archived && q.includes(p.name.toLowerCase()));
+
+  // Price paid per tonne (from priced deliveries only)
+  if (has(q, 'price', 'pay for', 'paid for', 'per tonne', '/t', 'dearer', 'cheaper')) {
+    const list = (product ? [product] : b.products.filter((p) => !p.archived)).map((p) => ({ p, h: priceHistory(d.prices, p.id, d.today) })).filter((x) => x.h.latest);
+    if (!list.length) return { text: 'No priced feed deliveries recorded yet.', details: ['Add the price when you record a delivery and Agri-It keeps the history.'], confidence: null, basis: 'Your records', links: [{ label: 'Feed arrived', to: '/record/delivery' }] };
+    const first = list[0];
+    return {
+      text: list.length === 1
+        ? `You last paid ${eur(first.h.latest!.eurPerT)}/t for ${first.p.name} (${fmtDay(first.h.latest!.date)}, ${first.h.latest!.supplierName}).`
+        : `Last prices paid: ${list.map((x) => `${x.p.name} ${eur(x.h.latest!.eurPerT)}/t`).join(', ')}.`,
+      details: list.flatMap(({ p, h }) => [
+        ...(h.previous && h.changePct !== null ? [`${p.name}: ${h.changePct >= 0 ? 'up' : 'down'} ${eur(Math.abs(h.latest!.eurPerT - h.previous.eurPerT))}/t on the delivery before (${eur(h.previous.eurPerT)}/t, ${fmtDay(h.previous.date)}).`] : []),
+        ...(h.avg12m !== null && h.points.length > 1 ? [`${p.name}: average ${eur(h.avg12m)}/t over the last 12 months, by tonnes delivered.`] : [])
+      ]),
+      confidence: null, basis: 'Your priced deliveries. Agri-It never quotes a supplier price.',
+      links: list.map((x) => ({ label: x.p.name, to: `/feed/${x.p.id}` }))
+    };
+  }
+
+  // Feed run-out / ordering
   if (product || has(q, 'order', 'run out', 'runs out', 'meal', 'nut', 'ration', 'feed left', 'days of feed', 'concentrate')) {
     const list = product ? [product] : b.products.filter((p) => !p.archived);
     if (!list.length) return { text: 'You have no purchased feeds set up yet.', details: [], confidence: null, basis: 'Your records', links: [{ label: 'Add a feed', to: '/feed/new' }] };

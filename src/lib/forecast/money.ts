@@ -101,6 +101,10 @@ export interface VarianceRow {
   budget: number;
   actual: number;
   variance: number; // actual - budget (for costs, positive = overspend)
+  /** Completed months only (what alerts use): fair to lumpy bills that land early in a month. */
+  closed: { budget: number; actual: number; variance: number };
+  /** The month in progress, shown separately. */
+  thisMonth: { budget: number; actual: number };
 }
 
 /**
@@ -112,19 +116,30 @@ export function budgetVsActual(farm: Farm, bundle: Pick<FarmBundle, 'budget' | '
   const months = monthsBetween(monthKey(fy.start), monthKey(today));
   const inMonths = (d: ISODate) => d >= fy.start && d <= today;
   const ymSet = new Set(months.map((m) => m.split('-').map(Number).join('-')));
-  const budgetFor = (kind: string, cat: string) =>
+  const current = monthKey(today);
+  const budgetFor = (kind: string, cat: string, only?: (m: string) => boolean) =>
     bundle.budget.filter((b) => b.kind === kind && b.category === cat && b.month !== null && ymSet.has(`${b.year}-${b.month}`))
+      .filter((b) => !only || only(`${b.year}-${String(b.month).padStart(2, '0')}`))
       .reduce((s, b) => s + Number(b.amount_eur), 0);
+  const actualFor = (kind: string, cat: string, only?: (m: string) => boolean) => (kind === 'income'
+    ? bundle.income.filter((i) => i.income_type === cat && inMonths(i.occurred_on) && (!only || only(monthKey(i.occurred_on)))).reduce((s, i) => s + Number(i.amount_eur), 0)
+    : bundle.costs.filter((c) => c.category === cat && inMonths(c.occurred_on) && (!only || only(monthKey(c.occurred_on)))).reduce((s, c) => s + Number(c.amount_eur), 0));
 
   const cats = new Set(bundle.budget.map((b) => `${b.kind}:${b.category}`));
+  const closedOnly = (m: string) => m < current;
+  const currentOnly = (m: string) => m === current;
   const rows: VarianceRow[] = [...cats].map((key) => {
     const [kind, category] = key.split(':') as ['income' | 'cost', string];
-    const actual = kind === 'income'
-      ? bundle.income.filter((i) => i.income_type === category && inMonths(i.occurred_on)).reduce((s, i) => s + Number(i.amount_eur), 0)
-      : bundle.costs.filter((c) => c.category === category && inMonths(c.occurred_on)).reduce((s, c) => s + Number(c.amount_eur), 0);
+    const actual = actualFor(kind, category);
     const b = budgetFor(kind, category);
+    const cb = budgetFor(kind, category, closedOnly);
+    const ca = actualFor(kind, category, closedOnly);
     const label = kind === 'income' ? INCOME_LABEL[category as IncomeType] ?? category : COST_LABEL[category as CostCategory] ?? category;
-    return { kind, category, label, budget: b, actual, variance: actual - b };
+    return {
+      kind, category, label, budget: b, actual, variance: actual - b,
+      closed: { budget: cb, actual: ca, variance: ca - cb },
+      thisMonth: { budget: budgetFor(kind, category, currentOnly), actual: actualFor(kind, category, currentOnly) }
+    };
   });
 
   const monthsWithData = new Set([
@@ -133,7 +148,96 @@ export function budgetVsActual(farm: Farm, bundle: Pick<FarmBundle, 'budget' | '
   ]);
   const completedMonths = Math.max(1, months.length - 1); // current month is still in progress
   const coverage = monthsWithData.size / completedMonths;
-  return { fy, rows, coverage, adequate: coverage >= 0.75, monthsElapsed: months.length };
+  return { fy, rows, coverage, adequate: coverage >= 0.75, monthsElapsed: months.length, lastClosedMonth: months.length > 1 ? months.at(-2)! : null };
+}
+
+/** Variance alert thresholds: big enough to matter on a family farm, small enough to be early. */
+export const BUDGET_ALERT = { ytdPct: 10, ytdMinEur: 250, incomeMinEur: 500, monthPct: 10, monthMinEur: 250, lastMonthPct: 25 } as const;
+
+export interface BudgetAlert {
+  id: string;
+  kind: 'income' | 'cost';
+  category: string;
+  label: string;
+  tone: 'warn' | 'info';
+  scope: 'year' | 'this_month' | 'last_month';
+  title: string;
+  detail: string;
+  amount: number; // € over (costs) or behind (income)
+}
+
+/**
+ * Budget variance alerts (spec P1). Only raised when enough months have records
+ * (`budgetVsActual().adequate`), so a farmer who hasn't entered much yet isn't nagged.
+ *
+ * - Year so far: completed months only, because one bill early in a month would otherwise
+ *   look like an overspend against a pro-rated budget. Costs over by 10% and €250, or
+ *   income behind by 10% and €500.
+ * - This month: a cost category already over its whole monthly budget (10% and €250).
+ * - Last month: a cost category that ran 25% over its monthly budget, when the year as a
+ *   whole is still on track (a quieter, information-only note).
+ * One alert per category, the most important first. Figures are the farmer's own budget
+ * and records: nothing here is a benchmark or a recommendation.
+ */
+export function budgetAlerts(farm: Farm, bundle: Pick<FarmBundle, 'budget' | 'income' | 'costs'>, today: ISODate): BudgetAlert[] {
+  const bva = budgetVsActual(farm, bundle, today);
+  if (!bva.adequate) return [];
+  const fy = bva.fy;
+  const thisMonth = monthKey(today);
+  const months = monthsBetween(monthKey(fy.start), thisMonth);
+  const completed = months.slice(0, -1);
+  const lastMonth = completed.at(-1) ?? null;
+  const ym = (m: string) => m.split('-').map(Number) as [number, number];
+  const budgetIn = (kind: string, cat: string, ms: string[]) => {
+    const set = new Set(ms.map((m) => ym(m).join('-')));
+    return bundle.budget.filter((b) => b.kind === kind && b.category === cat && b.month !== null && set.has(`${b.year}-${b.month}`)).reduce((s, b) => s + Number(b.amount_eur), 0);
+  };
+  const actualIn = (kind: string, cat: string, ms: string[]) => {
+    const set = new Set(ms);
+    return kind === 'income'
+      ? bundle.income.filter((i) => i.income_type === cat && i.occurred_on >= fy.start && i.occurred_on <= today && set.has(monthKey(i.occurred_on))).reduce((s, i) => s + Number(i.amount_eur), 0)
+      : bundle.costs.filter((c) => c.category === cat && c.occurred_on >= fy.start && c.occurred_on <= today && set.has(monthKey(c.occurred_on))).reduce((s, c) => s + Number(c.amount_eur), 0);
+  };
+  const monthName = (m: string) => new Intl.DateTimeFormat('en-IE', { month: 'long', timeZone: 'UTC' }).format(new Date(`${m}-01T00:00:00Z`));
+  const money = (n: number) => `€${Math.round(n).toLocaleString('en-IE')}`;
+
+  const out: BudgetAlert[] = [];
+  for (const r of bva.rows) {
+    const base = { id: `budget-${r.kind}-${r.category}`, kind: r.kind, category: r.category, label: r.label };
+    const yb = budgetIn(r.kind, r.category, completed);
+    const ya = actualIn(r.kind, r.category, completed);
+    if (r.kind === 'cost') {
+      const over = ya - yb;
+      if (yb > 0 && over >= BUDGET_ALERT.ytdMinEur && (over / yb) * 100 >= BUDGET_ALERT.ytdPct) {
+        out.push({ ...base, tone: 'warn', scope: 'year', amount: over, title: `${r.label} is over budget`,
+          detail: `${money(over)} over (${Math.round((over / yb) * 100)}%) to the end of ${monthName(lastMonth!)}` });
+        continue;
+      }
+      const mb = budgetIn(r.kind, r.category, [thisMonth]);
+      const ma = actualIn(r.kind, r.category, [thisMonth]);
+      if (mb > 0 && ma - mb >= BUDGET_ALERT.monthMinEur && ((ma - mb) / mb) * 100 >= BUDGET_ALERT.monthPct) {
+        out.push({ ...base, tone: 'warn', scope: 'this_month', amount: ma - mb, title: `${r.label}: this month's budget is used up`,
+          detail: `${money(ma)} spent in ${monthName(thisMonth)} against ${money(mb)} planned` });
+        continue;
+      }
+      if (lastMonth) {
+        const lb = budgetIn(r.kind, r.category, [lastMonth]);
+        const la = actualIn(r.kind, r.category, [lastMonth]);
+        if (lb > 0 && la - lb >= BUDGET_ALERT.monthMinEur && ((la - lb) / lb) * 100 >= BUDGET_ALERT.lastMonthPct) {
+          out.push({ ...base, tone: 'info', scope: 'last_month', amount: la - lb, title: `${r.label} ran over in ${monthName(lastMonth)}`,
+            detail: `${money(la)} against ${money(lb)} planned. The year so far is still within budget.` });
+        }
+      }
+    } else {
+      const behind = yb - ya;
+      if (yb > 0 && behind >= BUDGET_ALERT.incomeMinEur && (behind / yb) * 100 >= BUDGET_ALERT.ytdPct) {
+        out.push({ ...base, tone: 'warn', scope: 'year', amount: behind, title: `${r.label} is behind budget`,
+          detail: `${money(behind)} behind (${Math.round((behind / yb) * 100)}%) to the end of ${monthName(lastMonth!)}` });
+      }
+    }
+  }
+  const rank = { year: 0, this_month: 1, last_month: 2 } as const;
+  return out.sort((a, c) => (a.tone === c.tone ? 0 : a.tone === 'warn' ? -1 : 1) || rank[a.scope] - rank[c.scope] || c.amount - a.amount);
 }
 
 export interface MissingItem { id: string; text: string; fix: string; to: string }

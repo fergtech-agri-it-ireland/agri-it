@@ -30,14 +30,17 @@ export interface PhotoReader {
 const TESSERACT_VERSION = '7.0.0';
 const CORE_VERSION = '7.0.0';
 const DATA_VERSION = '1.0.0';
-const PATHS = IN_BROWSER
+// One-file builds have no folder of their own to serve the reader from.
+const ONE_FILE = IN_BROWSER && import.meta.env.MODE !== 'pages';
+const BASE = import.meta.env.BASE_URL;
+const PATHS = ONE_FILE
   ? {
       workerPath: `https://cdn.jsdelivr.net/npm/tesseract.js@${TESSERACT_VERSION}/dist/worker.min.js`,
       corePath: `https://cdn.jsdelivr.net/npm/tesseract.js-core@${CORE_VERSION}`,
       langPath: `https://cdn.jsdelivr.net/npm/@tesseract.js-data/eng@${DATA_VERSION}/4.0.0_best_int`,
       workerBlobURL: true
     }
-  : { workerPath: '/ocr/worker.min.js', corePath: '/ocr', langPath: '/ocr', workerBlobURL: false };
+  : { workerPath: `${BASE}ocr/worker.min.js`, corePath: `${BASE}ocr`, langPath: `${BASE}ocr`, workerBlobURL: false };
 
 type TWorker = Awaited<ReturnType<typeof import('tesseract.js')['createWorker']>>;
 let workerPromise: Promise<TWorker> | null = null;

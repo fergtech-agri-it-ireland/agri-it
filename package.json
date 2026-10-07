@@ -20,6 +20,7 @@
     "supabase:status": "supabase status",
     "build:demo": "tsc -b && vite build --mode demo",
     "build:phone": "tsc -b && vite build --mode phone",
+    "build:pages": "npm run ocr:assets && tsc -b && vite build --mode pages",
     "preview:demo": "vite preview --mode demo --outDir dist-demo",
     "ocr:assets": "node scripts/copy-ocr-assets.mjs",
     "predev": "npm run ocr:assets",

@@ -28,7 +28,8 @@ const CACHE_VERSION = 'v3-routines';
 const persister = createSyncStoragePersister({ storage: window.localStorage, key: 'agri-it:cache' });
 
 startThemeClock();
-if (!IN_BROWSER) registerSW({ immediate: true });
+// The one-file builds can't register a service worker; the normal and GitHub Pages builds can.
+if (!IN_BROWSER || import.meta.env.MODE === 'pages') registerSW({ immediate: true });
 // Phone-only build: the records live only here, so ask the browser not to clear them when space runs low
 if (IS_LOCAL) void navigator.storage?.persist?.().catch(() => false);
 

@@ -35,7 +35,12 @@ It is not a herd, grassland or accounting system. It does not prescribe rations,
 
 **Important:** the build sandbox resets between chats. Attach the GitHub repo `fergtech-ireland/agri-it` in a new chat and clone it.
 
-### Latest work: phone-only build (7 Oct, afternoon)
+### Latest work: GitHub Pages app, like Gauntlet (7 Oct, evening)
+- `npm run build:pages` (`.env.pages`, mode `pages`): the phone-only app as a real installable web app at **https://fergtech-ireland.github.io/agri-it/** (base `/agri-it/`, hash routing, service worker, offline, add to home screen, photo reader served from the app's own `ocr/` folder, file backups and print work). Output `dist-pages/`.
+- CI job `pages` in `.github/workflows/ci.yml` publishes it after the app checks pass on `main`, the same pattern as Gauntlet. It only runs once the repo is **public** and **Settings > Pages > Source = GitHub Actions**. Can also be run by hand (Actions > CI > Run workflow).
+- Checked when served under `/agri-it/`: `scripts/e2e/phone.py` all pass; service worker active and in control; manifest `standalone`; reopens offline with the farm; camera capture on; sample docket read in about 3 s; no requests to any outside site.
+
+### Earlier: phone-only build (7 Oct, afternoon)
 Feargal wants to use Agri-It on his phone and share it before any server exists. Decision: **records stay on the user's phone for now**; Supabase and hosting come later.
 
 - **New build mode** `npm run build:phone` (`.env.phone`, `VITE_LOCAL=1`) writes one self-contained file, `dist-phone/index.html`. It reuses the in-browser Supabase stand-in (`src/lib/demo/client.ts`) but starts from **reference data only** (`buildReference()` in `seed.ts`: Teagasc sources and allowances, supplier directory) with no farm, so first open goes to farm set-up. `IS_LOCAL` and `IN_BROWSER` flags in `src/lib/env.ts`.
@@ -288,7 +293,7 @@ Navigation: bottom bar Today / Forecast / **Record (hi-vis centre button)** / Mo
 ## 11. Next steps (suggested order)
 
 1. Use the phone-only link for real on the farm; share it from the page's Share menu; note friction points.
-2. Put the phone-only file on a free static host (Netlify, Cloudflare Pages or GitHub Pages; the repo is private so GitHub Pages needs a public repo or paid plan). Still no server: it gives a normal web address, add-to-home-screen, file backups, print and photo reading. Same `dist-phone/index.html`.
+2. Switch on GitHub Pages (repo public, Pages source GitHub Actions); then https://fergtech-ireland.github.io/agri-it/ is the link to install and share. The Claude artifact link becomes a fallback.
 3. Re-verify supplier numbers; decide on Arrabawn Tipperary contact.
 4. Finish the Supabase project `agri-it`: apply migrations 2 to 4 (`supabase link --project-ref xgudpylxmrlywegpdvps`, `supabase db push`), load reference data only (top half of `seed.sql`, not the demo user), then add "move my phone data to my account" using the backup JSON.
 5. Deploy `dist/` (Vercel, Netlify or Cloudflare Pages) with env vars; set auth redirect URLs; turn on email confirmation.

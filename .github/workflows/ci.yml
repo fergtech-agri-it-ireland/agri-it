@@ -3,6 +3,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   app:
@@ -29,3 +30,34 @@ jobs:
       - run: supabase db start
       - run: supabase db reset
       - run: supabase db lint --level error
+
+  pages:
+    # Publishes the phone-only app to https://fergtech-ireland.github.io/agri-it/ after the
+    # app checks pass, like Gauntlet. Records stay on each phone; no server is involved.
+    # Needs the repo public (free GitHub plan) and Settings > Pages > Source set to "GitHub Actions".
+    needs: app
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && github.event.repository.private == false
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run build:pages
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist-pages
+      - id: deployment
+        uses: actions/deploy-pages@v4

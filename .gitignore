@@ -2,6 +2,7 @@ node_modules
 dist
 dist-demo
 dist-phone
+dist-pages
 dev-dist
 coverage
 .env

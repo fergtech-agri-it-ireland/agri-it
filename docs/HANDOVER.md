@@ -38,7 +38,7 @@ It is not a herd, grassland or accounting system. It does not prescribe rations,
 ### MOVED (7 Oct, 19:00): repo is now `fergtech-agri-it-ireland/agri-it`
 Agri-It now has its own GitHub organisation so it gets its own web address, separate from Gauntlet. Reason: on `fergtech-ireland.github.io` the two apps shared one address, Gauntlet's update clean-up cleared Agri-It's offline copy, and Feargal's Android Chrome got stuck showing "This app is already installed" for Agri-It (no Agri-It in chrome://webapks; "Click to open" fails). Feargal has created the org, transferred the repo and installed the Claude GitHub app on it.
 
-**Done (7 Oct, 19:05):** the repo is public, Pages source is GitHub Actions, and CI run 37663526124 passed all three jobs (app, database, pages). The live app at **https://fergtech-agri-it-ireland.github.io/agri-it/** serves the bundle built from `main`, `sw.js` with navigateFallback `/agri-it/index.html`, and a manifest with id `/agri-it/app`, scope and start_url `/agri-it/`, display `standalone`. Old references in this file, the starter prompt and code comments are updated. The old address `fergtech-ireland.github.io/agri-it/` is no longer published; nobody has data there except Feargal's test. **Still to confirm:** Feargal installs it on Android (Chrome > menu > Install app) and checks it appears in chrome://webapks.
+**Done (7 Oct, 19:05):** the repo is public, Pages source is GitHub Actions, and CI run 37663526124 passed all three jobs (app, database, pages). The live app at **https://fergtech-agri-it-ireland.github.io/agri-it/** serves the bundle built from `main`, `sw.js` with navigateFallback `/agri-it/index.html`, and a manifest with id `/agri-it/app`, scope and start_url `/agri-it/`, display `standalone`. Old references in this file, the starter prompt and code comments are updated. The old address `fergtech-ireland.github.io/agri-it/` is no longer published; nobody has data there except Feargal's test. **Confirmed 7 Oct, 19:09:** Feargal installed it on Android from Chrome and it works like Gauntlet, as its own app.
 
 ### Earlier: GitHub Pages app (7 Oct, evening)
 - `npm run build:pages` (`.env.pages`, mode `pages`): the phone-only app as a real installable web app, now at **https://fergtech-agri-it-ireland.github.io/agri-it/** (was fergtech-ireland.github.io until the move) (base `/agri-it/`, hash routing, service worker, offline, add to home screen, photo reader served from the app's own `ocr/` folder, file backups and print work). Output `dist-pages/`.
@@ -301,7 +301,7 @@ Navigation: bottom bar Today / Forecast / **Record (hi-vis centre button)** / Mo
 ## 11. Next steps (suggested order)
 
 1. Use the phone-only link for real on the farm; share it from the page's Share menu; note friction points.
-2. Install https://fergtech-agri-it-ireland.github.io/agri-it/ on Android and share that link (Pages is live). The Claude artifact link is a fallback.
+2. Share https://fergtech-agri-it-ireland.github.io/agri-it/ with testers (installed and working on Feargal's Android). The Claude artifact link is a fallback.
 3. Re-verify supplier numbers; decide on Arrabawn Tipperary contact.
 4. Finish the Supabase project `agri-it`: apply migrations 2 to 4 (`supabase link --project-ref xgudpylxmrlywegpdvps`, `supabase db push`), load reference data only (top half of `seed.sql`, not the demo user), then add "move my phone data to my account" using the backup JSON.
 5. Deploy `dist/` (Vercel, Netlify or Cloudflare Pages) with env vars; set auth redirect URLs; turn on email confirmation.

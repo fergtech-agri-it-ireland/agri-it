@@ -2,7 +2,7 @@
 
 **Last updated:** 7 October 2026, afternoon (phone-only build: your own farm kept on the phone, shareable link; earlier 7 Oct: photo reading for dockets, receipts and invoices; 6 Oct: daily reminders, supplier price history, budget variance alerts, white-page fix, routines and tick-off checklist, UI redesign)
 **Owner:** Feargal
-**Status:** MVP code complete and on GitHub (`fergtech-ireland/agri-it`, private, CI green, latest work on `main`). Phone-only build live as a private Claude artifact (real farm, data kept on the phone, no server). Browser demo also live. Supabase cloud project `agri-it` created with tables only (see 2). No hosting.
+**Status:** MVP code complete and on GitHub (moved 7 Oct to `fergtech-agri-it-ireland/agri-it`, public, CI green, latest work on `main`). Phone-only build live as a private Claude artifact (real farm, data kept on the phone, no server). Browser demo also live. Supabase cloud project `agri-it` created with tables only (see 2). No hosting.
 
 Use this document to start a new chat. Paste or reference it, then say what you want to do next. The full product spec is in `docs/MVP-SPEC.md` (also saved in the Claude Project).
 
@@ -35,7 +35,12 @@ It is not a herd, grassland or accounting system. It does not prescribe rations,
 
 **Important:** the build sandbox resets between chats. Attach the GitHub repo `fergtech-ireland/agri-it` in a new chat and clone it.
 
-### Latest work: GitHub Pages app, like Gauntlet (7 Oct, evening)
+### MOVED (7 Oct, 19:00): repo is now `fergtech-agri-it-ireland/agri-it`
+Agri-It now has its own GitHub organisation so it gets its own web address, separate from Gauntlet. Reason: on `fergtech-ireland.github.io` the two apps shared one address, Gauntlet's update clean-up cleared Agri-It's offline copy, and Feargal's Android Chrome got stuck showing "This app is already installed" for Agri-It (no Agri-It in chrome://webapks; "Click to open" fails). Feargal has created the org, transferred the repo and installed the Claude GitHub app on it.
+
+**First job in the next session:** attach `fergtech-agri-it-ireland/agri-it`, check Settings > Pages > Source is GitHub Actions (ask Feargal if not), run the CI workflow (Actions > CI > Run workflow, or `gh workflow run ci.yml --ref main`), confirm all three jobs pass, then confirm the live app at **https://fergtech-agri-it-ireland.github.io/agri-it/** serves `sw.js` with navigateFallback `/agri-it/index.html` (the sandbox cannot open github.io, so check via the web fetch tool). Then Feargal installs it on Android (Chrome > menu > Install app) and confirms it appears in chrome://webapks. Update every old `fergtech-ireland/agri-it` and `fergtech-ireland.github.io/agri-it` reference in this file, the README and the starter prompt. The old address `fergtech-ireland.github.io/agri-it/` stops being published; nobody has data there except Feargal's test.
+
+### Earlier: GitHub Pages app (7 Oct, evening)
 - `npm run build:pages` (`.env.pages`, mode `pages`): the phone-only app as a real installable web app at **https://fergtech-ireland.github.io/agri-it/** (base `/agri-it/`, hash routing, service worker, offline, add to home screen, photo reader served from the app's own `ocr/` folder, file backups and print work). Output `dist-pages/`.
 - CI job `pages` in `.github/workflows/ci.yml` publishes it after the app checks pass on `main`, the same pattern as Gauntlet. It only runs once the repo is **public** and **Settings > Pages > Source = GitHub Actions**. Can also be run by hand (Actions > CI > Run workflow).
 - The Pages build takes its path from CI (`PAGES_BASE` from `actions/configure-pages` `base_path`), so it works at a project path (`/agri-it/`) or at the root of its own address with no code change.

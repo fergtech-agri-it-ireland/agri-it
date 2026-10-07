@@ -1,15 +1,26 @@
 /**
- * Demo-mode stand-in for the Supabase client. Implements only the parts of the
- * client the app uses, against an in-browser copy of the seed data, and mirrors
- * the SQL functions in supabase/migrations so screens behave identically.
- * Changes are kept in this browser where storage allows, and Reset restores the seed.
+ * In-browser stand-in for the Supabase client, used by the two one-file builds:
+ *
+ * - demo: a sample farm. Changes are kept in this browser; Reset restores the seed.
+ * - phone (IS_LOCAL): the farmer's own farm, starting from reference data only. Every
+ *   record is kept in this phone's browser storage and photos in IndexedDB. There is
+ *   no server, so nothing leaves the phone.
+ *
+ * Implements only the parts of the client the app uses, and mirrors the SQL functions
+ * in supabase/migrations so screens behave identically.
  */
-import { buildSeed, DEFAULTS, DEMO_USER, type DB, type Row } from './seed';
+import { buildReference, buildSeed, DEFAULTS, DEMO_USER, type DB, type Row } from './seed';
 import { todayISO } from '../format';
+import { IS_LOCAL } from '../env';
 
-const DB_KEY = 'agri-it:demo-db';
+const DB_KEY = IS_LOCAL ? 'agri-it:phone-db' : 'agri-it:demo-db';
 const SIGNED_OUT_KEY = 'agri-it:demo-signed-out';
-const VERSION = 4; // bump when the seed's shape changes so stored demo data is rebuilt
+// Demo: bump when the seed's shape changes so stored demo data is rebuilt.
+// Phone: the farmer's own records. NEVER thrown away on a version change; migrate instead.
+const VERSION = IS_LOCAL ? 1 : 4;
+const LOCAL_USER = { id: '20000000-0000-0000-0000-0000000000aa', email: 'This phone' };
+const USER = IS_LOCAL ? LOCAL_USER : DEMO_USER;
+const fresh = (): DB => (IS_LOCAL ? buildReference() : buildSeed());
 
 function store(): Storage | null {
   try { return window.localStorage; } catch { return null; }
@@ -19,21 +30,32 @@ function load(): DB {
     const raw = store()?.getItem(DB_KEY);
     if (raw) {
       const p = JSON.parse(raw) as { v: number; db: DB };
-      if (p.v === VERSION) return p.db;
+      if (p.v === VERSION || IS_LOCAL) return p.db;
     }
     // Older demo data: drop it and the app cache built from it, so nothing stale is shown.
     if (raw) { store()?.removeItem('agri-it:cache'); store()?.removeItem('agri-it:outbox'); }
   } catch { /* fall through to a fresh seed */ }
-  return buildSeed();
+  return fresh();
 }
 let db: DB = load();
+/** False when this browser refused to keep the last change (blocked or full storage). */
+export let browserKeepsData = true;
 function persist() {
-  try { store()?.setItem(DB_KEY, JSON.stringify({ v: VERSION, db })); } catch { /* demo keeps working in memory */ }
+  try {
+    const s = store();
+    if (!s) throw new Error('no storage');
+    s.setItem(DB_KEY, JSON.stringify({ v: VERSION, db }));
+    browserKeepsData = true;
+  } catch {
+    browserKeepsData = false; // keeps working in memory for this visit
+  }
 }
+// The phone build writes the empty farm straight away, so a blocked browser shows up at once
+if (IS_LOCAL) persist();
 
-/** Wipe demo changes and the cached app data, then reload on the seeded farm. */
+/** Wipe changes and the cached app data, then reload (demo: the sample farm; phone: an empty start). */
 export function resetDemo() {
-  db = buildSeed();
+  db = fresh();
   try {
     const s = store();
     s?.removeItem(DB_KEY);
@@ -43,7 +65,81 @@ export function resetDemo() {
     s?.removeItem(SIGNED_OUT_KEY);
   } catch { /* ignore */ }
   try { window.sessionStorage.removeItem('agri-it:snapshots'); } catch { /* ignore */ }
+  try { window.indexedDB.deleteDatabase(FILES_DB); } catch { /* ignore */ }
+  window.location.hash = '#/';
   window.location.reload();
+}
+
+/** Phone build: everything needed to rebuild this farm on another phone (records, not photos). */
+export function backupJson(): string {
+  return JSON.stringify({ app: 'agri-it', kind: 'phone-backup', v: VERSION, saved_at: new Date().toISOString(), db });
+}
+/** Phone build: replace this phone's records with a backup file, then reload. Throws if the file is not a backup. */
+export function restoreBackup(text: string) {
+  const p = JSON.parse(text) as { app?: string; kind?: string; db?: DB };
+  if (p.app !== 'agri-it' || p.kind !== 'phone-backup' || !p.db || !Array.isArray(p.db.farms)) {
+    throw new Error('That file is not an Agri-It backup.');
+  }
+  db = p.db;
+  persist();
+  if (!browserKeepsData) throw new Error('This browser would not keep the restored records.');
+  try {
+    const s = store();
+    s?.removeItem('agri-it:cache');
+    s?.removeItem('agri-it:outbox');
+    s?.removeItem('agri-it:farm');
+  } catch { /* ignore */ }
+  window.location.hash = '#/';
+  window.location.reload();
+}
+/** Rough size of what this phone holds, for the Settings card. */
+export function localSummary() {
+  const count = (t: string) => (db[t] ?? []).length;
+  return {
+    farms: count('farms'),
+    records: ['feed_products', 'feed_transactions', 'income', 'costs', 'farm_records', 'jobs', 'silage_stores', 'animal_groups', 'routine_completions'].reduce((a, t) => a + count(t), 0),
+    photos: count('documents')
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Photos and files: IndexedDB on the phone build (too big for localStorage),
+// memory only in the demo.
+// ---------------------------------------------------------------------------
+const FILES_DB = 'agri-it-files';
+function filesDb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = window.indexedDB.open(FILES_DB, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('files');
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function fileOp<T>(mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRequest): Promise<T> {
+  const d = await filesDb();
+  return new Promise<T>((resolve, reject) => {
+    const req = fn(d.transaction('files', mode).objectStore('files'));
+    req.onsuccess = () => resolve(req.result as T);
+    req.onerror = () => reject(req.error);
+  });
+}
+const fileUrls = new Map<string, string>();
+async function keepFile(path: string, file: Blob) {
+  fileUrls.set(path, URL.createObjectURL(file));
+  if (IS_LOCAL) {
+    try { await fileOp('readwrite', (s) => s.put(file, path)); } catch { /* kept for this visit only */ }
+  }
+}
+async function fileUrl(path: string): Promise<string | null> {
+  if (fileUrls.has(path)) return fileUrls.get(path)!;
+  if (!IS_LOCAL) return null;
+  try {
+    const blob = await fileOp<Blob | undefined>('readonly', (s) => s.get(path));
+    if (!blob) return null;
+    const url = URL.createObjectURL(blob);
+    fileUrls.set(path, url);
+    return url;
+  } catch { return null; }
 }
 
 const uuid = () => crypto.randomUUID();
@@ -227,8 +323,8 @@ function setHeadCount(groupId: string, heads: number, reason = 'manual', effecti
 const rpcs: Record<string, (a: Args) => unknown> = {
   create_farm: (a) => {
     const id = uuid();
-    table('farms').push({ ...DEFAULTS.farms(), id, name: String(a.p_name).trim(), county: a.p_county, eircode: a.p_eircode ? String(a.p_eircode).trim().toUpperCase() : null, jurisdiction: a.p_jurisdiction ?? 'ROI', enterprise: a.p_enterprise ?? 'dairy', default_lead_time_days: a.p_default_lead_time_days ?? null, created_by: DEMO_USER.id, created_at: nowISO(), updated_at: nowISO() });
-    table('farm_members').push({ farm_id: id, user_id: DEMO_USER.id, role: 'owner', added_at: nowISO() });
+    table('farms').push({ ...DEFAULTS.farms(), id, name: String(a.p_name).trim(), county: a.p_county, eircode: a.p_eircode ? String(a.p_eircode).trim().toUpperCase() : null, jurisdiction: a.p_jurisdiction ?? 'ROI', enterprise: a.p_enterprise ?? 'dairy', default_lead_time_days: a.p_default_lead_time_days ?? null, created_by: USER.id, created_at: nowISO(), updated_at: nowISO() });
+    table('farm_members').push({ farm_id: id, user_id: USER.id, role: 'owner', added_at: nowISO() });
     return id;
   },
   record_feed_delivery: (a) => {
@@ -305,17 +401,16 @@ const rpcs: Record<string, (a: Args) => unknown> = {
 type AuthCb = (event: string, session: unknown) => void;
 const listeners = new Set<AuthCb>();
 function makeSession() {
-  return { access_token: 'demo', refresh_token: 'demo', token_type: 'bearer', expires_in: 3600, user: { id: DEMO_USER.id, email: DEMO_USER.email, aud: 'authenticated', app_metadata: {}, user_metadata: {}, created_at: nowISO() } };
+  return { access_token: 'demo', refresh_token: 'demo', token_type: 'bearer', expires_in: 3600, user: { id: USER.id, email: USER.email, aud: 'authenticated', app_metadata: {}, user_metadata: {}, created_at: nowISO() } };
 }
 let signedOut = false;
-try { signedOut = store()?.getItem(SIGNED_OUT_KEY) === '1'; } catch { /* ignore */ }
+try { signedOut = !IS_LOCAL && store()?.getItem(SIGNED_OUT_KEY) === '1'; } catch { /* ignore */ }
 let session: ReturnType<typeof makeSession> | null = signedOut ? null : makeSession();
 function setSession(s: typeof session, event: string) {
   session = s;
   try { s ? store()?.removeItem(SIGNED_OUT_KEY) : store()?.setItem(SIGNED_OUT_KEY, '1'); } catch { /* ignore */ }
   listeners.forEach((cb) => cb(event, s));
 }
-const files = new Map<string, string>();
 
 export function createDemoClient() {
   return {
@@ -339,12 +434,12 @@ export function createDemoClient() {
       },
       signInWithPassword: async () => { const s = makeSession(); setSession(s, 'SIGNED_IN'); return ok({ session: s, user: s.user }); },
       signUp: async () => { const s = makeSession(); setSession(s, 'SIGNED_IN'); return ok({ session: s, user: s.user }); },
-      signOut: async () => { setSession(null, 'SIGNED_OUT'); return { error: null }; }
+      signOut: async () => { if (!IS_LOCAL) setSession(null, 'SIGNED_OUT'); return { error: null }; }
     },
     storage: {
       from: () => ({
-        upload: async (path: string, file: File) => { files.set(path, URL.createObjectURL(file)); return ok({ path }); },
-        createSignedUrl: async (path: string) => ok({ signedUrl: files.get(path) ?? null })
+        upload: async (path: string, file: File) => { await keepFile(path, file); return ok({ path }); },
+        createSignedUrl: async (path: string) => ok({ signedUrl: await fileUrl(path) })
       })
     }
   };

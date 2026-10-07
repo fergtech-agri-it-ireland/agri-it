@@ -11,11 +11,11 @@ import App from './App';
 import { ToastProvider } from './components/Toast';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { FarmProvider } from './lib/data/farm';
-import { IS_DEMO } from './lib/env';
+import { IN_BROWSER, IS_LOCAL } from './lib/env';
 import { startThemeClock } from './lib/theme';
 
-// The demo is published as a hosted page whose links only keep a bare #, so it routes on the hash.
-const Router = IS_DEMO ? HashRouter : BrowserRouter;
+// The one-file builds are published as hosted pages whose links only keep a bare #, so they route on the hash.
+const Router = IN_BROWSER ? HashRouter : BrowserRouter;
 
 // Cached farm data survives reloads and dead zones: screens open instantly offline.
 const queryClient = new QueryClient({
@@ -28,7 +28,9 @@ const CACHE_VERSION = 'v3-routines';
 const persister = createSyncStoragePersister({ storage: window.localStorage, key: 'agri-it:cache' });
 
 startThemeClock();
-if (!IS_DEMO) registerSW({ immediate: true });
+if (!IN_BROWSER) registerSW({ immediate: true });
+// Phone-only build: the records live only here, so ask the browser not to clear them when space runs low
+if (IS_LOCAL) void navigator.storage?.persist?.().catch(() => false);
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { IN_BROWSER } from '../lib/env';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { Camera, Check, CloudOff, Plus, Undo2 } from 'lucide-react';
@@ -52,7 +53,7 @@ export default function Saved() {
   }
 
   const max = s.compare ? Math.max(s.compare.before, s.compare.after, 1) : 1;
-  const canPhoto = s.photo && !photoDone && navigator.onLine;
+  const canPhoto = s.photo && !photoDone && (IN_BROWSER || navigator.onLine);
 
   return (
     <main className="mx-auto flex min-h-[100dvh] w-full max-w-xl flex-col px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(1.75rem+env(safe-area-inset-top))]">

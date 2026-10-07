@@ -13,7 +13,7 @@
  * Both return text lines; extract.ts turns lines into values.
  */
 import type { OcrLine } from './extract';
-import { IS_DEMO } from '../env';
+import { IN_BROWSER } from '../env';
 
 export interface ReadProgress { step: 'cleaning' | 'loading' | 'reading' | 'sorting'; progress: number }
 
@@ -26,11 +26,11 @@ export interface PhotoReader {
 
 // Tesseract file locations. The app serves its own copies (scripts/copy-ocr-assets.mjs
 // puts them in /ocr/ and the service worker caches them on first use). The one-file
-// demo cannot carry 7 MB, so it loads the same versions from the public CDN.
+// builds (demo, phone) cannot carry 7 MB, so they load the same versions from the public CDN.
 const TESSERACT_VERSION = '7.0.0';
 const CORE_VERSION = '7.0.0';
 const DATA_VERSION = '1.0.0';
-const PATHS = IS_DEMO
+const PATHS = IN_BROWSER
   ? {
       workerPath: `https://cdn.jsdelivr.net/npm/tesseract.js@${TESSERACT_VERSION}/dist/worker.min.js`,
       corePath: `https://cdn.jsdelivr.net/npm/tesseract.js-core@${CORE_VERSION}`,

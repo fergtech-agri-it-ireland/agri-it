@@ -1,4 +1,5 @@
 import { RepeatChips } from '../components/RepeatChips';
+import { IN_BROWSER } from '../lib/env';
 import { routineFromEntry, type RepeatChoice } from '../lib/routines';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -31,7 +32,7 @@ export default function MilkSaleForm() {
   const cpl = amount && litres ? (Number(amount) / Number(litres)) * 100 : null;
 
   async function submit() {
-    const documentId = photo && navigator.onLine ? await uploadDocument(photo, farmId!, 'invoice', true).catch(() => null) : null;
+    const documentId = photo && (IN_BROWSER || navigator.onLine) ? await uploadDocument(photo, farmId!, 'invoice', true).catch(() => null) : null;
     const row = {
       id: uuid(), farm_id: farmId!, income_type: 'milk' as const, occurred_on: date, amount_eur: Number(amount), counterparty: buyer || null,
       milk_litres: litres ? Number(litres) : null, fat_kg: fat ? Number(fat) : null, protein_kg: protein ? Number(protein) : null,

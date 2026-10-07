@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { IN_BROWSER } from '../lib/env';
 import { useSearchParams } from 'react-router-dom';
 import { clearPendingPhoto, peekPendingPhoto } from '../lib/pendingPhoto';
 import { useNavigate } from 'react-router-dom';
@@ -27,7 +28,7 @@ export default function RecordForm() {
   useEffect(() => () => clearPendingPhoto(), []);
 
   async function submit() {
-    const documentId = photo && navigator.onLine ? await uploadDocument(photo, farmId!, type, true).catch(() => null) : null;
+    const documentId = photo && (IN_BROWSER || navigator.onLine) ? await uploadDocument(photo, farmId!, type, true).catch(() => null) : null;
     const details: Record<string, unknown> = {};
     if (product) details.product = product;
     if (qty) details.quantity_kg = Number(qty);

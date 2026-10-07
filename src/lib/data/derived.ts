@@ -1,4 +1,5 @@
 import { useEffect, useMemo } from 'react';
+import { IN_BROWSER } from '../env';
 import type { FarmBundle, ISODate } from '../types';
 import { forecastFeed, type FeedForecast } from '../forecast/feed';
 import { forecastForage } from '../forecast/forage';
@@ -109,7 +110,7 @@ export function useDerived(b: FarmBundle) {
 /** Forecast governance: persist inputs + output + rule version whenever inputs change. */
 export function useSnapshotRecorder(b: FarmBundle | undefined, d: ReturnType<typeof useDerived> | undefined) {
   useEffect(() => {
-    if (!b || !d || !navigator.onLine) return;
+    if (!b || !d || (!IN_BROWSER && !navigator.onLine)) return;
     const seenKey = 'agri-it:snapshots';
     const seen = new Set<string>(JSON.parse(sessionStorage.getItem(seenKey) ?? '[]'));
     const rows: Record<string, unknown>[] = [];

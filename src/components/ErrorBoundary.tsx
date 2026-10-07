@@ -1,5 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
-import { IS_DEMO } from '../lib/env';
+import { IS_DEMO, IS_LOCAL } from '../lib/env';
 
 /**
  * Last line of defence: if a screen crashes, show a way out instead of a blank page.
@@ -37,6 +37,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { error: E
         <p className="text-lg">
           {IS_DEMO
             ? 'The demo had data saved from an older version. Reset it to start again on the sample farm.'
+            : IS_LOCAL ? 'Your records are safe on this phone. Reloading rebuilds the screens from them.'
             : 'Your records are safe. Reloading fetches a fresh copy of your farm data. Anything waiting to sync is kept.'}
         </p>
         <button

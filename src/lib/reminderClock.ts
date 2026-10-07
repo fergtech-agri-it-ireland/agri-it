@@ -14,7 +14,7 @@
  */
 import { useEffect, useState } from 'react';
 import type { FarmBundle } from './types';
-import { IS_DEMO } from './env';
+import { IN_BROWSER } from './env';
 import { todayISO } from './format';
 import { buildDigest, parsePrefs, slotDue, type Digest, type ReminderPrefs, type SlotId } from './reminders';
 
@@ -84,7 +84,7 @@ async function kvSet(key: string, value: unknown): Promise<void> {
 export type NotifyState = 'demo' | 'unsupported' | 'default' | 'granted' | 'denied';
 
 export function notifyState(): NotifyState {
-  if (IS_DEMO) return 'demo';
+  if (IN_BROWSER) return 'demo';
   if (typeof Notification === 'undefined' || !('serviceWorker' in navigator)) return 'unsupported';
   return Notification.permission as NotifyState;
 }
@@ -140,13 +140,13 @@ export function useReminderClock(b: FarmBundle | undefined, urgentToday: string[
   const [prefs] = useReminderPrefs();
   const urgentKey = urgentToday.join('|');
   useEffect(() => {
-    if (!b || IS_DEMO) return;
+    if (!b || IN_BROWSER) return;
     const digest = buildDigest(b, todayISO(), prefs, urgentToday);
     void kvSet('digest', digest);
   }, [b, prefs, urgentKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (IS_DEMO || !(prefs.morning || prefs.evening)) return;
+    if (IN_BROWSER || !(prefs.morning || prefs.evening)) return;
     const tick = () => void checkNow();
     const timer = window.setInterval(tick, 60_000);
     document.addEventListener('visibilitychange', tick);

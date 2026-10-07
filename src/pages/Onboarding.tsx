@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
@@ -18,7 +18,7 @@ const PRESETS: Record<Enterprise, AnimalClass[]> = {
 
 /** Three short steps. Everything else can be added later from the Farm tab. */
 export default function Onboarding() {
-  const { session, sessionLoading, selectFarm, refreshFarms } = useFarmCtx();
+  const { session, sessionLoading, selectFarm, refreshFarms, farms } = useFarmCtx();
   const nav = useNavigate();
   const qc = useQueryClient();
   const [step, setStep] = useState(1);
@@ -30,6 +30,13 @@ export default function Onboarding() {
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [created, setCreated] = useState<string | null>(null);
+
+  // Leave only once the new farm is in the farm list the app shell reads. Leaving straight
+  // after the refetch raced the list update, and the shell sent new farmers back to step 1.
+  useEffect(() => {
+    if (created && farms.some((f) => f.id === created)) nav('/', { replace: true });
+  }, [created, farms, nav]);
 
   if (!sessionLoading && !session) return <Navigate to="/login" replace />;
   const counties = jurisdiction === 'ROI' ? COUNTIES_ROI : COUNTIES_NI;
@@ -47,7 +54,7 @@ export default function Onboarding() {
     selectFarm(farmId as string);
     await refreshFarms();
     await qc.invalidateQueries();
-    nav('/', { replace: true });
+    setCreated(farmId as string);
   }
 
   return (

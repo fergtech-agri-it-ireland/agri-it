@@ -5,13 +5,19 @@ import { useFarmData } from '../lib/data/farm';
 import { yearEndCsv, yearEndPack } from '../lib/forecast/money';
 import { eur, fmtDate, fmtMonth, fmtNum, todayISO } from '../lib/format';
 import { Button, Card, Chips, List, Row, Screen, SectionTitle, ToneIcon } from '../components/ui';
-import { IS_DEMO } from '../lib/env';
+import { IN_FRAME, IS_DEMO } from '../lib/env';
 
 export default function YearEnd() {
   const b = useFarmData();
   const [offset, setOffset] = useState<'0' | '-1'>('0');
   const pack = yearEndPack(b, todayISO(), Number(offset));
 
+  const [copied, setCopied] = useState<string | null>(null);
+  async function copyCsv() {
+    const text = yearEndCsv(pack, b.farm.name);
+    try { await navigator.clipboard.writeText(text); setCopied('Copied. Paste it into an email or a spreadsheet for your accountant.'); }
+    catch { setCopied('This page could not copy. Open Agri-It in your phone browser to export.'); }
+  }
   function exportCsv() {
     const blob = new Blob([yearEndCsv(pack, b.farm.name)], { type: 'text/csv' });
     const a = document.createElement('a');
@@ -66,6 +72,11 @@ export default function YearEnd() {
 
       {IS_DEMO ? (
         <p className="rounded-xl bg-field-light px-4 py-3 font-bold text-accent">CSV export and Print / PDF work in the installed app. This demo can only show the pack on screen.</p>
+      ) : IN_FRAME ? (
+        <div className="no-print space-y-2">
+          <Button variant="primary" block onClick={copyCsv}><Download className="h-5 w-5" />Copy as CSV</Button>
+          {copied && <p className="px-1 font-bold">{copied}</p>}
+        </div>
       ) : (
         <div className="no-print grid grid-cols-2 gap-2">
           <Button variant="primary" onClick={exportCsv}><Download className="h-5 w-5" />Export CSV</Button>

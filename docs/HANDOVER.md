@@ -1,8 +1,8 @@
 # Agri-It MVP: Handover
 
-**Last updated:** 7 October 2026, early morning (photo reading for dockets, receipts and invoices; 6 Oct: daily reminders, supplier price history, budget variance alerts, white-page fix, routines and tick-off checklist, UI redesign)
+**Last updated:** 7 October 2026, afternoon (phone-only build: your own farm kept on the phone, shareable link; earlier 7 Oct: photo reading for dockets, receipts and invoices; 6 Oct: daily reminders, supplier price history, budget variance alerts, white-page fix, routines and tick-off checklist, UI redesign)
 **Owner:** Feargal
-**Status:** MVP code complete and on GitHub (`fergtech-ireland/agri-it`, private, CI green, latest work on `main`). Browser demo live as a private Claude artifact. No Supabase cloud project and no hosting yet.
+**Status:** MVP code complete and on GitHub (`fergtech-ireland/agri-it`, private, CI green, latest work on `main`). Phone-only build live as a private Claude artifact (real farm, data kept on the phone, no server). Browser demo also live. Supabase cloud project `agri-it` created with tables only (see 2). No hosting.
 
 Use this document to start a new chat. Paste or reference it, then say what you want to do next. The full product spec is in `docs/MVP-SPEC.md` (also saved in the Claude Project).
 
@@ -29,12 +29,24 @@ It is not a herd, grassland or accounting system. It does not prescribe rations,
 | Production build | Clean, PWA service worker generated |
 | Database | All four migrations + seed validated against real Postgres 16 with Supabase auth/storage stubs (`scripts/e2e/supabase_stub.sql`); RLS isolation and unique constraints tested |
 | GitHub | `fergtech-ireland/agri-it` (private), CI green. The Claude GitHub app is installed, so a chat can push |
-| Supabase cloud | Not created. Feargal's Supabase org also holds `gauntlet` / `gauntlet-test` for another project with devs: do not pause or change those |
-| Deployed | No. Browser-only demo (sample farm, no database, data kept in the phone's browser) is a private artifact: https://claude.ai/artifact/PrDSDf2cB5EgRaDSMe7UJw (version 7). UI concept canvas: https://claude.ai/artifact/UkQ1sRPKTTE3QN9rX11QF8 |
+| Supabase cloud | `agri-it` (ref `xgudpylxmrlywegpdvps`, eu-west-1) created 7 Oct. Only migration 1 (tables) applied. RLS is switched on for every table with **no policies yet**, so the API returns nothing until migration 2 (policies, storage bucket, RPCs) runs; migrations 3 and 4 and the reference data are not applied. Not used by the app yet. Feargal's Supabase org also holds `gauntlet` / `gauntlet-test` for another project with devs: do not pause or change those |
+| Phone-only app | **Live for real use**: https://claude.ai/artifact/WNRa3dHK8DcwjK4KYB1ePC (version 1). Starts empty, farmer sets up their own farm, everything stays on that phone. Private until shared from the page's Share menu |
+| Deployed | No hosting. Browser-only demo (sample farm, no database, data kept in the phone's browser) is a private artifact: https://claude.ai/artifact/PrDSDf2cB5EgRaDSMe7UJw (version 7). UI concept canvas: https://claude.ai/artifact/UkQ1sRPKTTE3QN9rX11QF8 |
 
 **Important:** the build sandbox resets between chats. Attach the GitHub repo `fergtech-ireland/agri-it` in a new chat and clone it.
 
-### Latest work: photo reading for dockets, receipts and invoices (7 Oct)
+### Latest work: phone-only build (7 Oct, afternoon)
+Feargal wants to use Agri-It on his phone and share it before any server exists. Decision: **records stay on the user's phone for now**; Supabase and hosting come later.
+
+- **New build mode** `npm run build:phone` (`.env.phone`, `VITE_LOCAL=1`) writes one self-contained file, `dist-phone/index.html`. It reuses the in-browser Supabase stand-in (`src/lib/demo/client.ts`) but starts from **reference data only** (`buildReference()` in `seed.ts`: Teagasc sources and allowances, supplier directory) with no farm, so first open goes to farm set-up. `IS_LOCAL` and `IN_BROWSER` flags in `src/lib/env.ts`.
+- **Storage:** records in localStorage key `agri-it:phone-db` (separate from the demo's key), photos in IndexedDB `agri-it-files`. Asks the browser for persistent storage. Stored phone data is **never discarded on a version change**: `VERSION` for the phone build is 1 and must be migrated, not bumped-and-wiped like the demo.
+- **No sync UI** in the phone build: no "offline / waiting to sync" pill, photos attach without signal, no sign-out (no accounts).
+- **Settings > Kept on this phone:** record count, a plain warning that clearing browser data deletes records, **Back up / Restore** (JSON of all records, not photos) and **Delete everything and start again**. `backupJson()`, `restoreBackup()`, `localSummary()` in `client.ts`; UI in `src/components/PhoneStorage.tsx`.
+- **Inside a shared page (`IN_FRAME`):** the Claude artifact frame blocks downloads, print and the photo reader's files. So Back up copies the backup to the clipboard (or shows it to select), Restore takes pasted text or a file, the year-end pack offers **Copy as CSV** and hides Print, and the photo screen says reading does not work in the shared link and to fill it in by hand (photo still kept).
+- **Bug fixed (all builds):** finishing farm set-up bounced new users back to step 1, because the screen left before the new farm reached the farm list. Onboarding now waits for the farm to appear, then goes to Today.
+- **Checked:** typecheck, 92/92 unit tests, demo `ui.py` 82/82, plus phone-only runs at phone size: set-up, cost, feed, offline save, close and reopen, photo kept in IndexedDB across reopen, backup file, restore on a second phone, delete all; and framed runs: copy backup, paste restore on a second phone, CSV copy.
+
+### Earlier: photo reading for dockets, receipts and invoices (7 Oct)
 **Where the reading happens (decided 7 Oct):** one pipeline with a swappable reader. Today the reader is open-source OCR (Tesseract.js 7, English `best_int` model) running **on the phone**: free, the photo never leaves the phone, works offline once its files (about 7 MB) are cached. Once Agri-It is hosted, add a better **server reader** (an AI vision model behind a Supabase edge function) for messy and handwritten dockets. Both readers return text lines only; the same tested rules turn lines into values, so a value can never appear that is not on the page.
 
 - **Rules** (`src/lib/docket/extract.ts`, rule `docket-read@1.0`, pure, tests in `extract.test.ts`): works out the kind (delivery docket, supplier invoice, bill or receipt) and whether it is feed; reads supplier, date (day first, skips due dates), product, quantity and unit (t, kg, "40 x 25kg"), €/t (labelled or the rate on the product line), total, net, VAT and rate, docket or invoice number, and the bill category. Matches suppliers by distinctive name words (accents ignored, one smudged letter allowed; counties and generic words like "Valley" or "Co-op" never match), past payees in the farmer's own spelling, and feeds by name with protein % that must agree (16% never matches 14%).
@@ -94,6 +106,8 @@ Demo login (seeded): `demo@agri-it.local` / `agri-it-demo`, or tap **Open the de
 Demo farm: Glenview Farm, Co. Tipperary, dairy. Four groups, two feeds (one with an open order and an estimated opening stock, one with a temporary feeding plan), a silage pit and bales, eight months of milk/cost history, budget, records and jobs. All dates are relative to the day of seeding.
 
 **Browser demo** (no Docker, no database): `npm run build:demo` writes one self-contained file, `dist-demo/index.html` (`VITE_DEMO=1`, hash routing, in-browser fake Supabase in `src/lib/demo/`). To republish the artifact, strip `<!doctype>/<html>/<head>/<body>` and keep the title (`Agri-It Demo`), theme-color meta, styles, `<div id="root">` and the script, then publish to the same artifact URL.
+
+**Phone-only build** (real farm, data on the phone): `npm run build:phone` writes `dist-phone/index.html`. To republish the artifact, strip `<!doctype>/<html>/<head>/<body>`, the charset and viewport metas and the icon links, keep `<title>Agri-It</title>`, the theme-color meta, styles, `<div id="root">` and the script, then publish to https://claude.ai/artifact/WNRa3dHK8DcwjK4KYB1ePC.
 
 **Browser tests:** serve `dist-demo` (`cd dist-demo && python3 -m http.server 4331`) then `python3 scripts/e2e/ui.py http://localhost:4331/ out/`, same for `routines.py`, `p1.py` and `ocr.py`, and `stale_cache.py` (one argument). Needs `pip install playwright` and a Chromium.
 
@@ -265,21 +279,24 @@ Navigation: bottom bar Today / Forecast / **Record (hi-vis centre button)** / Mo
 5. Whole-farm bundle loads ~2 years in one query. Fine at family-farm scale; page it later if needed.
 6. Supabase types are hand-written in `types.ts`; could switch to `supabase gen types`.
 7. `supabase/.temp/` slipped into the zip; it's git-ignored, so it won't be committed.
-8. Photo reading on the phone is weaker on handwritten dockets and very poor photos, and does not read PDFs. The first read on a phone downloads about 7 MB (once). The hosted demo blocks the reader, so the demo's samples use saved readings.
+8. **Phone-only data lives in one browser on one phone.** Clearing site data, uninstalling the browser, or (iPhone Safari) not opening the page for about 7 days when it is not added to the home screen can delete it. Users must take backups. Backups hold records, not photos. Each person who opens the link gets their own separate, empty farm; nothing is shared between phones.
+9. **The shared artifact link** cannot be added to the home screen as a proper app, cannot download files, print, or run the photo reader. A static host (no server needed) removes all of these limits; see next steps.
+10. Photo reading on the phone is weaker on handwritten dockets and very poor photos, and does not read PDFs. The first read on a phone downloads about 7 MB (once). The hosted demo blocks the reader, so the demo's samples use saved readings.
 
 ---
 
 ## 11. Next steps (suggested order)
 
-1. Try the demo on the phone end to end; note friction points.
-2. Re-verify supplier numbers; decide on Arrabawn Tipperary contact.
-3. Create a Supabase cloud project for Agri-It (separate from gauntlet), `supabase link`, `supabase db push`, load reference data only (not the demo user).
-4. Deploy `dist/` (Vercel, Netlify or Cloudflare Pages) with env vars; set auth redirect URLs; turn on email confirmation.
-5. Server push for reminders once hosted (needed for iPhone with the app closed): VAPID keys, a `push_subscriptions` table, and a scheduled Supabase edge function that sends the same message the digest builds. The service worker already shows pushes.
-6. P1 from spec still open: accountant pack export polish. (Photo reading, price history and budget alerts done.)
-7. Photo reading next: try it on real dockets from the yard; add the server reader once hosted (better on handwriting and poor photos); read PDFs (e-invoices usually carry text, so pdf.js text first); consider `costs.vat_eur` and `reference` columns so VAT reaches the year-end pack as a figure, not a note.
-8. Farm sharing: invite screen for family members and advisors (database already supports roles).
-9. P2: integrations (ICBF, AgFood, Herdwatch, PastureBase, co-op, accounting) where available.
+1. Use the phone-only link for real on the farm; share it from the page's Share menu; note friction points.
+2. Put the phone-only file on a free static host (Netlify, Cloudflare Pages or GitHub Pages; the repo is private so GitHub Pages needs a public repo or paid plan). Still no server: it gives a normal web address, add-to-home-screen, file backups, print and photo reading. Same `dist-phone/index.html`.
+3. Re-verify supplier numbers; decide on Arrabawn Tipperary contact.
+4. Finish the Supabase project `agri-it`: apply migrations 2 to 4 (`supabase link --project-ref xgudpylxmrlywegpdvps`, `supabase db push`), load reference data only (top half of `seed.sql`, not the demo user), then add "move my phone data to my account" using the backup JSON.
+5. Deploy `dist/` (Vercel, Netlify or Cloudflare Pages) with env vars; set auth redirect URLs; turn on email confirmation.
+6. Server push for reminders once hosted (needed for iPhone with the app closed): VAPID keys, a `push_subscriptions` table, and a scheduled Supabase edge function that sends the same message the digest builds. The service worker already shows pushes.
+7. P1 from spec still open: accountant pack export polish. (Photo reading, price history and budget alerts done.)
+8. Photo reading next: try it on real dockets from the yard; add the server reader once hosted (better on handwriting and poor photos); read PDFs (e-invoices usually carry text, so pdf.js text first); consider `costs.vat_eur` and `reference` columns so VAT reaches the year-end pack as a figure, not a note.
+9. Farm sharing: invite screen for family members and advisors (database already supports roles).
+10. P2: integrations (ICBF, AgFood, Herdwatch, PastureBase, co-op, accounting) where available.
 
 ---
 
@@ -291,4 +308,5 @@ Working rules for any chat on this project:
 - No em dashes anywhere (copy, docs, commit messages).
 - Commit to `main` only when asked or when finishing agreed work; keep CI green.
 - After changing the demo, rebuild, rerun the three browser scripts, and republish to the same artifact URL.
-- Bump `CACHE_VERSION` (and demo `VERSION`) whenever stored data changes shape.
+- Bump `CACHE_VERSION` (and demo `VERSION`) whenever stored data changes shape. Never wipe phone-only data (`agri-it:phone-db`): migrate it.
+- After changing the phone-only build, rebuild with `npm run build:phone` and republish to its artifact URL.

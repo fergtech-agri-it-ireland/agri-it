@@ -1,6 +1,6 @@
 import type { FarmBundle } from '../lib/types';
 import { Chips } from './ui';
-import { IS_DEMO } from '../lib/env';
+import { IS_DEMO, IN_BROWSER } from '../lib/env';
 
 /** Recent suppliers first (spec 4.1), then the rest of the directory, then "Other". */
 export function supplierOptions(b: FarmBundle) {
@@ -71,7 +71,7 @@ export function PhotoInput({ file, onFile }: { file: File | null; onFile: (f: Fi
         {file ? `Attached: ${file.name}` : 'Take photo'}
       </label>
       {file && <button type="button" className="mt-1 text-sm font-bold text-accent underline" onClick={() => onFile(null)}>Remove photo</button>}
-      {!navigator.onLine && <p className="hint">You're offline. Photos can only be attached with signal; the rest saves now.</p>}
+      {!IN_BROWSER && !navigator.onLine && <p className="hint">You're offline. Photos can only be attached with signal; the rest saves now.</p>}
     </div>
   );
 }

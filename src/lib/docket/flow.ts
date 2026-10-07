@@ -3,7 +3,7 @@
  */
 import type { FarmBundle } from '../types';
 import { todayISO } from '../format';
-import { IS_DEMO } from '../env';
+import { IN_BROWSER, IS_DEMO } from '../env';
 import { supabase } from '../supabase';
 import { uploadDocument } from '../upload';
 import { outboxItems } from '../offline/outbox';
@@ -90,7 +90,7 @@ export async function readWaiting(farmId: string): Promise<number> {
 /** Upload evidence photos for records saved offline, once those records have synced. */
 let uploading = false;
 export async function flushPhotoUploads(): Promise<number> {
-  if (uploading || IS_DEMO || !navigator.onLine || outboxItems().length > 0) return 0;
+  if (uploading || IN_BROWSER || !navigator.onLine || outboxItems().length > 0) return 0;
   uploading = true;
   let sent = 0;
   try {
@@ -139,13 +139,13 @@ export async function keepEvidence(photo: File, farmId: string, recordType: 'fee
   const blob = photo.type.startsWith('image/') ? await shrinkForStorage(photo).catch(() => photo) : photo;
   const file = blob === photo ? photo : new File([blob], photo.name.replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' });
   let documentId: string | null = null;
-  if (navigator.onLine) {
+  if (IN_BROWSER || navigator.onLine) {
     try { documentId = await uploadDocument(file, farmId, recordType, confirmed, extracted); } catch { documentId = null; }
   }
   return {
     documentId,
     later: async (link: ToUpload['link']) => {
-      if (documentId || IS_DEMO) return false;
+      if (documentId || IN_BROWSER) return false;
       await keepToUpload({ id: crypto.randomUUID(), farmId, blob: file, name: file.name, recordType, confirmed, extracted, link, addedAt: new Date().toISOString() });
       return true;
     }

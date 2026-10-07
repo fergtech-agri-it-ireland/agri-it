@@ -59,11 +59,13 @@ function monthPlus(m: number, plus: number): string {
   return addDays(toISO(new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() - m, 1))), plus);
 }
 
-export function buildSeed(): DB {
+/**
+ * Reference data only, as loaded into a production database: published sources,
+ * Teagasc allowances and the supplier directory. No farm and no login. The phone-only
+ * build starts from this, so the farmer goes straight to setting up their own farm.
+ */
+export function buildReference(): DB {
   n = 0;
-  const d = todayISO();
-  const D = (k: number) => addDays(d, k);
-  const year = Number(d.slice(0, 4));
   const db: DB = {};
   const put = (table: string, rows: Row[]) => { db[table] = [...(db[table] ?? []), ...rows.map((r) => row(table, r))]; };
 
@@ -89,6 +91,15 @@ export function buildSeed(): DB {
     sup('10000000-0000-0000-0000-000000000007', { name: 'Fane Valley Feeds', coverage: ['NI'], central_phone: '028 9261 9620', central_phone_label: 'Central', website: 'https://fanevalley.com', local_contact_method: 'Northern Ireland coverage. Use the current advisor or branch directory; central number as fallback.', source_url: 'https://fanevalley.com/', verified_on: '2026-09-01' })
   ];
   db.supplier_branches = [];
+  return db;
+}
+
+export function buildSeed(): DB {
+  const db = buildReference();
+  const d = todayISO();
+  const D = (k: number) => addDays(d, k);
+  const year = Number(d.slice(0, 4));
+  const put = (table: string, rows: Row[]) => { db[table] = [...(db[table] ?? []), ...rows.map((r) => row(table, r))]; };
 
   db.farms = [{
     ...DEFAULTS.farms(), id: F, name: 'Glenview Farm', eircode: 'E91 X000', county: 'Tipperary', jurisdiction: 'ROI', enterprise: 'dairy',

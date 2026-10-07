@@ -6,7 +6,7 @@ import { COST_LABEL } from '../lib/types';
 import { eur, fmtDay, fmtKg, fmtNum } from '../lib/format';
 import { setPendingPhoto } from '../lib/pendingPhoto';
 import { Button, Sheet } from '../components/ui';
-import { IS_DEMO } from '../lib/env';
+import { IN_FRAME, IS_DEMO, IS_LOCAL } from '../lib/env';
 import { interpret, isReferenceNote, NotReadable, readLines } from '../lib/docket/flow';
 import { warmReader, type ReadProgress } from '../lib/docket/reader';
 import { keepToRead } from '../lib/docket/photoStore';
@@ -221,8 +221,10 @@ export default function Record() {
           <div className="space-y-3 pb-3" data-testid="read-unavailable">
             <p className="text-lg">{IS_DEMO
               ? 'Can\'t read this photo here: the demo page blocks the photo reader. The sample photos above still work. In the app, the reader sets itself up the first time you have signal.'
-              : 'Can\'t read photos on this phone right now. The reader needs signal once to set itself up.'}</p>
-            <Button block onClick={keepForLater}>Read it when I have signal</Button>
+              : IS_LOCAL && IN_FRAME
+                ? 'Photo reading does not work in this shared link yet. Fill it in yourself. The photo is kept with the record.'
+                : 'Can\'t read photos on this phone right now. The reader needs signal once to set itself up.'}</p>
+            {!(IS_LOCAL && IN_FRAME) && <Button block onClick={keepForLater}>Read it when I have signal</Button>}
             <p className="font-bold">Or fill it in yourself. It&apos;s a:</p>
           </div>
         )}

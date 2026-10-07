@@ -7,8 +7,9 @@ import { fileURLToPath, URL } from 'node:url';
 
 // Normal build: installable, offline-capable PWA (farmers record in the yard with poor signal).
 // `--mode demo`: one self-contained HTML file with in-browser sample data, for sharing a preview.
+// `--mode phone`: the same one-file build, starting with no farm, keeping the farmer's records on the phone.
 export default defineConfig(({ mode }) => {
-  const demo = mode === 'demo';
+  const demo = mode === 'demo' || mode === 'phone';
   return {
     base: demo ? './' : '/',
     resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
@@ -51,7 +52,7 @@ export default defineConfig(({ mode }) => {
       ...(demo ? [viteSingleFile()] : [])
     ],
     build: demo
-      ? { outDir: 'dist-demo', emptyOutDir: true }
+      ? { outDir: mode === 'phone' ? 'dist-phone' : 'dist-demo', emptyOutDir: true }
       : {
           rollupOptions: {
             output: { manualChunks: { react: ['react', 'react-dom', 'react-router-dom'], supabase: ['@supabase/supabase-js'], query: ['@tanstack/react-query', '@tanstack/react-query-persist-client', '@tanstack/query-sync-storage-persister'] } }

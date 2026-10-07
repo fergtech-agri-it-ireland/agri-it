@@ -7,7 +7,7 @@ import { useDerived, useSnapshotRecorder } from '../lib/data/derived';
 import { discard, flush, retryFailed, subscribeOutbox, type Queued } from '../lib/offline/outbox';
 import { Button, Sheet } from './ui';
 import type { FarmBundle } from '../lib/types';
-import { IS_DEMO } from '../lib/env';
+import { IN_BROWSER, IS_DEMO } from '../lib/env';
 import { resetDemo } from '../lib/demo/client';
 import { Logo } from './Logo';
 import { useReminderClock } from '../lib/reminderClock';
@@ -51,7 +51,7 @@ function SyncStatus() {
     return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); };
   }, []);
   const failed = queue.filter((q) => q.lastError);
-  if (online && queue.length === 0) return null;
+  if (IN_BROWSER || (online && queue.length === 0)) return null;
   return (
     <>
       <button onClick={() => setOpen(true)} className="no-print fixed left-1/2 top-2 z-30 flex -translate-x-1/2 items-center gap-2 rounded-full bg-inverse px-4 py-2 text-sm font-bold text-oninverse shadow-lg" style={{ marginTop: 'env(safe-area-inset-top)' }}>

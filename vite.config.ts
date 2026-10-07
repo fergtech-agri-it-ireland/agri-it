@@ -31,6 +31,9 @@ export default defineConfig(({ mode }) => {
           background_color: '#EEF2EE',
           display: 'standalone',
           orientation: 'portrait',
+          // Fixed app identity. Without one, Chrome on Android left a broken "already installed"
+          // record after a failed first install; a new id lets phones install it cleanly.
+          id: `${base}app`,
           start_url: base,
           scope: base,
           icons: [

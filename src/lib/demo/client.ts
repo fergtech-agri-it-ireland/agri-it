@@ -65,7 +65,8 @@ export function resetDemo() {
     s?.removeItem(SIGNED_OUT_KEY);
   } catch { /* ignore */ }
   try { window.sessionStorage.removeItem('agri-it:snapshots'); } catch { /* ignore */ }
-  try { window.indexedDB.deleteDatabase(FILES_DB); } catch { /* ignore */ }
+  // Only Agri-It's own databases: the web address is shared with Gauntlet
+  try { window.indexedDB.deleteDatabase(FILES_DB); window.indexedDB.deleteDatabase('agri-it-photos'); } catch { /* ignore */ }
   window.location.hash = '#/';
   window.location.reload();
 }

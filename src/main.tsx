@@ -13,6 +13,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { FarmProvider } from './lib/data/farm';
 import { IN_BROWSER, IS_LOCAL } from './lib/env';
 import { startThemeClock } from './lib/theme';
+import { repairOfflineCopy } from './lib/offlineHeal';
 
 // The one-file builds are published as hosted pages whose links only keep a bare #, so they route on the hash.
 const Router = IN_BROWSER ? HashRouter : BrowserRouter;
@@ -30,6 +31,11 @@ const persister = createSyncStoragePersister({ storage: window.localStorage, key
 startThemeClock();
 // The one-file builds can't register a service worker; the normal and GitHub Pages builds can.
 if (!IN_BROWSER || import.meta.env.MODE === 'pages') registerSW({ immediate: true });
+if (import.meta.env.MODE === 'pages') {
+  const heal = () => void repairOfflineCopy(import.meta.env.BASE_URL).then((r) => { (window as unknown as { __offlineRepair?: string }).__offlineRepair = r; });
+  window.addEventListener('load', () => setTimeout(heal, 3000));
+  window.addEventListener('online', heal);
+}
 // Phone-only build: the records live only here, so ask the browser not to clear them when space runs low
 if (IS_LOCAL) void navigator.storage?.persist?.().catch(() => false);
 

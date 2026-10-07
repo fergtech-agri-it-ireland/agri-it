@@ -37,7 +37,7 @@ export function applyTheme() {
   const root = document.documentElement;
   root.classList.toggle('dawn', dawn);
   root.classList.toggle('sunlight', getSunlight() && !dawn);
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dawn ? '#0E1712' : '#1D4D36');
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dawn ? '#0B110E' : '#F1F4F2');
   window.dispatchEvent(new Event(EVENT));
 }
 

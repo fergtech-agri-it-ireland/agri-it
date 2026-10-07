@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AlertOctagon, AlertTriangle, ArrowLeft, CheckCircle2, ChevronDown, CircleHelp, Info, Mic, Minus, Phone, Plus, X } from 'lucide-react';
+import { AlertOctagon, AlertTriangle, Check, CheckCircle2, ChevronDown, ChevronLeft, CircleHelp, Info, Mic, Minus, Phone, Plus, X } from 'lucide-react';
 import type { Confidence, ISODate } from '../lib/types';
 import { addDays, fmtDate, todayISO } from '../lib/format';
 import { telHref } from '../lib/suppliers';
@@ -12,20 +12,20 @@ export function Screen({ title, back, right, children, sub }: { title: string; b
   const nav = useNavigate();
   return (
     <div className="pad-bottom mx-auto w-full max-w-xl">
-      <header className="sticky top-0 z-20 flex min-h-[4rem] items-center gap-2 bg-pasture/95 px-3 backdrop-blur" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+      <header className="sticky top-0 z-20 flex min-h-[3.75rem] items-center gap-1 bg-pasture/95 px-3 backdrop-blur" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
         {back && (
           <button aria-label="Back" onClick={() => (back === true ? nav(-1) : nav(back))}
-            className="-ml-1 flex min-h-tap min-w-tap items-center justify-center rounded-full hover:bg-field-light">
-            <ArrowLeft className="h-7 w-7" />
+            className="-ml-2 flex min-h-tap min-w-tap items-center justify-center rounded-full hover:bg-card">
+            <ChevronLeft className="h-6 w-6" />
           </button>
         )}
         <div className="min-w-0 flex-1 py-2">
-          <h1 className="h-display truncate text-[2rem]">{title}</h1>
-          {sub && <p className="truncate text-sm text-muted">{sub}</p>}
+          {sub && <p className="truncate text-[0.8125rem] font-semibold text-muted">{sub}</p>}
+          <h1 className="h-display truncate text-[1.625rem]">{title}</h1>
         </div>
         {right}
       </header>
-      <main className="space-y-4 px-3 pt-1">{children}</main>
+      <main className="space-y-3 px-3 pt-1">{children}</main>
     </div>
   );
 }
@@ -33,13 +33,13 @@ export function Screen({ title, back, right, children, sub }: { title: string; b
 export function Card({ children, className = '', as: As = 'section' }: { children: ReactNode; className?: string; as?: 'section' | 'div' | 'article' }) {
   // Let a caller's background replace the default white (Tailwind can't resolve two bg-* classes by order)
   const bg = /(^|\s)bg-/.test(className) ? '' : 'bg-card';
-  return <As className={`rounded-2xl p-4 shadow-lift ${bg} ${className}`}>{children}</As>;
+  return <As className={`rounded-[1.125rem] p-4 shadow-lift ${bg} ${className}`}>{children}</As>;
 }
 
 export function SectionTitle({ children, action }: { children: ReactNode; action?: ReactNode }) {
   return (
-    <div className="flex items-center justify-between px-1 pt-2">
-      <h2 className="h-display text-2xl">{children}</h2>
+    <div className="flex items-center justify-between px-1 pt-3">
+      <h2 className="text-[1.0625rem] font-bold">{children}</h2>
       {action}
     </div>
   );
@@ -51,28 +51,28 @@ export function SectionTitle({ children, action }: { children: ReactNode; action
 type Variant = 'primary' | 'hivis' | 'secondary' | 'ghost' | 'danger';
 const variants: Record<Variant, string> = {
   primary: 'bg-field text-white hover:bg-field-dark active:bg-field-dark',
-  hivis: 'bg-hivis text-onhivis hover:bg-hivis-dark active:bg-hivis-dark',
-  secondary: 'bg-card text-ink border-2 border-ink/80 hover:bg-pasture',
+  hivis: 'bg-field text-white hover:bg-field-dark active:bg-field-dark',
+  secondary: 'bg-card text-ink border border-line hover:bg-pasture',
   ghost: 'text-accent hover:bg-field-light',
-  danger: 'bg-card text-danger border-2 border-danger hover:bg-danger-bg'
+  danger: 'bg-card text-danger border border-danger/60 hover:bg-danger-bg'
 };
 export function Button({ variant = 'primary', block, className = '', children, ...rest }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; block?: boolean }) {
   return (
-    <button {...rest} className={`inline-flex min-h-tap items-center justify-center gap-2 rounded-2xl px-5 text-lg font-bold transition-colors disabled:opacity-50 ${variants[variant]} ${block ? 'w-full' : ''} ${className}`}>
+    <button {...rest} className={`inline-flex min-h-tap items-center justify-center gap-2 rounded-full px-5 text-base font-bold transition-colors disabled:opacity-50 ${variants[variant]} ${block ? 'w-full' : ''} ${className}`}>
       {children}
     </button>
   );
 }
 export function LinkButton({ to, variant = 'primary', block, children, className = '' }: { to: string; variant?: Variant; block?: boolean; children: ReactNode; className?: string }) {
   return (
-    <Link to={to} className={`inline-flex min-h-tap items-center justify-center gap-2 rounded-2xl px-5 text-lg font-bold ${variants[variant]} ${block ? 'w-full' : ''} ${className}`}>
+    <Link to={to} className={`inline-flex min-h-tap items-center justify-center gap-2 rounded-full px-5 text-base font-bold ${variants[variant]} ${block ? 'w-full' : ''} ${className}`}>
       {children}
     </Link>
   );
 }
 export function CallButton({ phone, label, variant = 'hivis', block }: { phone: string; label?: string; variant?: Variant; block?: boolean }) {
   return (
-    <a href={telHref(phone)} className={`inline-flex min-h-tap items-center justify-center gap-2 rounded-2xl px-5 text-lg font-bold ${variants[variant]} ${block ? 'w-full' : ''}`}>
+    <a href={telHref(phone)} className={`inline-flex min-h-tap items-center justify-center gap-2 rounded-full px-5 text-base font-bold ${variants[variant]} ${block ? 'w-full' : ''}`}>
       <Phone className="h-5 w-5" aria-hidden /> {label ?? phone}
     </a>
   );
@@ -107,7 +107,7 @@ export function NumberInput({ label, value, onChange, unit, hint, placeholder, s
   return (
     <Field label={label} hint={hint} htmlFor={id}>
       <div className="relative">
-        <input id={id} className="input pr-16 text-xl font-bold" type="number" inputMode={integer ? 'numeric' : 'decimal'} step={step}
+        <input id={id} className="input pr-16 text-lg font-semibold" type="number" inputMode={integer ? 'numeric' : 'decimal'} step={step}
           value={value} placeholder={placeholder} autoFocus={autoFocus} onChange={(e) => onChange(e.target.value)} />
         {unit && <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center font-bold text-muted">{unit}</span>}
       </div>
@@ -138,13 +138,13 @@ export function Stepper({ label, value, onChange, step = 1, min = 0, unit, hint,
   return (
     <Field label={label} hint={hint} htmlFor={id}>
       <div className="flex items-stretch gap-2">
-        <button type="button" aria-label={`Decrease ${label}`} onClick={() => set(value - step)} className="flex min-h-tap min-w-tap items-center justify-center rounded-xl border-2 border-ink/80 bg-card active:bg-pasture"><Minus className="h-6 w-6" /></button>
+        <button type="button" aria-label={`Decrease ${label}`} onClick={() => set(value - step)} className="flex min-h-tap min-w-tap items-center justify-center rounded-full border border-line bg-card active:bg-pasture"><Minus className="h-5 w-5" /></button>
         <div className="relative flex-1">
-          <input id={id} className="input text-center text-2xl font-bold" type="number" inputMode={decimals ? 'decimal' : 'numeric'} value={Number.isFinite(value) ? value : ''}
+          <input id={id} className="input text-center text-xl font-bold" type="number" inputMode={decimals ? 'decimal' : 'numeric'} value={Number.isFinite(value) ? value : ''}
             onChange={(e) => set(Number(e.target.value || 0))} />
           {unit && <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-bold text-muted">{unit}</span>}
         </div>
-        <button type="button" aria-label={`Increase ${label}`} onClick={() => set(value + step)} className="flex min-h-tap min-w-tap items-center justify-center rounded-xl border-2 border-ink/80 bg-card active:bg-pasture"><Plus className="h-6 w-6" /></button>
+        <button type="button" aria-label={`Increase ${label}`} onClick={() => set(value + step)} className="flex min-h-tap min-w-tap items-center justify-center rounded-full bg-field text-white active:bg-field-dark"><Plus className="h-5 w-5" /></button>
       </div>
     </Field>
   );
@@ -163,8 +163,8 @@ export function Chips<T extends string>({ label, options, value, onChange, hint,
           const on = o.value === value;
           return (
             <button key={o.value} type="button" aria-pressed={on} onClick={() => onChange(o.value)}
-              className={`min-h-tap rounded-xl border-2 px-4 py-2 text-left font-bold leading-tight ${on ? 'border-field bg-field text-white' : 'border-line bg-card text-ink hover:border-ink/60'}`}>
-              <span className="flex items-center gap-2">{on && <CheckCircle2 className="h-5 w-5 shrink-0" aria-hidden />}{o.label}</span>
+              className={`min-h-[2.75rem] ${columns ? 'rounded-xl' : 'rounded-full'} border px-4 py-2 text-left text-[0.9375rem] font-semibold leading-tight ${on ? 'border-field bg-field text-white' : 'border-line bg-card text-ink hover:border-ink/40'}`}>
+              <span className="flex items-center gap-2">{on && <Check className="h-4 w-4 shrink-0" strokeWidth={3} aria-hidden />}{o.label}</span>
               {o.sub && <span className={`block text-sm font-normal ${on ? 'text-white/85' : 'text-muted'}`}>{o.sub}</span>}
             </button>
           );
@@ -188,9 +188,9 @@ export function DateChips({ label, value, onChange, allowFuture }: { label: stri
       <div className="flex flex-wrap gap-2">
         {quick.map((d, i) => (
           <button key={d} type="button" aria-pressed={value === d} onClick={() => onChange(d)}
-            className={`min-h-tap rounded-xl border-2 px-4 font-bold ${value === d ? 'border-field bg-field text-white' : 'border-line bg-card'}`}>{names[i]}</button>
+            className={`min-h-[2.75rem] rounded-full border px-4 text-[0.9375rem] font-semibold ${value === d ? 'border-field bg-field text-white' : 'border-line bg-card'}`}>{names[i]}</button>
         ))}
-        <label htmlFor={id} className={`relative flex min-h-tap flex-1 items-center rounded-xl border-2 px-3 font-bold ${!isQuick ? 'border-field bg-field-light' : 'border-line bg-card'}`}>
+        <label htmlFor={id} className={`relative flex min-h-[2.75rem] flex-1 items-center rounded-full border px-4 text-[0.9375rem] font-semibold ${!isQuick ? 'border-field bg-field-light' : 'border-line bg-card'}`}>
           <span className="sr-only">Pick another date</span>
           <input id={id} type="date" className="w-full bg-transparent" value={value} max={allowFuture ? undefined : today} onChange={(e) => e.target.value && onChange(e.target.value)} />
         </label>
@@ -222,8 +222,8 @@ export function VoiceButton({ onText }: { onText: (t: string) => void }) {
         setOn(true);
         r.start();
       }}
-      className={`flex min-h-tap min-w-tap items-center justify-center rounded-xl border-2 ${on ? 'border-danger bg-danger-bg text-danger' : 'border-line bg-card'}`}>
-      <Mic className="h-6 w-6" />
+      className={`flex min-h-tap min-w-tap items-center justify-center rounded-full border ${on ? 'border-danger bg-danger-bg text-danger' : 'border-line bg-card'}`}>
+      <Mic className="h-5 w-5" />
     </button>
   );
 }
@@ -239,7 +239,7 @@ export function ConfidenceBadge({ level }: { level: Confidence }) {
     scenario: { text: 'What-if scenario', cls: 'bg-field-light text-accent', Icon: CircleHelp }
   };
   const m = map[level];
-  return <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-sm font-bold ${m.cls}`}><m.Icon className="h-4 w-4" aria-hidden />{m.text}</span>;
+  return <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold ${m.cls}`}><m.Icon className="h-3.5 w-3.5" aria-hidden />{m.text}</span>;
 }
 
 export function ToneIcon({ tone, className = 'h-6 w-6' }: { tone: 'urgent' | 'warn' | 'info' | 'ok'; className?: string }) {
@@ -252,12 +252,12 @@ export function ToneIcon({ tone, className = 'h-6 w-6' }: { tone: 'urgent' | 'wa
 /** Simple first, detail on demand: assumptions and formulas one tap deeper. */
 export function Explain({ title = 'How this is worked out', children, defaultOpen }: { title?: string; children: ReactNode; defaultOpen?: boolean }) {
   return (
-    <details className="group rounded-xl border-2 border-line bg-card" open={defaultOpen}>
-      <summary className="flex min-h-tap cursor-pointer list-none items-center justify-between gap-2 px-4 font-bold">
+    <details className="group rounded-[1.125rem] bg-card shadow-lift" open={defaultOpen}>
+      <summary className="flex min-h-tap cursor-pointer list-none items-center justify-between gap-2 px-4 text-[0.9375rem] font-semibold text-accent">
         {title}
         <ChevronDown className="h-5 w-5 transition-transform group-open:rotate-180" aria-hidden />
       </summary>
-      <div className="space-y-2 border-t border-line px-4 py-3 text-[0.95rem]">{children}</div>
+      <div className="space-y-2 border-t border-line px-4 py-3 text-[0.9375rem]">{children}</div>
     </details>
   );
 }
@@ -265,7 +265,7 @@ export function Explain({ title = 'How this is worked out', children, defaultOpe
 export function Empty({ title, body, action }: { title: string; body?: string; action?: ReactNode }) {
   return (
     <Card className="text-center">
-      <p className="h-display text-2xl">{title}</p>
+      <p className="text-lg font-bold">{title}</p>
       {body && <p className="mt-1 text-muted">{body}</p>}
       {action && <div className="mt-4 flex justify-center">{action}</div>}
     </Card>
@@ -277,18 +277,18 @@ export function Row({ to, title, sub, right, icon }: { to?: string; title: React
     <>
       {icon}
       <div className="min-w-0 flex-1">
-        <div className="font-bold leading-snug">{title}</div>
-        {sub && <div className="text-sm text-muted">{sub}</div>}
+        <div className="text-[0.9375rem] font-semibold leading-snug">{title}</div>
+        {sub && <div className="text-[0.8125rem] text-muted">{sub}</div>}
       </div>
       {right}
     </>
   );
-  const cls = 'flex min-h-tap items-center gap-3 px-4 py-3';
+  const cls = 'flex min-h-[3.5rem] items-center gap-3 px-4 py-2.5';
   return to ? <Link to={to} className={`${cls} hover:bg-pasture`}>{inner}</Link> : <div className={cls}>{inner}</div>;
 }
 
 export function List({ children }: { children: ReactNode }) {
-  return <div className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-lift">{children}</div>;
+  return <div className="divide-y divide-line overflow-hidden rounded-[1.125rem] bg-card shadow-lift">{children}</div>;
 }
 
 // ---------------------------------------------------------------------------
@@ -308,8 +308,8 @@ export function Sheet({ open, onClose, title, children }: { open: boolean; onClo
       <div className="anim-sheet absolute inset-x-0 bottom-0 mx-auto max-w-xl rounded-t-3xl bg-card px-4 pt-3" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}>
         <div className="mx-auto mb-2 h-1.5 w-12 rounded-full bg-line" aria-hidden />
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="h-display text-3xl">{title}</h2>
-          <button aria-label="Close" onClick={onClose} className="flex min-h-tap min-w-tap items-center justify-center rounded-full hover:bg-pasture"><X className="h-7 w-7" /></button>
+          <h2 className="h-display text-xl">{title}</h2>
+          <button aria-label="Close" onClick={onClose} className="flex min-h-tap min-w-tap items-center justify-center rounded-full hover:bg-pasture"><X className="h-6 w-6" /></button>
         </div>
         {children}
       </div>

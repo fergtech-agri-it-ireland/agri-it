@@ -5,7 +5,7 @@ import { useDerived, silageWithFedOut } from '../lib/data/derived';
 import { forecastForage } from '../lib/forecast/forage';
 import { eur, fmtDay, fmtMonth, fmtNum, todayISO } from '../lib/format';
 import { primaryRoute } from '../lib/suppliers';
-import { Card, Chips, ConfidenceBadge, Explain, LinkButton, Screen, Stepper, ToneIcon } from '../components/ui';
+import { Card, ConfidenceBadge, Explain, LinkButton, Screen, Stepper, ToneIcon } from '../components/ui';
 import { FeedGauge } from '../components/FeedGauge';
 
 type Tab = 'feed' | 'forage' | 'cash';
@@ -14,9 +14,13 @@ export default function Forecast() {
   const [params, setParams] = useSearchParams();
   const tab = (params.get('tab') as Tab) || 'feed';
   return (
-    <Screen title="Forecast">
-      <Chips columns={3} value={tab} onChange={(t) => setParams({ tab: t }, { replace: true })}
-        options={[{ value: 'feed', label: 'Feed' }, { value: 'forage', label: 'Silage' }, { value: 'cash', label: 'Cash' }]} />
+    <Screen title="Progress">
+      <div role="tablist" aria-label="Progress" className="flex rounded-full bg-track p-1 text-sm font-bold">
+        {([['feed', 'Feed'], ['forage', 'Silage'], ['cash', 'Cash']] as const).map(([t, label]) => (
+          <button key={t} role="tab" aria-selected={tab === t} onClick={() => setParams({ tab: t }, { replace: true })}
+            className={`min-h-[2.25rem] flex-1 rounded-full ${tab === t ? 'bg-card text-ink shadow-lift' : 'text-muted'}`}>{label}</button>
+        ))}
+      </div>
       {tab === 'feed' && <FeedTab />}
       {tab === 'forage' && <ForageTab />}
       {tab === 'cash' && <CashTab />}

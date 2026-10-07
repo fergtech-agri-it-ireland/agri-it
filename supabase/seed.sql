@@ -94,19 +94,19 @@ declare
   d date := current_date;
   m int;
 begin
-  insert into public.farms (id, name, eircode, county, jurisdiction, enterprise, financial_year_start_month,
+  insert into public.farms (id, name, eircode, county, jurisdiction, enterprise, enterprises, financial_year_start_month,
     opening_cash_eur, opening_cash_date, default_lead_time_days, forage_reserve_percent,
     housing_start, turnout_date, created_by)
-  values (f, 'Glenview Farm', 'E91 X000', 'Tipperary', 'ROI', 'dairy', 1,
+  values (f, 'Glenview Farm', 'E91 X000', 'Tipperary', 'ROI', 'dairy', array['dairy'], 1,
     38000, date_trunc('year', d)::date, 3, 15,
     make_date(extract(year from d)::int, 11, 1), make_date(extract(year from d)::int + 1, 2, 28), u);
   insert into public.farm_members (farm_id, user_id, role) values (f, u, 'owner');
 
-  insert into public.animal_groups (id, farm_id, name, animal_class, head_count, sort_order, housed) values
-    (g_cows, f, 'Dairy cows', 'dairy_cow', 120, 1, true),
-    (g_heif, f, 'In-calf heifers', 'in_calf_heifer', 40, 2, true),
-    (g_wean, f, 'Weanlings', 'weanling', 30, 3, true),
-    (g_calf, f, 'Calves', 'calf', 18, 4, true);
+  insert into public.animal_groups (id, farm_id, name, animal_class, breed, head_count, sort_order, housed) values
+    (g_cows, f, 'Dairy cows', 'dairy_cow', 'Holstein Friesian', 120, 1, true),
+    (g_heif, f, 'In-calf heifers', 'in_calf_heifer', 'Holstein Friesian', 40, 2, true),
+    (g_wean, f, 'Weanlings', 'weanling', 'Aberdeen Angus', 30, 3, true),
+    (g_calf, f, 'Calves', 'calf', 'Mixed', 18, 4, true);
   insert into public.head_count_history (farm_id, animal_group_id, head_count, effective_on, reason)
   select f, id, head_count, d - 20, 'opening' from public.animal_groups where farm_id = f;
 

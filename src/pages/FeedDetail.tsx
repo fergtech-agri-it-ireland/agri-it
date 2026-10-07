@@ -124,14 +124,14 @@ export default function FeedDetail() {
 
       <div className="grid grid-cols-2 gap-2.5">
         {phone ? (
-          <a href={telHref(phone.phone)} className="flex min-h-[4.25rem] flex-col items-center justify-center rounded-[1.125rem] border-2 border-ink bg-card leading-tight">
+          <a href={telHref(phone.phone)} className="flex min-h-[4.25rem] flex-col items-center justify-center rounded-[1.125rem] bg-card leading-tight shadow-lift">
             <span className="flex items-center gap-1.5 font-bold"><Phone className="h-5 w-5" aria-hidden />Call {supplier?.name.split(' ')[0]}</span>
             <span className="text-sm text-muted">{phone.phone}</span>
           </a>
         ) : (
           <LinkButton to={`/feed/${product.id}/count`} variant="secondary">Stock count</LinkButton>
         )}
-        <Link to={`/record/order?feed=${product.id}${lastDelivery ? `&kg=${lastDelivery.quantity_kg}` : ''}`} className="flex min-h-[4.25rem] flex-col items-center justify-center rounded-[1.125rem] bg-hivis leading-tight text-onhivis">
+        <Link to={`/record/order?feed=${product.id}${lastDelivery ? `&kg=${lastDelivery.quantity_kg}` : ''}`} className="flex min-h-[4.25rem] flex-col items-center justify-center rounded-[1.125rem] bg-field leading-tight text-white">
           <b>{lastDelivery ? `Order ${fmtKg(Number(lastDelivery.quantity_kg))} again` : 'Record an order'}</b>
           {lastDelivery?.price_per_tonne_eur && <span className="text-sm">Last price {eur(Number(lastDelivery.price_per_tonne_eur))}/t</span>}
         </Link>

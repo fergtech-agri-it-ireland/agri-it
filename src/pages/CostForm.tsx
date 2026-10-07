@@ -70,7 +70,7 @@ export default function CostForm() {
       category: category!, counterparty: payee || null, repeat: repeats, recordTable: 'costs', recordId: row.id, routineId: uuid()
     });
     const ok = await save([{ kind: 'insert', table: 'costs', row }, ...(rep?.ops ?? [])], {
-      label: rep ? `Cost saved. Repeats ${repeats}, shows on Today when due` : 'Cost saved',
+      label: rep ? `Cost saved. Repeats ${repeats}, shows in the diary when due` : 'Cost saved',
       patch: (x) => ({
         ...x, costs: [{ supplier_id: null, ...row, feed_transaction_id: null } as Cost, ...x.costs],
         routines: rep ? [...x.routines, rep.routine] : x.routines, completions: rep ? [...x.completions, rep.completion] : x.completions

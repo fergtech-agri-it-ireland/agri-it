@@ -14,6 +14,6 @@ export function RepeatChips({ value, onChange, date }: { value: RepeatChoice; on
         { value: 'weekly', label: 'Weekly', sub: `${WEEKDAYS[d.getUTCDay()]}s` },
         { value: 'monthly', label: 'Monthly', sub: `On the ${ordinal(d.getUTCDate())}` }
       ]}
-      hint={value === 'none' ? undefined : 'It will show on Today when due, ready to tick off. Nothing is recorded until you do.'} />
+      hint={value === 'none' ? undefined : 'It will show in the diary when due, ready to tick off. Nothing is recorded until you do.'} />
   );
 }

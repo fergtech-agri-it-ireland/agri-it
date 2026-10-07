@@ -4,16 +4,20 @@
 export type ISODate = string; // 'YYYY-MM-DD'
 
 export type Jurisdiction = 'ROI' | 'NI';
+/** Old single farm type, kept for older records. New code reads `enterprises`. */
 export type Enterprise = 'dairy' | 'suckler' | 'beef' | 'mixed' | 'sheep' | 'tillage' | 'other';
+/** What a farm does. A farm can be any mix of these. */
+export type FarmType = 'dairy' | 'suckler' | 'beef' | 'calf_rearing' | 'sheep' | 'tillage' | 'pigs' | 'poultry' | 'horses' | 'goats' | 'other';
 export type AnimalClass =
-  | 'dairy_cow' | 'suckler_cow' | 'in_calf_heifer' | 'store_cattle' | 'weanling'
-  | 'calf' | 'bull' | 'finishing_cattle' | 'ewe' | 'lamb' | 'other';
+  | 'dairy_cow' | 'suckler_cow' | 'in_calf_heifer' | 'heifer' | 'store_cattle' | 'bullock' | 'weanling'
+  | 'calf' | 'bull' | 'finishing_cattle' | 'ewe' | 'lamb' | 'ram' | 'hogget'
+  | 'goat' | 'pig' | 'poultry' | 'horse' | 'other';
 export type FeedTxnType = 'opening' | 'order' | 'delivery' | 'count' | 'adjustment';
 export type OrderStatus = 'open' | 'delivered' | 'cancelled';
 export type Evidence = 'measured' | 'confirmed_docket' | 'invoice_derived' | 'farmer_estimate' | 'unconfirmed';
-export type IncomeType = 'milk' | 'livestock' | 'grant' | 'other';
+export type IncomeType = 'milk' | 'livestock' | 'crop' | 'grant' | 'other';
 export type CostCategory =
-  | 'feed' | 'fertiliser' | 'contractor' | 'vet_medicine' | 'machinery_fuel' | 'utilities' | 'other';
+  | 'feed' | 'fertiliser' | 'seed_sprays' | 'contractor' | 'vet_medicine' | 'machinery_fuel' | 'utilities' | 'other';
 export type RecordType = 'feed_docket' | 'invoice' | 'fertiliser' | 'medicine' | 'movement' | 'other';
 export type SilageMethod = 'acreage' | 'pit_dimensions' | 'bale_count' | 'measured_tonnes';
 export type Confidence = 'high' | 'medium' | 'low' | 'scenario';
@@ -25,6 +29,8 @@ export interface Farm {
   county: string;
   jurisdiction: Jurisdiction;
   enterprise: Enterprise;
+  /** Everything the farm does. Missing on farms saved before 7 Oct 2026: use farmTypes(). */
+  enterprises?: FarmType[];
   financial_year_start_month: number;
   opening_cash_eur: number | null;
   opening_cash_date: ISODate | null;
@@ -41,6 +47,8 @@ export interface AnimalGroup {
   farm_id: string;
   name: string;
   animal_class: AnimalClass;
+  /** The farmer's own words, e.g. "Holstein Friesian" or "Texel cross". */
+  breed?: string | null;
   head_count: number;
   head_count_updated_at: string;
   forage_t_per_head_month: number | null;
@@ -312,9 +320,23 @@ export interface Job {
 }
 
 /** Everything the app needs for one farm, fetched in one go and cached offline. */
+/** A tillage crop for one harvest. */
+export interface Crop {
+  id: string;
+  farm_id: string;
+  name: string;
+  variety: string | null;
+  acres: number | null;
+  harvest_year: number;
+  sown_on: ISODate | null;
+  archived: boolean;
+  created_at?: string;
+}
+
 export interface FarmBundle {
   farm: Farm;
   groups: AnimalGroup[];
+  crops: Crop[];
   suppliers: Supplier[];
   branches: SupplierBranch[];
   supplierSettings: FarmSupplierSetting[];
@@ -339,19 +361,28 @@ export const ANIMAL_CLASS_LABEL: Record<AnimalClass, string> = {
   dairy_cow: 'Dairy cows',
   suckler_cow: 'Suckler cows',
   in_calf_heifer: 'In-calf heifers',
+  heifer: 'Heifers',
   store_cattle: 'Store cattle',
+  bullock: 'Bullocks',
   weanling: 'Weanlings',
   calf: 'Calves',
   bull: 'Bulls',
   finishing_cattle: 'Finishing cattle',
   ewe: 'Ewes',
   lamb: 'Lambs',
-  other: 'Other'
+  ram: 'Rams',
+  hogget: 'Hoggets',
+  goat: 'Goats',
+  pig: 'Pigs',
+  poultry: 'Poultry',
+  horse: 'Horses',
+  other: 'Other animals'
 };
 
 export const COST_LABEL: Record<CostCategory, string> = {
   feed: 'Feed',
   fertiliser: 'Fertiliser',
+  seed_sprays: 'Seed & sprays',
   contractor: 'Contractor',
   vet_medicine: 'Vet & medicine',
   machinery_fuel: 'Machinery & fuel',
@@ -362,6 +393,7 @@ export const COST_LABEL: Record<CostCategory, string> = {
 export const INCOME_LABEL: Record<IncomeType, string> = {
   milk: 'Milk',
   livestock: 'Livestock sales',
+  crop: 'Grain & crop sales',
   grant: 'Grants & schemes',
   other: 'Other income'
 };

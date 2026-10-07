@@ -25,14 +25,14 @@ export default function Routines() {
 
   const toggleRule = (r: FeedingRule, on: boolean) =>
     save([{ kind: 'update', table: 'feeding_rules', match: { id: r.id }, patch: { confirm_daily: on } }], {
-      label: on ? 'Shows on Today to tick off' : 'Won’t ask any more. The plan is assumed fed',
+      label: on ? 'Shows in the diary to tick off' : 'Won’t ask any more. The plan is assumed fed',
       patch: (x) => ({ ...x, rules: x.rules.map((y) => (y.id === r.id ? { ...y, confirm_daily: on } : y)) })
     });
 
   return (
-    <Screen title="Routines" back="/farm" sub="Repeating work you tick off on Today">
+    <Screen title="Routines" back sub="Repeating work you tick off in the diary">
       <LinkButton to="/routines/new" variant="hivis" block><Plus className="h-6 w-6" aria-hidden />Add a routine</LinkButton>
-      <p className="px-1 text-[0.95rem] text-muted">Each routine shows on Today when it's due. Ticking it off records what actually happened, so stock, costs and cash stay right. Nothing is recorded until you tick it.</p>
+      <p className="px-1 text-[0.95rem] text-muted">Each routine shows in the diary when it's due. Ticking it off records what actually happened, so stock, costs and cash stay right. Nothing is recorded until you tick it.</p>
 
       <SectionTitle>Feeding</SectionTitle>
       {rules.length === 0 ? (

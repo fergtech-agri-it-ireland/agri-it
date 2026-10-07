@@ -36,7 +36,7 @@ export default function Ask() {
           </div>
           <div className="flex flex-wrap gap-2 pt-1">
             {a.call && <CallButton phone={a.call.phone} label={a.call.label} />}
-            {a.links.map((l) => <Link key={l.to} to={l.to} className="inline-flex min-h-tap items-center rounded-2xl border-2 border-ink/80 px-4 font-bold">{l.label}</Link>)}
+            {a.links.map((l) => <Link key={l.to} to={l.to} className="inline-flex min-h-tap items-center rounded-full border border-line px-4 font-bold">{l.label}</Link>)}
           </div>
         </Card>
       ))}

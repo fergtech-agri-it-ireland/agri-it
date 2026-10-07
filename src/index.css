@@ -1,7 +1,8 @@
-@import '@fontsource/atkinson-hyperlegible/400.css';
-@import '@fontsource/atkinson-hyperlegible/700.css';
-@import '@fontsource/barlow-condensed/600.css';
-@import '@fontsource/barlow-condensed/700.css';
+@import '@fontsource/figtree/400.css';
+@import '@fontsource/figtree/500.css';
+@import '@fontsource/figtree/600.css';
+@import '@fontsource/figtree/700.css';
+@import '@fontsource/figtree/800.css';
 
 @tailwind base;
 @tailwind components;
@@ -9,23 +10,25 @@
 
 /* Theme tokens as RGB channels. Day is the default; .sunlight and .dawn redefine them. */
 :root {
-  --ink: 23 33 28; --muted: 77 91 83; --line: 201 211 204; --pasture: 238 242 238; --card: 255 255 255;
-  --track: 230 236 231; --accent: 29 77 54; --inverse: 23 33 28; --oninverse: 255 255 255; --onhivis: 23 33 28;
-  --field: 29 77 54; --field-dark: 20 56 38; --field-light: 215 230 220;
-  --hivis: 255 198 26; --hivis-dark: 224 168 0;
-  --danger: 168 35 26; --danger-bg: 251 228 225; --warn: 122 74 0; --warn-bg: 255 241 204;
-  --ok: 30 107 67; --ok-bg: 225 242 231;
+  --ink: 16 26 21; --muted: 91 102 96; --line: 227 232 229; --pasture: 241 244 242; --card: 255 255 255;
+  --track: 236 240 238; --accent: 11 122 85; --inverse: 16 26 21; --oninverse: 255 255 255; --onhivis: 16 26 21;
+  --field: 11 122 85; --field-dark: 7 94 65; --field-light: 226 243 234;
+  --hivis: 245 176 65; --hivis-dark: 226 152 34;
+  --money: 46 107 214; --money-light: 229 238 252; --silage: 62 155 79;
+  --danger: 180 35 24; --danger-bg: 253 232 229; --warn: 122 74 0; --warn-bg: 255 243 220;
+  --ok: 7 94 65; --ok-bg: 226 243 234;
   color-scheme: light;
 }
 /* Sunlight mode: pure white ground, darker greys and borders for glare. */
-html.sunlight { --pasture: 255 255 255; --ink: 0 0 0; --muted: 31 42 36; --line: 107 122 113; }
+html.sunlight { --pasture: 255 255 255; --ink: 0 0 0; --muted: 31 42 36; --line: 120 134 126; }
 /* Dawn mode: dark screen for early milking and late checks. */
 html.dawn {
-  --ink: 236 243 238; --muted: 169 185 175; --line: 44 63 51; --pasture: 14 23 18; --card: 23 36 28;
-  --track: 38 55 44; --accent: 143 211 174; --inverse: 236 243 238; --oninverse: 14 23 18;
-  --field: 47 122 85; --field-dark: 37 99 69; --field-light: 30 52 39;
-  --danger: 255 138 122; --danger-bg: 63 22 18; --warn: 255 212 92; --warn-bg: 58 46 5;
-  --ok: 127 221 170; --ok-bg: 18 48 31;
+  --ink: 236 243 238; --muted: 160 176 167; --line: 40 54 46; --pasture: 11 17 14; --card: 22 31 26;
+  --track: 36 48 41; --accent: 120 214 168; --inverse: 236 243 238; --oninverse: 11 17 14;
+  --field: 22 145 101; --field-dark: 16 120 83; --field-light: 24 52 39;
+  --money: 120 166 245; --money-light: 27 39 61; --silage: 110 196 126;
+  --danger: 255 138 122; --danger-bg: 63 22 18; --warn: 255 205 110; --warn-bg: 56 42 10;
+  --ok: 120 214 168; --ok-bg: 18 46 31;
   color-scheme: dark;
 }
 
@@ -38,11 +41,11 @@ html.dawn {
     @apply bg-pasture font-sans text-base text-ink antialiased;
     min-height: 100dvh;
   }
-  html.sunlight .shadow-lift { box-shadow: none; border: 2px solid rgb(var(--ink)); }
+  html.sunlight .shadow-lift { box-shadow: none; border: 1.5px solid rgb(var(--ink)); }
   html.dawn .shadow-lift { box-shadow: none; }
 
   :focus-visible {
-    outline: 3px solid rgb(var(--accent));
+    outline: 2px solid rgb(var(--accent));
     outline-offset: 2px;
     border-radius: 6px;
   }
@@ -56,15 +59,16 @@ html.dawn {
 }
 
 @layer components {
-  .numeral { @apply font-display font-bold tracking-tight; font-variant-numeric: tabular-nums; }
-  .h-display { @apply font-display font-semibold leading-none tracking-tight; }
+  .numeral { @apply font-display font-extrabold tracking-tight; font-variant-numeric: tabular-nums; }
+  .h-display { @apply font-display font-extrabold leading-tight tracking-tight; }
   .input {
-    @apply block w-full min-h-tap rounded-xl border-2 border-line bg-card px-4 text-lg text-ink placeholder:text-muted/70;
+    @apply block w-full min-h-tap rounded-xl border border-line bg-card px-3.5 text-base text-ink placeholder:text-muted/70;
   }
-  .input:focus { @apply border-field outline-none ring-2 ring-field/25; }
-  .label { @apply mb-1.5 block text-[0.95rem] font-bold text-ink; }
-  .hint { @apply mt-1 text-sm text-muted; }
-  .pad-bottom { padding-bottom: calc(6.5rem + env(safe-area-inset-bottom)); }
+  .input:focus { @apply border-field outline-none ring-2 ring-field/20; }
+  .label { @apply mb-1.5 block text-sm font-semibold text-muted; }
+  .hint { @apply mt-1 text-[0.8125rem] text-muted; }
+  .eyebrow { @apply text-xs font-bold uppercase tracking-wider text-muted; }
+  .pad-bottom { padding-bottom: calc(6rem + env(safe-area-inset-bottom)); }
 }
 
 /* Sheet + toast motion answers the user's action only */

@@ -1,6 +1,6 @@
 # Agri-It MVP: Handover
 
-**Last updated:** 7 October 2026, evening (Agri-It live at its own address, fergtech-agri-it-ireland.github.io/agri-it; earlier: phone-only build: your own farm kept on the phone, shareable link; earlier 7 Oct: photo reading for dockets, receipts and invoices; 6 Oct: daily reminders, supplier price history, budget variance alerts, white-page fix, routines and tick-off checklist, UI redesign)
+**Last updated:** 7 October 2026, night (new fitness-tracker style UI: Dashboard, Diary, Add, Progress, More; sign-up open to any mix of farming, any animal class, breeds; crops for tillage. Earlier 7 Oct: Agri-It live at its own address, fergtech-agri-it-ireland.github.io/agri-it; earlier: phone-only build: your own farm kept on the phone, shareable link; earlier 7 Oct: photo reading for dockets, receipts and invoices; 6 Oct: daily reminders, supplier price history, budget variance alerts, white-page fix, routines and tick-off checklist, UI redesign)
 **Owner:** Feargal
 **Status:** MVP code complete and on GitHub (moved 7 Oct to `fergtech-agri-it-ireland/agri-it`, public, CI green, latest work on `main`). Phone-only build live as a private Claude artifact (real farm, data kept on the phone, no server). Installable app live on GitHub Pages at https://fergtech-agri-it-ireland.github.io/agri-it/. Browser demo also live. Supabase cloud project `agri-it` created with tables only (see 2).
 
@@ -24,18 +24,33 @@ It is not a herd, grassland or accounting system. It does not prescribe rations,
 | --- | --- |
 | Code | P0 scope complete, plus the redesign, recurring routines with tick-offs, and (6 Oct, night) daily reminders, supplier price history and budget variance alerts |
 | Typecheck | Clean (`tsc -b`) |
-| Unit tests | 92/92 passing (forecast engines, run-out steps, Today dials, routine schedules, checklist, actual-vs-planned feeding, reminders, price history, budget alerts, docket reading and matching) |
-| Browser tests | `scripts/e2e/` (Python + Playwright, run against the demo build at phone size): `ui.py` 82 checks, `routines.py` 41 checks, `stale_cache.py` 5 checks, `p1.py` 30 checks (reminders, prices, budget alerts), `ocr.py` 53 checks (photo reading). All pass on any day and at any time (dates in `ui.py` are now relative to today) |
+| Unit tests | 103/103 passing (farm types, breeds, getting-started guide and add options in `farmTypes.test.ts`; (forecast engines, run-out steps, Today dials, routine schedules, checklist, actual-vs-planned feeding, reminders, price history, budget alerts, docket reading and matching) |
+| Browser tests | `scripts/e2e/` (Python + Playwright, run against the demo build at phone size): `ui.py` 115 checks (dashboard, diary, add, more, farm types, crops, breeds), `routines.py` 47 checks (tick-offs now in the Diary), `stale_cache.py` 5 checks, `p1.py` 30 checks (reminders, prices, budget alerts), `ocr.py` 53 checks (photo reading), `phone.py` 17 checks (sign-up with dairy, sheep and tillage, breeds, crops, skip farm types; run against `build:phone` and `build:pages`). All pass on any day and at any time (dates in `ui.py` are now relative to today) |
 | Production build | Clean, PWA service worker generated |
-| Database | All four migrations + seed validated against real Postgres 16 with Supabase auth/storage stubs (`scripts/e2e/supabase_stub.sql`); RLS isolation and unique constraints tested |
+| Database | All five migrations + seed validated against real Postgres 16 with Supabase auth/storage stubs (`scripts/e2e/supabase_stub.sql`); RLS isolation and unique constraints tested |
 | GitHub | `fergtech-agri-it-ireland/agri-it` (public), CI green. The Claude GitHub app is installed on the org, so a chat can push |
-| Supabase cloud | `agri-it` (ref `xgudpylxmrlywegpdvps`, eu-west-1) created 7 Oct. Only migration 1 (tables) applied. RLS is switched on for every table with **no policies yet**, so the API returns nothing until migration 2 (policies, storage bucket, RPCs) runs; migrations 3 and 4 and the reference data are not applied. Not used by the app yet. Feargal's Supabase org also holds `gauntlet` / `gauntlet-test` for another project with devs: do not pause or change those |
+| Supabase cloud | `agri-it` (ref `xgudpylxmrlywegpdvps`, eu-west-1) created 7 Oct. Only migration 1 (tables) applied; migrations 2 to 5 are not. RLS is switched on for every table with **no policies yet**, so the API returns nothing until migration 2 (policies, storage bucket, RPCs) runs; migrations 3 and 4 and the reference data are not applied. Not used by the app yet. Feargal's Supabase org also holds `gauntlet` / `gauntlet-test` for another project with devs: do not pause or change those |
 | Phone-only app | **Live for real use**: https://claude.ai/artifact/WNRa3dHK8DcwjK4KYB1ePC (version 1). Starts empty, farmer sets up their own farm, everything stays on that phone. Private until shared from the page's Share menu |
 | Deployed | Live app: https://fergtech-agri-it-ireland.github.io/agri-it/ (GitHub Pages, publishes from `main`). Browser-only demo (sample farm, no database, data kept in the phone's browser) is a private artifact: https://claude.ai/artifact/PrDSDf2cB5EgRaDSMe7UJw (version 7). UI concept canvas: https://claude.ai/artifact/UkQ1sRPKTTE3QN9rX11QF8 |
 
 **Important:** the build sandbox resets between chats. Attach the GitHub repo `fergtech-agri-it-ireland/agri-it` in a new chat and clone it.
 
-### MOVED (7 Oct, 19:00): repo is now `fergtech-agri-it-ireland/agri-it`
+### NEW (7 Oct, night): fitness-tracker UI and open farm types
+Feargal disliked the old UI ("for 2 year olds or 92 year olds") and the restricted sign-up. Rebuilt in the style of MyFitnessPal (the Design canvas "Agri-It Simple Prototypes" holds the agreed prototype and walkthrough: https://claude.ai/artifact/2jeDd6ezur6KXuPrxyHwZL).
+
+- **Look:** Figtree type (replaces Atkinson Hyperlegible and Barlow Condensed), white cards on a soft grey-green ground, one green accent (#0B7A55), amber only for "do something", pill buttons, 48px tap targets (was 56). Tokens are still CSS variables in `src/index.css` (new `--money`, `--silage`); dawn and sunlight modes still work. Theme colour #F1F4F2 (dawn #0B110E). Manifest `id` unchanged.
+- **Bottom bar:** Dashboard `/` · Diary `/diary` · **+** `/record` · Progress `/progress` (the old Forecast, `/forecast` still works) · More `/more` (`/farm` shows the same hub). The bar hides on screens with a save bar.
+- **Dashboard** (`pages/Today.tsx`): feed ring for the feed that runs out first (days left against your target, bin, daily use, order-by chip with Call), other feeds under it, Silage and Cash cards, Today's diary progress, Do next, then cards per farm type (Milk for dairy, Crops for tillage, Your animals with breeds), and the month against budget. A **Getting started** card (`farmGuide()`) steers each farmer to what matters for their mix of farming until done or hidden.
+- **Diary** (`pages/Diary.tsx`): Day view with day-by-day arrows, the bin sum (start − fed + delivered = in the bin, any feed), then sections like meals: Feeding and Jobs and routines (the tick-off list, `Checklist` with `kinds`), Deliveries and orders, Money, Records, each with ADD. History tab (`components/DiaryHistory.tsx`) is the old full timeline and milk chart.
+- **Add** (`pages/Record.tsx`): search, Scan a docket, a quick tile for the farmer's most likely entry, Recent (same as last time, + to add again) and Everything (`addOptions()`: the farmer's kinds first, everything else under "Other things you can add"; nothing hidden).
+- **Farm types** (migration `20261007000100_farm_types.sql`): `farms.enterprises text[]` (dairy, suckler, beef, calf_rearing, sheep, tillage, pigs, poultry, horses, goats, other; any mix; empty = not said yet). The old `enterprise` column is kept in step (`mixed` when more than one). `create_farm` now takes `p_enterprises`. Older stored farms without the list are read through `farmTypes()` (`normalizeBundle` fills it), so Feargal's phone data needs no migration.
+- **Animals:** new classes heifers, bullocks, rams, hoggets, goats, pigs, poultry, horses. `animal_groups.breed` (free text, max 60) with common Irish breeds per species one tap away (beef breeds first for bullocks, sucklers, stores). Silage budget: heifers and bullocks use the published store cattle figure and say so; pigs, poultry and horses are left out of it; other classes without a figure still ask.
+- **Tillage:** `crops` table (name, variety, acres, harvest year; RLS like other farm tables), Crops screen `/farm/crops`, income type `crop` (grain and straw, `/record/income?type=crop`), cost category `seed_sprays`. Dashboard Crops card shows acres, inputs this year and per acre, and sales.
+- **Sign-up** (`pages/Onboarding.tsx`): farm, then "What do you farm?" (any mix, Skip allowed), then Your animals (the usual groups for what was picked, compact counts, breed once a count is set, "Add another kind of animal" from every species), then Your crops for tillage. `/farm/types` changes farm types any time.
+- `CACHE_VERSION` is `v4-farm-types`; demo `VERSION` 5 (demo groups now have breeds). Phone `VERSION` still 1: nothing to migrate.
+- Checked: typecheck, 103 unit tests, all five migrations and the seed on Postgres 16 with RLS (a second user cannot see or add crops; bad farm types rejected), every browser script above, phone build and the Pages build under `/agri-it/`.
+
+### Earlier: MOVED (7 Oct, 19:00): repo is now `fergtech-agri-it-ireland/agri-it`
 Agri-It now has its own GitHub organisation so it gets its own web address, separate from Gauntlet. Reason: on `fergtech-ireland.github.io` the two apps shared one address, Gauntlet's update clean-up cleared Agri-It's offline copy, and Feargal's Android Chrome got stuck showing "This app is already installed" for Agri-It (no Agri-It in chrome://webapks; "Click to open" fails). Feargal has created the org, transferred the repo and installed the Claude GitHub app on it.
 
 **Done (7 Oct, 19:05):** the repo is public, Pages source is GitHub Actions, and CI run 37663526124 passed all three jobs (app, database, pages). The live app at **https://fergtech-agri-it-ireland.github.io/agri-it/** serves the bundle built from `main`, `sw.js` with navigateFallback `/agri-it/index.html`, and a manifest with id `/agri-it/app`, scope and start_url `/agri-it/`, display `standalone`. Old references in this file, the starter prompt and code comments are updated. The old address `fergtech-ireland.github.io/agri-it/` is no longer published; nobody has data there except Feargal's test. **Confirmed 7 Oct, 19:09:** Feargal installed it on Android from Chrome and it works like Gauntlet, as its own app.
@@ -141,6 +156,7 @@ supabase/
     20260929000200_security_and_functions.sql   RLS, storage policies, RPCs
     20261006000100_feed_target.sql              farms.feed_target_days (fills the Feed dial)
     20261006000200_routines.sql                 routines, routine_completions, feed_use_logs, feeding_rules.confirm_daily
+    20261007000100_farm_types.sql               farms.enterprises (any mix), new animal classes, animal_groups.breed, crops, crop income, seed_sprays cost
   seed.sql                        evidence sources, Teagasc allowances, suppliers, DEMO user + farm
 src/
   main.tsx, App.tsx               providers, routes
@@ -184,9 +200,10 @@ Feed is always stored in **kg**. Money is `numeric(12,2)` euro.
 
 | Table | Purpose |
 | --- | --- |
-| `farms` | Eircode, county, ROI/NI, enterprise, FY start month, opening cash + date, default lead time, forage reserve %, housing/turnout dates, feed target days (farmer's own comfort level, default 30) |
+| `farms` | Eircode, county, ROI/NI, enterprises (list, any mix; old single enterprise kept in step), FY start month, opening cash + date, default lead time, forage reserve %, housing/turnout dates, feed target days (farmer's own comfort level, default 30) |
 | `farm_members` | user to farm, role `owner` / `member` / `advisor` (advisor = read-only) |
-| `animal_groups` | class, head count, `head_count_updated_at`, optional farm-history forage t/head/month, housed flag |
+| `crops` | tillage crop: name, variety, acres, harvest year, archived |
+| `animal_groups` | class, breed (free text), head count, `head_count_updated_at`, optional farm-history forage t/head/month, housed flag |
 | `head_count_history` | audit of every head count change |
 | `suppliers` | `farm_id` null = shared verified directory (read-only); non-null = farm-added. Central/secondary phones, `verified_on`, `source_url`, `needs_live_directory` |
 | `supplier_branches` | branch/territory contacts with counties served. **Empty**: only load verified data |
@@ -248,6 +265,8 @@ Feed is always stored in **kg**. Money is `numeric(12,2)` euro.
 
 ## 8. Screens and routes
 
+**Since 7 Oct, night:** Dashboard `/` · Diary `/diary` (`?d=` day, `?tab=history`) · Add `/record` · Progress `/progress` · More `/more` (also `/farm`) · What you farm `/farm/types` · Crops `/farm/crops` · Animals and breeds `/farm/groups`. The list below is the older detail; forms and feed screens are unchanged apart from the look.
+
 Today `/` (three dials, Do next, Feeding today, quick tiles, feed cards) · Record `/record` (photo a docket, same as last time, something new) · Saved `/record/done` (after delivery, sale, milk cheque) · Forecast `/forecast` (tabs feed, forage, cash) · Feed: new, detail (the sum, who eats it, call, order again), edit, count, rule new/edit · Record forms: delivery, order (`?feed=&kg=`), count, milk, sale, cost (`?repeat=<cost id>`), income · Money `/money`, year-end, budget · Farm diary `/diary` · Farm hub, groups, silage (+form), jobs · Suppliers + detail · Records + new (`?type=`) · Ask · Settings (dawn mode, sunlight, reminders, feed target) · Login · Onboarding (3 steps).
 
 Today `/` now opens on the dials then **Today's jobs** checklist (dawn mode: "Before milking" / "Evening jobs"). Routines `/routines` (feeding plans with tick-off switches, money, stock and feed, jobs) and `/routines/new`, `/routines/:id`. Bill, milk and other-income forms have "Does this repeat?". Count form accepts `?routine=&due=`.
@@ -259,6 +278,9 @@ Navigation: bottom bar Today / Forecast / **Record (hi-vis centre button)** / Mo
 ---
 
 ## 9. UX decisions (keep these)
+
+- Fitness-tracker pattern (7 Oct, night): a dashboard of rings and cards, a day diary with a sum at the top and sections with ADD, a centre + that opens search, scan and recent. Normal-sized type; no oversized tiles.
+- Never restrict by farm type: farm types only change what is shown first and what the guide suggests. Every animal class, every kind of entry is always reachable.
 
 - Three dials first (Feed, Silage, Cash); rings fill only against real denominators (feed target, winter need, 90-day outlook).
 - Dawn mode (dark, auto before 8am/after 8pm) puts "Before milking" feeding first.
@@ -303,7 +325,7 @@ Navigation: bottom bar Today / Forecast / **Record (hi-vis centre button)** / Mo
 1. Use the phone-only link for real on the farm; share it from the page's Share menu; note friction points.
 2. Share https://fergtech-agri-it-ireland.github.io/agri-it/ with testers (installed and working on Feargal's Android). The Claude artifact link is a fallback.
 3. Re-verify supplier numbers; decide on Arrabawn Tipperary contact.
-4. Finish the Supabase project `agri-it`: apply migrations 2 to 4 (`supabase link --project-ref xgudpylxmrlywegpdvps`, `supabase db push`), load reference data only (top half of `seed.sql`, not the demo user), then add "move my phone data to my account" using the backup JSON.
+4. Finish the Supabase project `agri-it`: apply migrations 2 to 5 (`supabase link --project-ref xgudpylxmrlywegpdvps`, `supabase db push`), load reference data only (top half of `seed.sql`, not the demo user), then add "move my phone data to my account" using the backup JSON.
 5. Deploy `dist/` (Vercel, Netlify or Cloudflare Pages) with env vars; set auth redirect URLs; turn on email confirmation.
 6. Server push for reminders once hosted (needed for iPhone with the app closed): VAPID keys, a `push_subscriptions` table, and a scheduled Supabase edge function that sends the same message the digest builds. The service worker already shows pushes.
 7. P1 from spec still open: accountant pack export polish. (Photo reading, price history and budget alerts done.)

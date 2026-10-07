@@ -47,7 +47,7 @@ with sync_playwright() as p:
     check('Reminder times kept on this phone', pg.get_by_role('button', name='7am').get_attribute('aria-pressed') == 'true')
     go(pg, '#/')
     check('Nudge gone once reminders are set', pg.get_by_role('link', name='Get a nudge at milking time to tick these off').count() == 0)
-    check('Setting reminders recorded nothing', "0 of 3 done" in pg.locator('main').inner_text())
+    check("Setting reminders recorded nothing", "0 of 3 ticked off" in pg.locator('main').inner_text())
 
     # B. Price history on the feed screen
     go(pg, f'#/feed/{NUT}')

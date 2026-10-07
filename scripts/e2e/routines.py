@@ -16,12 +16,22 @@ with sync_playwright() as p:
     pg.on('pageerror', lambda e: errors.append(str(e)))
     def go(h):
         pg.goto(URL + h); pg.locator('main').first.wait_for(timeout=10000); pg.wait_for_timeout(350)
-    checklist = lambda: pg.locator('section[aria-labelledby=checklist-title]')
+    # The day's tick-offs live in the Diary: a Feeding section and a Jobs and routines section
+    feeding = lambda: pg.locator('section[aria-labelledby=checklist-feeding]')
+    class Both:
+        def inner_text(self):
+            return feeding().inner_text() + '\n' + pg.locator('section[aria-labelledby=checklist-jobs-and-routines]').inner_text()
+    checklist = lambda: Both()
     toast = lambda: ' '.join(pg.locator('[role=status]').all_inner_texts())
-    card = lambda name: pg.locator('article', has_text=name).first.inner_text().replace('\n', ' | ')
+    def card(name):
+        # Feed cards with "in store" are on Progress > Feed; come back to the diary after
+        go('#/progress?tab=feed')
+        t = pg.locator('article', has_text=name).first.inner_text().replace('\n', ' | ')
+        go('#/diary')
+        return t
 
     # 1. What's due
-    go('#/')
+    go('#/diary')
     t = checklist().inner_text()
     check('Checklist: 0 of 3 done', '0 of 3 done' in t, t[:200])
     check('All fed as planned button with total', 'All fed as planned (307 kg)' in t)
@@ -35,20 +45,20 @@ with sync_playwright() as p:
     pg.get_by_role('button', name='Fed 27 kg: Calves: 27 kg Calf ration').click()
     pg.wait_for_timeout(500)
     check('Toast says what is left', 'Fed 27 kg' in toast() and 'about 308 kg left' in toast(), toast())
-    check('Progress 1 of 3', '1 of 3 done' in checklist().inner_text())
+    check('Progress 1 of 3', '1 of 3 done' in feeding().inner_text())
     check('Calf ration card now 308 kg', '308 kg in store' in card('Calf ration'), card('Calf ration'))
 
     # 3. All fed as planned
     pg.get_by_role('button', name=re.compile('All fed as planned')).click()
     pg.wait_for_timeout(500)
-    check('All feeding done: 3 of 3', '3 of 3 done' in checklist().inner_text())
+    check('All feeding done: 3 of 3', '3 of 3 done' in feeding().inner_text())
     check('Dairy nut drops by 280 kg to 8.3 t', '8.3 t in store' in card('Dairy nut'), card('Dairy nut'))
 
     # 4. Untick from the list
     pg.get_by_role('button', name=re.compile(r'Show done \(3\)')).click()
     pg.get_by_role('button', name='Untick: Calves: 27 kg Calf ration').click()
     pg.wait_for_timeout(500)
-    check('Untick puts it back: 2 of 3', '2 of 3 done' in checklist().inner_text())
+    check('Untick puts it back: 2 of 3', '2 of 3 done' in feeding().inner_text())
     check('Calf ration back to 335 kg', '335 kg in store' in card('Calf ration'), card('Calf ration'))
 
     # 5. Change the amount
@@ -57,7 +67,7 @@ with sync_playwright() as p:
     dlg.locator('input').fill('20')
     dlg.get_by_role('button', name='Fed 20 kg').click()
     pg.wait_for_timeout(500)
-    if pg.get_by_role('button', name=re.compile(r'Show done')).count(): pg.get_by_role('button', name=re.compile(r'Show done')).click()
+    while pg.get_by_role('button', name=re.compile(r'Show done')).count(): pg.get_by_role('button', name=re.compile(r'Show done')).first.click(); pg.wait_for_timeout(100)
     t = checklist().inner_text()
     check('Changed amount recorded against plan', 'Fed 20 kg (plan 27 kg)' in t, t[:600])
     check('Calf ration uses actual 20 kg: 315 kg', '315 kg in store' in card('Calf ration'), card('Calf ration'))
@@ -75,12 +85,12 @@ with sync_playwright() as p:
     check('Cost recorded in Money', 'Loan repayment' in m and '−€5,000' in m, m[-900:])
 
     # 7. Stock count routine opens the count and ticks itself off
-    go('#/')
+    go('#/diary')
     pg.get_by_role('link', name='Count now: Dip the nut bin').click()
     pg.get_by_text('How much is there?').wait_for()
     pg.locator('#qty').fill('8')
     pg.get_by_role('button', name='Save count').click()
-    pg.get_by_label('Farm at a glance').wait_for(); pg.wait_for_timeout(500)
+    pg.wait_for_timeout(800); go('#/diary')
     check('Count routine ticked off', 'Dip the nut bin' not in checklist().inner_text())
     check('Dairy nut stock now the count, 8 t', '8 t in store' in card('Dairy nut'), card('Dairy nut'))
 
@@ -95,12 +105,12 @@ with sync_playwright() as p:
     pg.get_by_role('button', name=re.compile('^Job')).click()
     pg.get_by_label('What needs doing?').fill('Wash bulk tank filter')
     pg.get_by_role('button', name='Every day').click()
-    check('Form previews when it first shows', 'Shows on Today, today.' in pg.locator('main').inner_text())
+    check('Form previews when it first shows', 'Shows in the diary today.' in pg.locator('main').inner_text(), pg.locator('main').inner_text()[-300:])
     pg.screenshot(path=f'{OUT}/routine-form.png')
     pg.get_by_role('button', name='Add routine').click()
     pg.wait_for_timeout(500)
-    go('#/')
-    check('New job is on Today', 'Wash bulk tank filter' in checklist().inner_text())
+    go('#/diary')
+    check('New job is in the diary', 'Wash bulk tank filter' in checklist().inner_text())
     pg.get_by_role('button', name='Done: Wash bulk tank filter').click()
     pg.wait_for_timeout(400)
     check('Job ticked off', 'Done: Wash bulk tank filter' in toast(), toast())
@@ -109,8 +119,8 @@ with sync_playwright() as p:
     go('#/routines')
     pg.locator('li', has_text='In-calf heifers').get_by_role('checkbox').uncheck()
     pg.wait_for_timeout(400)
-    go('#/')
-    if pg.get_by_role('button', name=re.compile(r'Show done')).count(): pg.get_by_role('button', name=re.compile(r'Show done')).click()
+    go('#/diary')
+    while pg.get_by_role('button', name=re.compile(r'Show done')).count(): pg.get_by_role('button', name=re.compile(r'Show done')).first.click(); pg.wait_for_timeout(100)
     check('Rule with ticking off leaves the checklist', 'In-calf heifers' not in checklist().inner_text())
 
     # 10. A bill that repeats becomes a routine
@@ -123,8 +133,8 @@ with sync_playwright() as p:
     go('#/routines')
     check('Repeating bill appears as a monthly routine', re.search(r'Utilities.*Monthly on the', pg.locator('main').inner_text(), re.S) is not None)
 
-    # 11. Diary and Ask
-    go('#/diary')
+    # 11. Diary history and Ask
+    go('#/diary?tab=history')
     d = pg.locator('main').inner_text()
     check('Diary shows ticked-off feeding', 'Feeding ticked off' in d, d[:500])
     check('Diary shows the job done', 'Done: Wash bulk tank filter' in d)
@@ -136,13 +146,13 @@ with sync_playwright() as p:
 
     # 12. Dawn mode screenshot and small-screen overflow
     pg.evaluate("localStorage.setItem('agri-it:dawn','on')")
-    go('#/'); pg.evaluate("window.scrollTo(0, document.getElementById('checklist-title').getBoundingClientRect().top + scrollY - 70)"); pg.wait_for_timeout(200)
+    go('#/diary'); pg.wait_for_timeout(200)
     pg.screenshot(path=f'{OUT}/checklist-dawn.png')
     small = b.new_context(viewport={'width': 360, 'height': 740}); sp = small.new_page()
     sp.on('pageerror', lambda e: errors.append('360px: ' + str(e)))
     for mode in ['off', 'on']:
         sp.goto(URL + '#/'); sp.evaluate(f"localStorage.setItem('agri-it:dawn', '{mode}')")
-        for r_ in ['#/', '#/routines', '#/routines/new', '#/record/cost', '#/diary']:
+        for r_ in ['#/', '#/routines', '#/routines/new', '#/record/cost', '#/diary', '#/diary?tab=history', '#/record', '#/more']:
             sp.goto(URL + r_); sp.locator('main').first.wait_for(timeout=10000); sp.wait_for_timeout(250)
             check(f'No sideways scroll {r_} (dawn {mode})', not sp.evaluate('document.documentElement.scrollWidth > innerWidth + 1'))
     b.close()

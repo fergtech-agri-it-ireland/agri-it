@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ComponentType } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Banknote, Beef, Camera, Check, ClipboardList, Clock, ImagePlus, Loader2, Milk, Package, PackageCheck, Receipt, Ruler, ScanText, Truck, X } from 'lucide-react';
+import { Check, ChevronRight, ClipboardList, Clock, ImagePlus, Loader2, Milk, Package, PackageCheck, Plus, Receipt, ScanLine, ScanText, Search, X } from 'lucide-react';
+import { addOptions, farmTypes } from '../lib/farmTypes';
 import { useFarmCtx, useFarmData } from '../lib/data/farm';
 import { COST_LABEL } from '../lib/types';
 import { eur, fmtDay, fmtKg, fmtNum } from '../lib/format';
@@ -15,18 +16,6 @@ import { PhotoQueueList, readHeadline } from '../components/PhotoQueue';
 import { useToast } from '../components/Toast';
 
 type Icon = ComponentType<{ className?: string }>;
-
-/** Farmer intents from spec section 8, each one tap from here. */
-const NEW: { to: string; label: string; Icon: Icon }[] = [
-  { to: '/record/delivery', label: 'Feed arrived', Icon: PackageCheck },
-  { to: '/record/order', label: 'Ordered feed', Icon: Truck },
-  { to: '/record/milk', label: 'Milk cheque', Icon: Milk },
-  { to: '/record/sale', label: 'Sold animals', Icon: Beef },
-  { to: '/record/cost', label: 'Paid a bill', Icon: Receipt },
-  { to: '/record/count', label: 'Stock count', Icon: Ruler },
-  { to: '/records/new', label: 'Farm record', Icon: ClipboardList },
-  { to: '/record/income', label: 'Other income', Icon: Banknote }
-];
 
 /** What a docket photo can be, and which form it opens with the photo attached. */
 const PHOTO_KINDS: { to: string; label: string; sub: string; Icon: Icon }[] = [
@@ -57,6 +46,8 @@ export default function Record() {
   const [photo, setPhoto] = useState<File | null>(null);
   const [phase, setPhase] = useState<Phase | null>(null);
   const run = useRef(0);
+  const [query, setQuery] = useState('');
+  const [tab, setTab] = useState<'recent' | 'all' | null>(null);
   // Sample photos ship in the demo build only
   const [samples, setSamples] = useState<typeof import('../lib/demo/samples') | null>(null);
   useEffect(() => { if (import.meta.env.VITE_DEMO === '1') import('../lib/demo/samples').then(setSamples).catch(() => {}); }, []);
@@ -126,64 +117,110 @@ export default function Record() {
     });
   }
 
+  const types = farmTypes(b.farm);
+  const options = addOptions(types);
+  const q = query.trim().toLowerCase();
+  const match = (...t: string[]) => !q || t.some((x) => x.toLowerCase().includes(q));
+  const shownRepeats = repeats.filter((r) => match(r.title, r.sub));
+  const shownOptions = options.filter((o) => match(o.label, o.sub));
+  const firstUseful = options[0];
+  const showTab = q ? 'search' : tab ?? (repeats.length ? 'recent' : 'all');
+
+  const optionRow = (o: (typeof options)[number]) => (
+    <Link key={o.id} to={o.to} className="flex min-h-[3.75rem] items-center gap-3 py-2 pl-4 pr-3 hover:bg-pasture">
+      <span className="min-w-0 flex-1"><b className="block text-[0.9375rem] font-semibold leading-snug">{o.label}</b><span className="text-[0.8125rem] text-muted">{o.sub}</span></span>
+      <ChevronRight className="h-5 w-5 shrink-0 text-muted" aria-hidden />
+    </Link>
+  );
+  const repeatRow = (r: (typeof repeats)[number]) => (
+    <Link key={r.key} to={r.to} aria-label={`Add again: ${r.title}`} className="flex min-h-[3.75rem] items-center gap-3 py-2 pl-4 pr-3 hover:bg-pasture">
+      <span className="min-w-0 flex-1"><b className="block text-[0.9375rem] font-semibold leading-snug">{r.title}</b><span className="text-[0.8125rem] text-muted">{r.sub}</span></span>
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-field text-accent" aria-hidden><Plus className="h-5 w-5" strokeWidth={2.75} /></span>
+    </Link>
+  );
+
   return (
-    <main className="mx-auto w-full max-w-xl px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-[calc(0.75rem+env(safe-area-inset-top))]">
-      <div className="flex items-center justify-between">
-        <h1 className="h-display text-[2.25rem]">Record</h1>
-        <button onClick={() => nav(-1)} aria-label="Close" className="-mr-2 flex h-14 w-14 items-center justify-center rounded-full hover:bg-field-light">
-          <X className="h-7 w-7" aria-hidden />
+    <main className="mx-auto min-h-[100dvh] w-full max-w-xl bg-card pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-[env(safe-area-inset-top)]">
+      <div className="flex items-center gap-1 px-2 pt-2">
+        <button onClick={() => nav(-1)} aria-label="Close" className="flex h-12 w-12 items-center justify-center rounded-full hover:bg-pasture">
+          <X className="h-6 w-6" aria-hidden />
         </button>
+        <h1 className="h-display text-xl">Add to diary</h1>
       </div>
 
-      <label className="mt-2 flex min-h-[5.25rem] cursor-pointer items-center gap-3.5 rounded-[1.375rem] bg-field px-4 py-3 text-white">
-        {/* The demo page can't use the camera, so it opens the file picker instead */}
-        <input type="file" accept="image/*,application/pdf" {...(IS_DEMO ? {} : { capture: 'environment' as const })} className="sr-only" data-testid="photo-input"
-          onChange={(e) => { choose(e.target.files?.[0] ?? null); e.target.value = ''; }} />
-        <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-hivis text-onhivis">{IS_DEMO ? <ImagePlus className="h-8 w-8" aria-hidden /> : <Camera className="h-8 w-8" aria-hidden />}</span>
-        <span className="min-w-0"><b className="block text-[1.1875rem]">{IS_DEMO ? 'Pick a docket or invoice photo' : 'Photo a docket or invoice'}</b><span className="text-[0.95rem] text-white/85">Agri-It reads it and fills in the form. You check, then save.</span></span>
-      </label>
+      <div className="px-4 pt-2">
+        <label className="flex h-12 items-center gap-2.5 rounded-full bg-pasture px-4 text-muted">
+          <Search className="h-5 w-5 shrink-0" aria-hidden />
+          <input type="search" aria-label="Search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search feed, bills, sales"
+            className="h-full min-w-0 flex-1 bg-transparent text-base text-ink placeholder:text-muted focus:outline-none" />
+        </label>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2.5 px-4 pt-3">
+        <label className="flex min-h-[5rem] cursor-pointer flex-col items-center justify-center gap-1.5 rounded-2xl bg-field px-2 text-center text-white active:bg-field-dark">
+          {/* The demo page can't use the camera, so it opens the file picker instead */}
+          <input type="file" accept="image/*,application/pdf" {...(IS_DEMO ? {} : { capture: 'environment' as const })} className="sr-only" data-testid="photo-input"
+            onChange={(e) => { choose(e.target.files?.[0] ?? null); e.target.value = ''; }} />
+          {IS_DEMO ? <ImagePlus className="h-6 w-6" aria-hidden /> : <ScanLine className="h-6 w-6" aria-hidden />}
+          <b className="text-sm leading-tight">{IS_DEMO ? 'Pick a docket photo' : 'Scan a docket'}</b>
+        </label>
+        {firstUseful && (
+          <Link to={firstUseful.to} className="flex min-h-[5rem] flex-col items-center justify-center gap-1.5 rounded-2xl bg-pasture px-2 text-center active:bg-field-light">
+            <Plus className="h-6 w-6 text-accent" aria-hidden />
+            <b className="text-sm leading-tight">{firstUseful.label}</b>
+          </Link>
+        )}
+      </div>
+      <p className="px-4 pt-2 text-[0.8125rem] text-muted">A photo is read on this phone and fills in the form. You check it, then save.</p>
 
       {samples && (
-        <div className="mt-2" data-testid="samples">
-          <p className="px-1 text-[0.95rem] font-bold text-muted">Or try a sample photo</p>
-          <div className="mt-1 grid grid-cols-3 gap-2">
+        <div className="px-4 pt-2" data-testid="samples">
+          <p className="eyebrow">Or try a sample photo</p>
+          <div className="mt-1.5 grid grid-cols-3 gap-2">
             {samples.SAMPLES.map((s) => (
-              <button key={s.name} onClick={async () => choose(await samples.sampleFile(s))} className="flex flex-col items-center gap-1 rounded-2xl bg-card p-2 text-center shadow-lift active:bg-field-light" data-sample={s.name}>
-                <img src={s.url} alt="" className="h-20 w-full rounded-lg object-cover" />
-                <b className="text-[0.95rem] leading-tight">{s.label}</b>
-                <span className="text-xs leading-tight text-muted">{s.sub}</span>
+              <button key={s.name} onClick={async () => choose(await samples.sampleFile(s))} className="flex flex-col items-center gap-1 rounded-xl bg-pasture p-2 text-center active:bg-field-light" data-sample={s.name}>
+                <img src={s.url} alt="" className="h-16 w-full rounded-lg object-cover" />
+                <b className="text-[0.8125rem] leading-tight">{s.label}</b>
+                <span className="text-[0.6875rem] leading-tight text-muted">{s.sub}</span>
               </button>
             ))}
           </div>
         </div>
       )}
 
-      <PhotoQueueList />
+      <div className="px-4"><PhotoQueueList /></div>
 
-      {repeats.length > 0 && (
-        <>
-          <h2 className="h-display mb-2 mt-5 text-2xl">Same as last time</h2>
-          <div className="divide-y divide-line overflow-hidden rounded-[1.375rem] bg-card shadow-lift">
-            {repeats.map((r) => (
-              <Link key={r.key} to={r.to} className="flex min-h-[4.5rem] items-center gap-3 py-2 pl-3.5 pr-2.5 hover:bg-pasture">
-                <r.Icon className="h-[1.875rem] w-[1.875rem] shrink-0 text-accent" aria-hidden />
-                <span className="min-w-0 flex-1"><b className="block leading-snug">{r.title}</b><span className="text-[0.95rem] text-muted">{r.sub}</span></span>
-                <span className="flex min-h-[3.5rem] min-w-[4rem] shrink-0 items-center justify-center rounded-2xl bg-hivis px-3 font-bold text-onhivis" aria-hidden>Add</span>
-              </Link>
-            ))}
-          </div>
-          <p className="mt-1.5 px-1 text-sm text-muted">Opens the form filled in from last time, dated today. Check it, then save.</p>
-        </>
+      {showTab !== 'search' && (
+        <div role="tablist" aria-label="What to add" className="mt-4 flex gap-6 border-b border-line px-4 text-sm font-bold">
+          {repeats.length > 0 && (
+            <button role="tab" aria-selected={showTab === 'recent'} onClick={() => setTab('recent')}
+              className={`min-h-[2.75rem] ${showTab === 'recent' ? 'text-accent shadow-[inset_0_-3px_0_rgb(var(--accent))]' : 'text-muted'}`}>Recent</button>
+          )}
+          <button role="tab" aria-selected={showTab === 'all'} onClick={() => setTab('all')}
+            className={`min-h-[2.75rem] ${showTab === 'all' ? 'text-accent shadow-[inset_0_-3px_0_rgb(var(--accent))]' : 'text-muted'}`}>Everything</button>
+        </div>
       )}
 
-      <h2 className="h-display mb-2 mt-5 text-2xl">Something new</h2>
-      <div className="grid grid-cols-2 gap-2">
-        {NEW.map(({ to, label, Icon }) => (
-          <Link key={to} to={to} className="flex min-h-[4.25rem] items-center gap-3 rounded-[1.125rem] bg-card px-3 py-2 font-bold leading-tight shadow-lift active:bg-field-light">
-            <Icon className="h-[1.875rem] w-[1.875rem] shrink-0 text-accent" aria-hidden />{label}
-          </Link>
-        ))}
-      </div>
+      {showTab === 'recent' && (
+        <>
+          <div className="divide-y divide-line border-b border-line">{repeats.map(repeatRow)}</div>
+          <p className="px-4 pt-2 text-[0.8125rem] text-muted">Opens the form filled in from last time, dated today. Check it, then save.</p>
+        </>
+      )}
+      {showTab === 'all' && (
+        <div className="divide-y divide-line border-b border-line">
+          {options.filter((o) => o.relevant).map(optionRow)}
+          {options.some((o) => !o.relevant) && <p className="eyebrow bg-pasture px-4 py-2">Other things you can add</p>}
+          {options.filter((o) => !o.relevant).map(optionRow)}
+        </div>
+      )}
+      {showTab === 'search' && (
+        <div className="mt-3 divide-y divide-line border-y border-line">
+          {shownRepeats.map(repeatRow)}
+          {shownOptions.map(optionRow)}
+          {shownRepeats.length + shownOptions.length === 0 && <p className="px-4 py-4 text-muted">Nothing matches &quot;{query}&quot;. Try feed, bill, milk or sale.</p>}
+        </div>
+      )}
 
       <Sheet open={!!photo} onClose={close} title={phase?.stage === 'reading' ? 'Reading the photo' : phase?.stage === 'read' ? 'Read from photo' : 'What is this?'}>
         {phase?.stage === 'reading' && (
@@ -192,7 +229,7 @@ export default function Record() {
               const at = STEPS.findIndex((x) => x.step === phase.progress.step);
               const state = i < at ? 'done' : i === at ? 'now' : 'next';
               return (
-                <p key={s.step} className={`flex min-h-[2.75rem] items-center gap-2.5 text-lg ${state === 'next' ? 'text-muted' : 'font-bold'}`}>
+                <p key={s.step} className={`flex min-h-[2.75rem] items-center gap-2.5 ${state === 'next' ? 'text-muted' : 'font-bold'}`}>
                   {state === 'done' ? <Check className="h-6 w-6 text-ok" aria-hidden /> : state === 'now' ? <Loader2 className="h-6 w-6 animate-spin text-accent" aria-hidden /> : <Clock className="h-6 w-6" aria-hidden />}
                   {s.label}{state === 'now' && phase.progress.progress > 0 && phase.progress.progress < 1 ? ` ${Math.round(phase.progress.progress * 100)}%` : ''}
                 </p>
@@ -204,9 +241,9 @@ export default function Record() {
 
         {phase?.stage === 'read' && (
           <div className="pb-3" data-testid="read-result">
-            <div className="rounded-2xl border-2 border-field bg-pasture p-3">
+            <div className="rounded-2xl bg-field-light p-3">
               <p className="flex items-center gap-1.5 font-bold text-accent"><ScanText className="h-5 w-5" aria-hidden />Looks like</p>
-              <p className="text-2xl font-bold leading-tight" data-testid="read-result-kind">{kindLabel(phase.read)}</p>
+              <p className="text-xl font-extrabold leading-tight" data-testid="read-result-kind">{kindLabel(phase.read)}</p>
               <p className="mt-0.5 text-lg">{readHeadline(phase.read)}</p>
               {phase.read.missing.length > 0 && <p className="mt-1 text-[0.95rem] text-muted">To fill in yourself: {phase.read.missing.join(', ')}</p>}
             </div>
@@ -233,9 +270,9 @@ export default function Record() {
         <div className={`grid gap-2 pb-2 ${phase?.stage === 'reading' ? 'hidden' : ''}`}>
           {PHOTO_KINDS.map(({ to, label, sub, Icon }) => (
             <button key={to} onClick={() => open(to, phase?.stage === 'read' && (to === '/record/delivery' || to === '/record/cost') ? phase.read : null)}
-              className="flex min-h-[4.5rem] items-center gap-3.5 rounded-2xl border-2 border-line bg-pasture px-4 text-left hover:border-field active:bg-field-light">
-              <Icon className="h-8 w-8 shrink-0 text-accent" aria-hidden />
-              <span><b className="block text-lg leading-tight">{label}</b><span className="text-[0.95rem] text-muted">{sub}</span></span>
+              className="flex min-h-[3.75rem] items-center gap-3 rounded-2xl border border-line bg-card px-4 text-left hover:border-field active:bg-field-light">
+              <Icon className="h-6 w-6 shrink-0 text-accent" aria-hidden />
+              <span><b className="block font-semibold leading-tight">{label}</b><span className="text-[0.8125rem] text-muted">{sub}</span></span>
             </button>
           ))}
         </div>

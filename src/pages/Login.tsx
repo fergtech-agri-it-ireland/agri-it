@@ -34,7 +34,7 @@ export default function Login() {
       <div className="flex items-center gap-3">
         <Logo className="h-14 w-14" />
         <div>
-          <h1 className="h-display text-5xl">Agri-It</h1>
+          <h1 className="h-display text-4xl">Agri-It</h1>
           <p className="text-muted">Feed, cash and records. Enter it once.</p>
         </div>
       </div>

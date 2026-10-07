@@ -86,7 +86,7 @@ export default function Settings() {
           Default delivery time for feed
         </label>
         {knowLead && <Stepper label="Days from order to delivery" value={lead} onChange={setLead} unit="days" hint="Used when a feed or supplier has no lead time of its own." />}
-        <Stepper label="Feed you like to have in hand" value={feedTarget} step={5} min={1} onChange={setFeedTarget} unit="days" hint="Fills the Feed dial on Today. Your own comfort level, not a recommendation." />
+        <Stepper label="Feed you like to have in hand" value={feedTarget} step={5} min={1} onChange={setFeedTarget} unit="days" hint="Fills the feed ring on the dashboard. Your own comfort level, not a recommendation." />
         <div className="grid grid-cols-2 gap-2">
           <Field label="Housing from" htmlFor="h"><input id="h" type="date" className="input" value={housing} onChange={(e) => setHousing(e.target.value)} /></Field>
           <Field label="Turnout" htmlFor="t"><input id="t" type="date" className="input" value={turnout} onChange={(e) => setTurnout(e.target.value)} /></Field>

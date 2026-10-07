@@ -25,7 +25,7 @@ const queryClient = new QueryClient({
   }
 });
 // Bump when the shape of cached farm data changes, so an older cache is thrown away instead of crashing screens.
-const CACHE_VERSION = 'v3-routines';
+const CACHE_VERSION = 'v4-farm-types';
 const persister = createSyncStoragePersister({ storage: window.localStorage, key: 'agri-it:cache' });
 
 startThemeClock();

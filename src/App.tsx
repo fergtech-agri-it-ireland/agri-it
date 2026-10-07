@@ -34,6 +34,8 @@ import Saved from './pages/Saved';
 import Diary from './pages/Diary';
 import Routines from './pages/Routines';
 import RoutineForm from './pages/RoutineForm';
+import Crops from './pages/Crops';
+import FarmTypes from './pages/FarmTypes';
 
 export default function App() {
   if (!supabaseConfigured) return <MissingConfig />;
@@ -44,6 +46,8 @@ export default function App() {
       <Route element={<RequireFarm />}>
         <Route index element={<Today />} />
         <Route path="forecast" element={<Forecast />} />
+        <Route path="progress" element={<Forecast />} />
+        <Route path="more" element={<FarmHub />} />
         <Route path="feed/new" element={<FeedEdit />} />
         <Route path="feed/:id" element={<FeedDetail />} />
         <Route path="feed/:id/edit" element={<FeedEdit />} />
@@ -68,6 +72,8 @@ export default function App() {
         <Route path="money/budget" element={<Budget />} />
         <Route path="farm" element={<FarmHub />} />
         <Route path="farm/groups" element={<Groups />} />
+        <Route path="farm/types" element={<FarmTypes />} />
+        <Route path="farm/crops" element={<Crops />} />
         <Route path="farm/silage" element={<Silage />} />
         <Route path="farm/silage/new" element={<SilageForm />} />
         <Route path="farm/silage/:id/edit" element={<SilageForm />} />

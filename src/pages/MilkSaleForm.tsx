@@ -70,7 +70,7 @@ export default function MilkSaleForm() {
         ...(cash && row.occurred_on <= today ? [{ label: 'Cash recorded', before: eur(cash.balance), after: eur(cash.balance + row.amount_eur) }] : []),
         ...(cpl !== null ? [{ label: 'This cheque', after: `${fmtNum(cpl)} c/L`, sub: litresYear > 0 ? `Year average ${fmtNum((litresWithPrice / litresYear) * 100)} c/L` : undefined }] : [])
       ],
-      note: `Added to income, cash flow and the year-end pack.${rep ? ` Repeats ${repeat}: the next one shows on Today, ready to tick off with the real amount.` : ''}`,
+      note: `Added to income, cash flow and the year-end pack.${rep ? ` Repeats ${repeat}: the next one shows in the diary, ready to tick off with the real amount.` : ''}`,
       undo: [...(rep ? [{ kind: 'delete' as const, table: 'routines', match: { id: rep.routine.id } }] : []), { kind: 'delete', table: 'income', match: { id: row.id } }],
       undoLabel: 'Milk cheque removed',
       photo: documentId ? undefined : { table: 'income', id: row.id, recordType: 'invoice' },

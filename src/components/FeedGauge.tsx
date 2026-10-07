@@ -12,7 +12,7 @@ export function SiloBar({ f }: { f: FeedForecast }) {
   const safety = Math.min(100, (f.safetyKg / peak) * 100);
   const fill = f.status === 'order_now' ? 'bg-danger' : f.status === 'order_soon' ? 'bg-hivis' : 'bg-field';
   return (
-    <div className="relative h-full w-7 shrink-0 overflow-hidden rounded-t-full rounded-b-md border-2 border-ink/80 bg-pasture" role="img"
+    <div className="relative h-full w-7 shrink-0 overflow-hidden rounded-t-full rounded-b-md border border-line bg-track" role="img"
       aria-label={`${Math.round(pct)}% of recent peak stock`}>
       <div className={`absolute inset-x-0 bottom-0 ${fill}`} style={{ height: `${pct}%` }} />
       <div className="absolute inset-x-0 border-t-2 border-dashed border-ink" style={{ bottom: `${safety}%` }} title="Reorder line" />

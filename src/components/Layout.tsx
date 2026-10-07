@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, Navigate, Outlet, useLocation } from 'react-router-dom';
-import { Banknote, CalendarRange, CloudOff, Home, Plus, RefreshCw, Tractor } from 'lucide-react';
+import { BookOpen, CloudOff, LayoutGrid, LineChart, MoreHorizontal, Plus, RefreshCw } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useBundle, useFarmCtx } from '../lib/data/farm';
 import { useDerived, useSnapshotRecorder } from '../lib/data/derived';
@@ -17,24 +17,24 @@ function DemoBanner() {
   const [confirm, setConfirm] = useState(false);
   return (
     <div className="no-print mx-auto flex max-w-xl items-center gap-3 px-3 pt-2">
-      <p className="min-w-0 flex-1 rounded-xl bg-hivis px-3 py-2 text-sm font-bold leading-snug text-onhivis">
+      <p className="min-w-0 flex-1 rounded-xl bg-warn-bg px-3 py-2 text-[0.8125rem] font-semibold leading-snug text-warn">
         Demo farm with sample data. Changes stay on this device only.
       </p>
       {confirm ? (
-        <button onClick={resetDemo} className="min-h-tap shrink-0 rounded-xl bg-inverse px-3 text-sm font-bold text-oninverse">Reset now</button>
+        <button onClick={resetDemo} className="min-h-[2.5rem] shrink-0 rounded-full bg-inverse px-4 text-sm font-bold text-oninverse">Reset now</button>
       ) : (
-        <button onClick={() => setConfirm(true)} className="min-h-tap shrink-0 rounded-xl border-2 border-ink/80 bg-card px-3 text-sm font-bold">Reset</button>
+        <button onClick={() => setConfirm(true)} className="min-h-[2.5rem] shrink-0 rounded-full border border-line bg-card px-4 text-sm font-bold">Reset</button>
       )}
     </div>
   );
 }
 
 const tabs = [
-  { to: '/', label: 'Today', Icon: Home, end: true },
-  { to: '/forecast', label: 'Forecast', Icon: CalendarRange },
-  null, // centre record button
-  { to: '/money', label: 'Money', Icon: Banknote },
-  { to: '/farm', label: 'Farm', Icon: Tractor }
+  { to: '/', label: 'Dashboard', Icon: LayoutGrid, end: true, also: [] as string[] },
+  { to: '/diary', label: 'Diary', Icon: BookOpen, also: [] as string[] },
+  null, // centre add button
+  { to: '/progress', label: 'Progress', Icon: LineChart, also: ['/forecast'] },
+  { to: '/more', label: 'More', Icon: MoreHorizontal, also: ['/money', '/farm', '/suppliers', '/records', '/routines', '/settings', '/ask', '/feed'] }
 ] as const;
 
 function SyncStatus() {
@@ -78,27 +78,27 @@ function SyncStatus() {
 }
 
 function BottomNav() {
+  const loc = useLocation();
   return (
-    <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-card" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+    <nav aria-label="Main" className="no-print fixed inset-x-0 bottom-0 z-30 border-t border-line bg-card" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
       <ul className="mx-auto grid max-w-xl grid-cols-5">
         {tabs.map((t, i) =>
           t === null ? (
-            <li key="rec" className="flex justify-center">
-              <Link to="/record" aria-label="Record something"
-                className="-mt-6 flex h-[4.5rem] w-[4.5rem] flex-col items-center justify-center rounded-full border-4 border-card bg-hivis text-onhivis shadow-lg active:bg-hivis-dark">
-                <Plus className="h-9 w-9" strokeWidth={3} aria-hidden />
+            <li key="add" className="flex justify-center">
+              <Link to="/record" aria-label="Add to diary"
+                className="-mt-4 flex h-14 w-14 items-center justify-center rounded-full bg-field text-white shadow-float active:bg-field-dark">
+                <Plus className="h-7 w-7" strokeWidth={2.75} aria-hidden />
               </Link>
             </li>
           ) : (
             <li key={i}>
               <NavLink to={t.to} end={'end' in t ? t.end : false}
-                className={({ isActive }) => `flex min-h-[4.25rem] flex-col items-center justify-center gap-0.5 text-[0.8rem] font-bold ${isActive ? 'text-accent' : 'text-muted'}`}>
-                {({ isActive }) => (
-                  <>
-                    <span className={`flex h-8 w-14 items-center justify-center rounded-full ${isActive ? 'bg-field-light' : ''}`}><t.Icon className="h-6 w-6" aria-hidden /></span>
-                    {t.label}
-                  </>
-                )}
+                className={({ isActive }) => {
+                  const on = isActive || t.also.some((p) => loc.pathname.startsWith(p));
+                  return `flex min-h-[3.75rem] flex-col items-center justify-center gap-1 text-[0.6875rem] font-bold ${on ? 'text-accent' : 'text-muted'}`;
+                }}>
+                <t.Icon className="h-[1.375rem] w-[1.375rem]" aria-hidden />
+                {t.label}
               </NavLink>
             </li>
           )
@@ -118,7 +118,7 @@ function Recorder({ bundle }: { bundle: FarmBundle }) {
 export function AppShell() {
   const { data } = useBundle();
   const loc = useLocation();
-  const hideNav = loc.pathname.startsWith('/record') || /^\/routines\/.+/.test(loc.pathname) || /\/(new|count|edit)$/.test(loc.pathname) || loc.pathname.includes('/rule/');
+  const hideNav = loc.pathname.startsWith('/record') || /^\/routines\/.+/.test(loc.pathname) || /\/(new|count|edit)$/.test(loc.pathname) || loc.pathname.includes('/rule/') || loc.pathname === '/farm/types' || loc.pathname === '/money/budget';
   return (
     <>
       <SyncStatus />
@@ -141,7 +141,7 @@ export function RequireFarm() {
   if (bundle.isError && !bundle.data) {
     return (
       <div className="mx-auto max-w-md p-6 text-center">
-        <p className="h-display text-3xl">Can't load your farm</p>
+        <p className="h-display text-xl">Can't load your farm</p>
         <p className="mt-2 text-muted">{(bundle.error as Error).message}</p>
         <Button className="mt-4" onClick={() => bundle.refetch()}>Try again</Button>
       </div>
@@ -156,7 +156,7 @@ export function Splash() {
     <div className="flex min-h-[100dvh] items-center justify-center">
       <div className="flex items-center gap-3 text-accent">
         <Logo className="h-10 w-10 animate-pulse" />
-        <span className="h-display text-3xl">Agri-It</span>
+        <span className="h-display text-2xl">Agri-It</span>
       </div>
     </div>
   );

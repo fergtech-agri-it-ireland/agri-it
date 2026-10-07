@@ -12,12 +12,14 @@
 import { buildReference, buildSeed, DEFAULTS, DEMO_USER, type DB, type Row } from './seed';
 import { todayISO } from '../format';
 import { IS_LOCAL } from '../env';
+import { farmTypes, legacyEnterprise } from '../farmTypes';
+import type { FarmType } from '../types';
 
 const DB_KEY = IS_LOCAL ? 'agri-it:phone-db' : 'agri-it:demo-db';
 const SIGNED_OUT_KEY = 'agri-it:demo-signed-out';
 // Demo: bump when the seed's shape changes so stored demo data is rebuilt.
 // Phone: the farmer's own records. NEVER thrown away on a version change; migrate instead.
-const VERSION = IS_LOCAL ? 1 : 4;
+const VERSION = IS_LOCAL ? 1 : 5;
 const LOCAL_USER = { id: '20000000-0000-0000-0000-0000000000aa', email: 'This phone' };
 const USER = IS_LOCAL ? LOCAL_USER : DEMO_USER;
 const fresh = (): DB => (IS_LOCAL ? buildReference() : buildSeed());
@@ -324,7 +326,8 @@ function setHeadCount(groupId: string, heads: number, reason = 'manual', effecti
 const rpcs: Record<string, (a: Args) => unknown> = {
   create_farm: (a) => {
     const id = uuid();
-    table('farms').push({ ...DEFAULTS.farms(), id, name: String(a.p_name).trim(), county: a.p_county, eircode: a.p_eircode ? String(a.p_eircode).trim().toUpperCase() : null, jurisdiction: a.p_jurisdiction ?? 'ROI', enterprise: a.p_enterprise ?? 'dairy', default_lead_time_days: a.p_default_lead_time_days ?? null, created_by: USER.id, created_at: nowISO(), updated_at: nowISO() });
+    const types: FarmType[] = Array.isArray(a.p_enterprises) ? a.p_enterprises : a.p_enterprise ? farmTypes({ enterprise: a.p_enterprise }) : [];
+    table('farms').push({ ...DEFAULTS.farms(), id, name: String(a.p_name).trim(), county: a.p_county, eircode: a.p_eircode ? String(a.p_eircode).trim().toUpperCase() : null, jurisdiction: a.p_jurisdiction ?? 'ROI', enterprise: legacyEnterprise(types), enterprises: types, default_lead_time_days: a.p_default_lead_time_days ?? null, created_by: USER.id, created_at: nowISO(), updated_at: nowISO() });
     table('farm_members').push({ farm_id: id, user_id: USER.id, role: 'owner', added_at: nowISO() });
     return id;
   },

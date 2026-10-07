@@ -30,7 +30,7 @@ export default function YearEnd() {
   return (
     <Screen title="Year-end pack" back="/money" sub={`${b.farm.name}, ${fmtDate(pack.fy.start)} to ${fmtDate(pack.fy.end)}`}>
       <div className="no-print"><Chips columns={2} value={offset} onChange={setOffset} options={[{ value: '0', label: 'This year' }, { value: '-1', label: 'Last year' }]} /></div>
-      <Card className="border-2 border-ink">
+      <Card className="border border-line">
         <p className="font-bold">Management summary only</p>
         <p className="text-muted">Built from the records in Agri-It. It is not a set of statutory accounts and does not calculate taxable profit. Your accountant uses it as a starting point.</p>
       </Card>

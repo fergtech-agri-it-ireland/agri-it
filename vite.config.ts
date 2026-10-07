@@ -29,8 +29,8 @@ export default defineConfig(({ mode }) => {
           name: 'Agri-It',
           short_name: 'Agri-It',
           description: 'Feed run-out, cash flow and farm records in one place',
-          theme_color: '#1D4D36',
-          background_color: '#EEF2EE',
+          theme_color: '#0B7A55',
+          background_color: '#F1F4F2',
           display: 'standalone',
           orientation: 'portrait',
           // Fixed app identity. Without one, Chrome on Android left a broken "already installed"

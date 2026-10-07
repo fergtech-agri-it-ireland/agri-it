@@ -76,7 +76,7 @@ export default function RoutineForm() {
     const ok = await save(
       existing ? [{ kind: 'update', table: 'routines', match: { id: rid }, patch: draft }] : [{ kind: 'insert', table: 'routines', row: { id: rid, ...draft } }],
       {
-        label: existing ? 'Routine saved' : `Routine added. ${next ? `First on Today ${next === today ? 'today' : fmtDay(next)}` : ''}`,
+        label: existing ? 'Routine saved' : `Routine added. ${next ? `First in the diary ${next === today ? 'today' : fmtDay(next)}` : ''}`,
         patch: (x) => ({ ...x, routines: existing ? x.routines.map((r) => (r.id === rid ? { ...r, ...draft } : r)) : [...x.routines, { id: rid, ...draft, created_at: new Date().toISOString() }] }),
         undo: existing ? undefined : [{ kind: 'delete', table: 'routines', match: { id: rid } }]
       }
@@ -150,7 +150,7 @@ export default function RoutineForm() {
           <Field label="Ends (optional)" htmlFor="re"><input id="re" type="date" className="input" value={end} min={start} onChange={(e) => setEnd(e.target.value)} /></Field>
         </div>
         <p className="rounded-xl bg-field-light px-3 py-2.5 font-bold text-accent">
-          {scheduleLabel(draft)}. {next ? (next === today ? 'Shows on Today, today.' : `First on Today ${fmtDay(next)}.`) : 'No dates in range.'}
+          {scheduleLabel(draft)}. {next ? (next === today ? 'Shows in the diary today.' : `First in the diary ${fmtDay(next)}.`) : 'No dates in range.'}
         </p>
       </Card>
 

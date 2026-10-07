@@ -7,7 +7,7 @@ import { checklistProgress, type ChecklistItem, type ChecklistKind } from '../li
 import { completeRoutine, tickAllFeeding, tickFeeding, untick, type TickAction } from '../lib/routineActions';
 import type { FarmBundle } from '../lib/types';
 import { eur, fmtDay, fmtKg, fmtNum } from '../lib/format';
-import { Button, NumberInput, SectionTitle, Sheet } from './ui';
+import { Button, NumberInput, Sheet } from './ui';
 
 const ICON: Record<ChecklistKind, ComponentType<{ className?: string }>> = {
   feeding: Package, silage: Warehouse, count: Ruler, order: Truck, job: Briefcase, expense: Receipt, income: Banknote
@@ -37,15 +37,22 @@ const SAVE_VERB: Record<ChecklistKind, string> = { feeding: 'Fed', expense: 'Pai
  * bills, income, jobs, stock counts, orders and silage feed-out. Ticking records what
  * actually happened, and every forecast updates from it.
  */
-export function Checklist({ b, items, today, feed, title }: {
+export function Checklist({ b, items: all, today, feed, title, kinds, footer, empty }: {
   b: FarmBundle; items: ChecklistItem[]; today: string; feed: Map<string, FeedForecast>; title: string;
+  /** Only these kinds (the diary shows feeding and jobs as separate sections). */
+  kinds?: ChecklistKind[];
+  /** Link at the foot of the card, like a food diary's "Add food". */
+  footer?: { to: string; label: string };
+  /** Shown instead of nothing when there is nothing to tick. */
+  empty?: string;
 }) {
+  const items = kinds ? all.filter((i) => kinds.includes(i.kind)) : all;
   const save = useSave();
   const { farmId } = useFarmCtx();
   const [editing, setEditing] = useState<ChecklistItem | null>(null);
   const [amount, setAmount] = useState('');
   const [showDone, setShowDone] = useState(false);
-  if (items.length === 0) return null;
+  if (items.length === 0 && !empty) return null;
 
   const progress = checklistProgress(items, today);
   const pendingToday = items.filter((i) => i.date === today && i.status === 'pending');
@@ -87,64 +94,71 @@ export function Checklist({ b, items, today, feed, title }: {
     const done = i.status !== 'pending';
     const countLink = i.kind === 'count' && !done ? `/feed/${i.routine!.feed_product_id}/count?routine=${i.routine!.id}&due=${i.date}` : null;
     return (
-      <li key={i.key} className="flex min-h-[4.5rem] items-center gap-3 px-3 py-2">
-        {countLink ? (
-          <Link to={countLink} aria-label={`Count now: ${i.title}`}
-            className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border-[3px] border-ink/70 text-ink">
-            <Ruler className="h-6 w-6" aria-hidden />
-          </Link>
-        ) : (
-          <button onClick={() => tick(i)} aria-pressed={done}
-            aria-label={done ? `Untick: ${i.title}` : `${SAVE_VERB[i.kind]}${i.planned !== null ? ` ${amountText(i, i.planned)}` : ''}: ${i.title}`}
-            className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-full border-[3px] transition-colors ${
-              i.status === 'done' ? 'border-ok bg-ok text-oninverse' : i.status === 'skipped' ? 'border-line bg-track text-muted' : 'border-ink/70 bg-card hover:bg-field-light'}`}>
-            {i.status === 'done' ? <Check className="h-8 w-8" strokeWidth={3} aria-hidden /> : i.status === 'skipped' ? <Minus className="h-7 w-7" strokeWidth={3} aria-hidden /> : null}
-          </button>
-        )}
+      <li key={i.key} className="flex min-h-[3.75rem] items-center gap-3 px-4 py-2">
         <div className="min-w-0 flex-1">
-          <p className={`flex items-start gap-1.5 font-bold leading-snug ${done ? 'text-muted' : ''}`}>
-            <Icon className="mt-[0.2rem] h-[1.125rem] w-[1.125rem] shrink-0 text-accent" aria-hidden /><span className="min-w-0">{i.title}</span>
+          <p className={`flex items-start gap-1.5 text-[0.9375rem] font-semibold leading-snug ${done ? 'text-muted' : ''}`}>
+            <Icon className="mt-[0.2rem] h-4 w-4 shrink-0 text-accent" aria-hidden /><span className="min-w-0">{i.title}</span>
           </p>
-          <p className="text-[0.95rem] text-muted">
+          <p className="text-[0.8125rem] text-muted">
             {i.date < today && <b className="text-warn">{fmtDay(i.date)}. </b>}
             {done ? doneText(i) : i.sub}
           </p>
         </div>
         {!done && i.kind !== 'count' && (
-          <button onClick={() => openEdit(i)} className="min-h-tap shrink-0 rounded-xl px-2.5 font-bold text-accent hover:bg-field-light">Change</button>
+          <button onClick={() => openEdit(i)} className="min-h-[2.5rem] shrink-0 rounded-full px-2 text-sm font-bold text-accent hover:bg-field-light">Change</button>
+        )}
+        {countLink ? (
+          <Link to={countLink} aria-label={`Count now: ${i.title}`}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 border-line text-ink">
+            <Ruler className="h-5 w-5" aria-hidden />
+          </Link>
+        ) : (
+          <button onClick={() => tick(i)} aria-pressed={done}
+            aria-label={done ? `Untick: ${i.title}` : `${SAVE_VERB[i.kind]}${i.planned !== null ? ` ${amountText(i, i.planned)}` : ''}: ${i.title}`}
+            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+              i.status === 'done' ? 'border-field bg-field text-white' : i.status === 'skipped' ? 'border-line bg-track text-muted' : 'border-line bg-card hover:border-field'}`}>
+            {i.status === 'done' ? <Check className="h-5 w-5" strokeWidth={3} aria-hidden /> : i.status === 'skipped' ? <Minus className="h-5 w-5" strokeWidth={3} aria-hidden /> : null}
+          </button>
         )}
       </li>
     );
   };
 
+  const headId = `checklist-${title.replace(/\W+/g, '-').toLowerCase()}`;
   return (
-    <section aria-labelledby="checklist-title" className="space-y-2">
-      <SectionTitle action={<span className="pb-1 text-[0.95rem] font-bold text-muted">{progress.done} of {progress.total} done</span>}>
-        <span id="checklist-title">{title}</span>
-      </SectionTitle>
-      <div className="h-2 overflow-hidden rounded-full bg-track" role="progressbar" aria-label="Today's checklist" aria-valuemin={0} aria-valuemax={progress.total} aria-valuenow={progress.done}>
-        <div className="h-full rounded-full bg-ok transition-[width]" style={{ width: `${progress.total ? (progress.done / progress.total) * 100 : 0}%` }} />
+    <section aria-labelledby={headId} className="overflow-hidden rounded-[1.125rem] bg-card shadow-lift">
+      <div className="flex items-baseline justify-between gap-2 px-4 pt-3.5">
+        <h2 id={headId} className="text-[1.0625rem] font-bold">{title}</h2>
+        {progress.total > 0 && <span className="text-[0.8125rem] font-semibold text-muted">{progress.done} of {progress.total} done</span>}
       </div>
-
-      {feedingOpen.length >= 2 && (
-        <button onClick={() => run(tickAllFeeding(feedingOpen, farmId!))}
-          className="flex min-h-[3.75rem] w-full items-center justify-center gap-2.5 rounded-[1.125rem] bg-hivis px-4 text-lg font-bold text-onhivis active:bg-hivis-dark">
-          <ClipboardCheck className="h-6 w-6" aria-hidden />All fed as planned ({fmtKg(feedingOpen.reduce((s, i) => s + (i.planned ?? 0), 0))})
-        </button>
+      {progress.total > 0 && (
+        <div className="mx-4 mt-2 h-1.5 overflow-hidden rounded-full bg-track" role="progressbar" aria-label={title} aria-valuemin={0} aria-valuemax={progress.total} aria-valuenow={progress.done}>
+          <div className="h-full rounded-full bg-field transition-[width]" style={{ width: `${progress.total ? (progress.done / progress.total) * 100 : 0}%` }} />
+        </div>
       )}
 
-      <ul className="divide-y divide-line overflow-hidden rounded-[1.375rem] bg-card shadow-lift">
+      {feedingOpen.length >= 2 && (
+        <div className="px-4 pt-3">
+          <button onClick={() => run(tickAllFeeding(feedingOpen, farmId!))}
+            className="flex min-h-[2.75rem] w-full items-center justify-center gap-2 rounded-full bg-field-light px-4 text-[0.9375rem] font-bold text-accent active:bg-field active:text-white">
+            <ClipboardCheck className="h-5 w-5" aria-hidden />All fed as planned ({fmtKg(feedingOpen.reduce((s, i) => s + (i.planned ?? 0), 0))})
+          </button>
+        </div>
+      )}
+
+      <ul className="mt-2 divide-y divide-line border-t border-line">
         {pendingToday.map(row)}
-        {pendingToday.length === 0 && earlier.length === 0 && (
-          <li className="flex min-h-[4rem] items-center gap-3 px-4 font-bold text-ok"><Check className="h-6 w-6" aria-hidden />All done for today</li>
+        {items.length === 0 && empty && <li className="px-4 py-3 text-[0.9375rem] text-muted">{empty}</li>}
+        {items.length > 0 && pendingToday.length === 0 && earlier.length === 0 && (
+          <li className="flex min-h-[3rem] items-center gap-2 px-4 text-[0.9375rem] font-bold text-ok"><Check className="h-5 w-5" aria-hidden />All done for today</li>
         )}
         {earlier.length > 0 && (
-          <li className="bg-warn-bg px-4 py-2 text-[0.95rem] font-bold text-warn">From earlier, not ticked off yet</li>
+          <li className="bg-warn-bg px-4 py-2 text-[0.8125rem] font-bold text-warn">From earlier, not ticked off yet</li>
         )}
         {earlier.map(row)}
         {doneToday.length > 0 && (
           <li>
-            <button onClick={() => setShowDone(!showDone)} className="min-h-tap w-full px-4 text-left font-bold text-accent">
+            <button onClick={() => setShowDone(!showDone)} className="min-h-[2.75rem] w-full px-4 text-left text-sm font-bold text-accent">
               {showDone ? 'Hide done' : `Show done (${doneToday.length})`}
             </button>
           </li>
@@ -152,7 +166,7 @@ export function Checklist({ b, items, today, feed, title }: {
         {showDone && doneToday.map(row)}
       </ul>
 
-      <Link to="/routines" className="flex min-h-tap items-center px-2 text-[0.95rem] font-bold text-accent">Add or change routines</Link>
+      <Link to={footer?.to ?? '/routines'} className="flex min-h-[3rem] items-center border-t border-line px-4 text-[0.8125rem] font-bold uppercase tracking-wide text-accent">{footer?.label ?? 'Add or change routines'}</Link>
 
       <Sheet open={!!editing} onClose={() => setEditing(null)} title={editing?.title ?? ''}>
         {editing && (

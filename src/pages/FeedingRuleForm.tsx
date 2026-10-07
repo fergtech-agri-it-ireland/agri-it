@@ -92,7 +92,7 @@ export default function FeedingRuleForm() {
         <Chips label="Feeds per day" columns={3} value={feeds} onChange={setFeeds} options={[{ value: '1', label: 'Once' }, { value: '2', label: 'Twice' }, { value: '3', label: '3 times' }]} />
         <label className="flex min-h-tap items-center gap-3 rounded-xl bg-pasture px-3 py-2 font-bold">
           <input type="checkbox" className="h-6 w-6 shrink-0 accent-field" checked={confirmDaily} onChange={(e) => setConfirmDaily(e.target.checked)} />
-          <span>Tick it off on Today each day<span className="block text-sm font-normal text-muted">What you tick replaces the plan, so stock left stays right. Off: Agri-It assumes the plan was fed.</span></span>
+          <span>Tick it off in the diary each day<span className="block text-sm font-normal text-muted">What you tick replaces the plan, so stock left stays right. Off: Agri-It assumes the plan was fed.</span></span>
         </label>
       </Card>
       <Card className="space-y-4">

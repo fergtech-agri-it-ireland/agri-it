@@ -1,3 +1,4 @@
+import { farmTypes } from '../farmTypes';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Session } from '@supabase/supabase-js';
@@ -100,10 +101,11 @@ async function fetchBundle(farmId: string): Promise<FarmBundle> {
   const q = <T,>(p: PromiseLike<{ data: T | null; error: { message: string } | null }>) =>
     Promise.resolve(p).then((r) => { if (r.error) throw new Error(r.error.message); return (r.data ?? []) as T; });
 
-  const [farm, groups, suppliers, branches, supplierSettings, products, txns, rules, silage, benchmarks, evidence, income, costs, budget, records, documents, jobs, routines, completions, feedLogs] =
+  const [farm, groups, crops, suppliers, branches, supplierSettings, products, txns, rules, silage, benchmarks, evidence, income, costs, budget, records, documents, jobs, routines, completions, feedLogs] =
     await Promise.all([
       q(supabase.from('farms').select('*').eq('id', farmId).single()),
       q(supabase.from('animal_groups').select('*').eq('farm_id', farmId).order('sort_order').order('name')),
+      q(supabase.from('crops').select('*').eq('farm_id', farmId).order('harvest_year', { ascending: false }).order('name')),
       q(supabase.from('suppliers').select('*').or(`farm_id.is.null,farm_id.eq.${farmId}`).order('name')),
       q(supabase.from('supplier_branches').select('*')),
       q(supabase.from('farm_supplier_settings').select('*').eq('farm_id', farmId)),
@@ -123,17 +125,20 @@ async function fetchBundle(farmId: string): Promise<FarmBundle> {
       q(supabase.from('routine_completions').select('*').eq('farm_id', farmId).gte('due_date', since).order('due_date')),
       q(supabase.from('feed_use_logs').select('*').eq('farm_id', farmId).gte('used_on', since).order('used_on'))
     ]);
-  return { farm, groups, suppliers, branches, supplierSettings, products, txns, rules, silage, benchmarks, evidence, income, costs, budget, records, documents, jobs, routines, completions, feedLogs } as unknown as FarmBundle;
+  return { farm, groups, crops, suppliers, branches, supplierSettings, products, txns, rules, silage, benchmarks, evidence, income, costs, budget, records, documents, jobs, routines, completions, feedLogs } as unknown as FarmBundle;
 }
 
-const LIST_KEYS = ['groups', 'suppliers', 'branches', 'supplierSettings', 'products', 'txns', 'rules', 'silage', 'benchmarks', 'evidence', 'income', 'costs', 'budget', 'records', 'documents', 'jobs', 'routines', 'completions', 'feedLogs'] as const;
+const LIST_KEYS = ['groups', 'crops', 'suppliers', 'branches', 'supplierSettings', 'products', 'txns', 'rules', 'silage', 'benchmarks', 'evidence', 'income', 'costs', 'budget', 'records', 'documents', 'jobs', 'routines', 'completions', 'feedLogs'] as const;
 
 /** Data cached by an older version of the app can lack newer lists. Treat a missing list as empty. */
 export function normalizeBundle(b: FarmBundle): FarmBundle {
   const missing = LIST_KEYS.filter((k) => !Array.isArray((b as unknown as Record<string, unknown>)[k]));
-  if (!missing.length) return b;
+  const noTypes = !Array.isArray(b.farm?.enterprises);
+  if (!missing.length && !noTypes) return b;
   const fixed = { ...b } as unknown as Record<string, unknown>;
   for (const k of missing) fixed[k] = [];
+  // Farms saved before farm types were a list: work the list out from the old single type
+  if (noTypes && b.farm) fixed.farm = { ...b.farm, enterprises: farmTypes(b.farm) };
   return fixed as unknown as FarmBundle;
 }
 

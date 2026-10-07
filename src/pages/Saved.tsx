@@ -62,7 +62,7 @@ export default function Saved() {
           <Check className="h-9 w-9" strokeWidth={3} aria-hidden />
         </span>
         <div className="min-w-0">
-          <h1 className="h-display text-[2.25rem]" tabIndex={-1}>{s.title}</h1>
+          <h1 className="h-display text-[1.75rem]" tabIndex={-1}>{s.title}</h1>
           <p className="mt-1 text-muted">{s.subtitle}</p>
         </div>
       </div>
@@ -108,7 +108,7 @@ export default function Saved() {
 
       <div className="mt-auto flex flex-col gap-2.5 pt-6">
         {canPhoto && (
-          <label className="flex min-h-[3.75rem] cursor-pointer items-center justify-center gap-2.5 rounded-[1.125rem] border-2 border-ink bg-card text-lg font-bold">
+          <label className="flex min-h-[3.75rem] cursor-pointer items-center justify-center gap-2.5 rounded-full border border-line bg-card font-bold">
             <input type="file" accept="image/*,application/pdf" capture="environment" className="sr-only" disabled={busy} onChange={(e) => attach(e.target.files?.[0] ?? null)} />
             <Camera className="h-6 w-6" aria-hidden />{busy ? 'Attaching' : 'Add the docket photo'}
           </label>

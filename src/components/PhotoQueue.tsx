@@ -62,7 +62,7 @@ export function PhotoQueueList() {
                   <><b className="flex items-center gap-1.5 leading-snug"><Clock className="h-4 w-4" aria-hidden />Waiting to be read</b><span className="text-[0.95rem] text-muted">Reads when you have signal</span></>
                 )}
               </div>
-              {p.status !== 'waiting' && <button onClick={open} className="min-h-[3.5rem] shrink-0 rounded-2xl bg-hivis px-3 font-bold text-onhivis">{read ? 'Check' : 'Fill in'}</button>}
+              {p.status !== 'waiting' && <button onClick={open} className="min-h-[2.75rem] shrink-0 rounded-full bg-field px-4 text-sm font-bold text-white">{read ? 'Check' : 'Fill in'}</button>}
               <button onClick={() => dropToRead(p.id)} aria-label="Remove this photo" className="flex h-14 w-12 shrink-0 items-center justify-center rounded-full hover:bg-field-light"><X className="h-6 w-6" aria-hidden /></button>
             </div>
           );

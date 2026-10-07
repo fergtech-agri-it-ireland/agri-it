@@ -4,7 +4,7 @@
  * usage per head beats published Teagasc allowances. Missing inputs lower
  * confidence or are asked for. They are never filled with invented values.
  */
-import type { AnimalGroup, Confidence, EvidenceSource, Farm, ForageBenchmark, ISODate, SilageStore } from '../types';
+import type { AnimalClass, AnimalGroup, Confidence, EvidenceSource, Farm, ForageBenchmark, ISODate, SilageStore } from '../types';
 import { ANIMAL_CLASS_LABEL } from '../types';
 import { daysBetween, hashString, maxISO } from '../format';
 
@@ -88,6 +88,15 @@ export function estimateStore(s: SilageStore): StoreEstimate {
   }
 }
 
+/**
+ * Teagasc publishes one figure for "in-calf heifers and store cattle". Bullocks and other
+ * heifers are store cattle, so they use that published figure, and the screen says which
+ * figure was used. Every other class without its own figure asks the farmer.
+ */
+const BENCHMARK_ALIAS: Partial<Record<AnimalClass, AnimalClass>> = { heifer: 'store_cattle', bullock: 'store_cattle' };
+/** Pigs, poultry and horses are not fed pit silage, so they are left out of the winter budget. */
+const EATS_SILAGE = (c: AnimalClass) => c !== 'pig' && c !== 'poultry' && c !== 'horse';
+
 export function forecastForage(input: {
   farm: Farm; stores: SilageStore[]; groups: AnimalGroup[]; benchmarks: ForageBenchmark[];
   evidence: EvidenceSource[]; today: ISODate; reserveOverride?: number; scenario?: boolean;
@@ -111,16 +120,18 @@ export function forecastForage(input: {
   };
 
   const groups: GroupDemand[] = input.groups
-    .filter((g) => !g.archived && g.housed && g.head_count > 0)
+    .filter((g) => !g.archived && g.housed && g.head_count > 0 && EATS_SILAGE(g.animal_class))
     .map((g) => {
       if (g.forage_t_per_head_month !== null && g.forage_t_per_head_month !== undefined) {
         const t = Number(g.forage_t_per_head_month);
         return { id: g.id, name: g.name, heads: g.head_count, tPerHeadMonth: t, source: 'farm_history' as const, sourceLabel: 'Your farm usage', tPerMonth: t * g.head_count };
       }
-      const b = latestBench.get(g.animal_class);
+      const alias = BENCHMARK_ALIAS[g.animal_class];
+      const b = latestBench.get(g.animal_class) ?? (alias ? latestBench.get(alias) : undefined);
       if (b) {
         const t = Number(b.fresh_tonnes_per_month);
-        return { id: g.id, name: g.name, heads: g.head_count, tPerHeadMonth: t, source: 'benchmark' as const, sourceLabel: `Published allowance, ${srcTitle(b.source_code)}`, tPerMonth: t * g.head_count };
+        const as = b.animal_class !== g.animal_class ? `, ${ANIMAL_CLASS_LABEL[b.animal_class].toLowerCase()} figure` : '';
+        return { id: g.id, name: g.name, heads: g.head_count, tPerHeadMonth: t, source: 'benchmark' as const, sourceLabel: `Published allowance${as}, ${srcTitle(b.source_code)}`, tPerMonth: t * g.head_count };
       }
       missing.push(`Monthly silage use per head for ${g.name} (no published allowance for ${ANIMAL_CLASS_LABEL[g.animal_class].toLowerCase()})`);
       return { id: g.id, name: g.name, heads: g.head_count, tPerHeadMonth: null, source: 'missing' as const, sourceLabel: 'Needs your figure', tPerMonth: 0 };

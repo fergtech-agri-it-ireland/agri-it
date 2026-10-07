@@ -54,8 +54,12 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      - id: pages
+        uses: actions/configure-pages@v5
+      # Build for wherever Pages serves this repo ('' for its own address, '/agri-it' for a project page)
       - run: npm run build:pages
-      - uses: actions/configure-pages@v5
+        env:
+          PAGES_BASE: ${{ steps.pages.outputs.base_path }}/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist-pages

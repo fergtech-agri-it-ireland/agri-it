@@ -4,7 +4,7 @@ Usage: python3 scripts/e2e/phone.py file:///abs/path/dist-phone/index.html OUTDI
 import sys, struct, zlib, os
 from playwright.sync_api import sync_playwright
 URL=sys.argv[1]
-OUT=sys.argv[2]; res=[]; errs=[]
+OUT=sys.argv[2]; os.makedirs(OUT, exist_ok=True); res=[]; errs=[]
 def check(n,c,d=''): res.append((n,bool(c),d))
 def png(path):
     raw=b'\x00\xff\xc6\x1a'

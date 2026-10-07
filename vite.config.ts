@@ -13,7 +13,9 @@ import { fileURLToPath, URL } from 'node:url';
 export default defineConfig(({ mode }) => {
   const demo = mode === 'demo' || mode === 'phone'; // one self-contained HTML file
   const pages = mode === 'pages';
-  const base = demo ? './' : pages ? '/agri-it/' : '/';
+  // Pages: CI passes the site's path (e.g. '/' for its own address, '/agri-it/' for a project page)
+  const pagesBase = (process.env.PAGES_BASE || '/agri-it/').replace(/\/?$/, '/');
+  const base = demo ? './' : pages ? pagesBase : '/';
   return {
     base,
     resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },

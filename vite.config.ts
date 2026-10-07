@@ -9,7 +9,7 @@ import { fileURLToPath, URL } from 'node:url';
 // `--mode demo`: one self-contained HTML file with in-browser sample data, for sharing a preview.
 // `--mode phone`: the same one-file build, starting with no farm, keeping the farmer's records on the phone.
 // `--mode pages`: the phone-only app as an installable, offline web app for GitHub Pages
-//   (https://fergtech-ireland.github.io/agri-it/). Records stay on each phone; no server.
+//   (https://fergtech-agri-it-ireland.github.io/agri-it/). Records stay on each phone; no server.
 export default defineConfig(({ mode }) => {
   const demo = mode === 'demo' || mode === 'phone'; // one self-contained HTML file
   const pages = mode === 'pages';

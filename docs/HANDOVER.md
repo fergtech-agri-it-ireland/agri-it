@@ -1,8 +1,8 @@
 # Agri-It MVP: Handover
 
-**Last updated:** 7 October 2026, afternoon (phone-only build: your own farm kept on the phone, shareable link; earlier 7 Oct: photo reading for dockets, receipts and invoices; 6 Oct: daily reminders, supplier price history, budget variance alerts, white-page fix, routines and tick-off checklist, UI redesign)
+**Last updated:** 7 October 2026, evening (Agri-It live at its own address, fergtech-agri-it-ireland.github.io/agri-it; earlier: phone-only build: your own farm kept on the phone, shareable link; earlier 7 Oct: photo reading for dockets, receipts and invoices; 6 Oct: daily reminders, supplier price history, budget variance alerts, white-page fix, routines and tick-off checklist, UI redesign)
 **Owner:** Feargal
-**Status:** MVP code complete and on GitHub (moved 7 Oct to `fergtech-agri-it-ireland/agri-it`, public, CI green, latest work on `main`). Phone-only build live as a private Claude artifact (real farm, data kept on the phone, no server). Browser demo also live. Supabase cloud project `agri-it` created with tables only (see 2). No hosting.
+**Status:** MVP code complete and on GitHub (moved 7 Oct to `fergtech-agri-it-ireland/agri-it`, public, CI green, latest work on `main`). Phone-only build live as a private Claude artifact (real farm, data kept on the phone, no server). Installable app live on GitHub Pages at https://fergtech-agri-it-ireland.github.io/agri-it/. Browser demo also live. Supabase cloud project `agri-it` created with tables only (see 2).
 
 Use this document to start a new chat. Paste or reference it, then say what you want to do next. The full product spec is in `docs/MVP-SPEC.md` (also saved in the Claude Project).
 
@@ -28,24 +28,24 @@ It is not a herd, grassland or accounting system. It does not prescribe rations,
 | Browser tests | `scripts/e2e/` (Python + Playwright, run against the demo build at phone size): `ui.py` 82 checks, `routines.py` 41 checks, `stale_cache.py` 5 checks, `p1.py` 30 checks (reminders, prices, budget alerts), `ocr.py` 53 checks (photo reading). All pass on any day and at any time (dates in `ui.py` are now relative to today) |
 | Production build | Clean, PWA service worker generated |
 | Database | All four migrations + seed validated against real Postgres 16 with Supabase auth/storage stubs (`scripts/e2e/supabase_stub.sql`); RLS isolation and unique constraints tested |
-| GitHub | `fergtech-ireland/agri-it` (private), CI green. The Claude GitHub app is installed, so a chat can push |
+| GitHub | `fergtech-agri-it-ireland/agri-it` (public), CI green. The Claude GitHub app is installed on the org, so a chat can push |
 | Supabase cloud | `agri-it` (ref `xgudpylxmrlywegpdvps`, eu-west-1) created 7 Oct. Only migration 1 (tables) applied. RLS is switched on for every table with **no policies yet**, so the API returns nothing until migration 2 (policies, storage bucket, RPCs) runs; migrations 3 and 4 and the reference data are not applied. Not used by the app yet. Feargal's Supabase org also holds `gauntlet` / `gauntlet-test` for another project with devs: do not pause or change those |
 | Phone-only app | **Live for real use**: https://claude.ai/artifact/WNRa3dHK8DcwjK4KYB1ePC (version 1). Starts empty, farmer sets up their own farm, everything stays on that phone. Private until shared from the page's Share menu |
-| Deployed | No hosting. Browser-only demo (sample farm, no database, data kept in the phone's browser) is a private artifact: https://claude.ai/artifact/PrDSDf2cB5EgRaDSMe7UJw (version 7). UI concept canvas: https://claude.ai/artifact/UkQ1sRPKTTE3QN9rX11QF8 |
+| Deployed | Live app: https://fergtech-agri-it-ireland.github.io/agri-it/ (GitHub Pages, publishes from `main`). Browser-only demo (sample farm, no database, data kept in the phone's browser) is a private artifact: https://claude.ai/artifact/PrDSDf2cB5EgRaDSMe7UJw (version 7). UI concept canvas: https://claude.ai/artifact/UkQ1sRPKTTE3QN9rX11QF8 |
 
-**Important:** the build sandbox resets between chats. Attach the GitHub repo `fergtech-ireland/agri-it` in a new chat and clone it.
+**Important:** the build sandbox resets between chats. Attach the GitHub repo `fergtech-agri-it-ireland/agri-it` in a new chat and clone it.
 
 ### MOVED (7 Oct, 19:00): repo is now `fergtech-agri-it-ireland/agri-it`
 Agri-It now has its own GitHub organisation so it gets its own web address, separate from Gauntlet. Reason: on `fergtech-ireland.github.io` the two apps shared one address, Gauntlet's update clean-up cleared Agri-It's offline copy, and Feargal's Android Chrome got stuck showing "This app is already installed" for Agri-It (no Agri-It in chrome://webapks; "Click to open" fails). Feargal has created the org, transferred the repo and installed the Claude GitHub app on it.
 
-**First job in the next session:** attach `fergtech-agri-it-ireland/agri-it`, check Settings > Pages > Source is GitHub Actions (ask Feargal if not), run the CI workflow (Actions > CI > Run workflow, or `gh workflow run ci.yml --ref main`), confirm all three jobs pass, then confirm the live app at **https://fergtech-agri-it-ireland.github.io/agri-it/** serves `sw.js` with navigateFallback `/agri-it/index.html` (the sandbox cannot open github.io, so check via the web fetch tool). Then Feargal installs it on Android (Chrome > menu > Install app) and confirms it appears in chrome://webapks. Update every old `fergtech-ireland/agri-it` and `fergtech-ireland.github.io/agri-it` reference in this file, the README and the starter prompt. The old address `fergtech-ireland.github.io/agri-it/` stops being published; nobody has data there except Feargal's test.
+**Done (7 Oct, 19:05):** the repo is public, Pages source is GitHub Actions, and CI run 37663526124 passed all three jobs (app, database, pages). The live app at **https://fergtech-agri-it-ireland.github.io/agri-it/** serves the bundle built from `main`, `sw.js` with navigateFallback `/agri-it/index.html`, and a manifest with id `/agri-it/app`, scope and start_url `/agri-it/`, display `standalone`. Old references in this file, the starter prompt and code comments are updated. The old address `fergtech-ireland.github.io/agri-it/` is no longer published; nobody has data there except Feargal's test. **Still to confirm:** Feargal installs it on Android (Chrome > menu > Install app) and checks it appears in chrome://webapks.
 
 ### Earlier: GitHub Pages app (7 Oct, evening)
-- `npm run build:pages` (`.env.pages`, mode `pages`): the phone-only app as a real installable web app at **https://fergtech-ireland.github.io/agri-it/** (base `/agri-it/`, hash routing, service worker, offline, add to home screen, photo reader served from the app's own `ocr/` folder, file backups and print work). Output `dist-pages/`.
+- `npm run build:pages` (`.env.pages`, mode `pages`): the phone-only app as a real installable web app, now at **https://fergtech-agri-it-ireland.github.io/agri-it/** (was fergtech-ireland.github.io until the move) (base `/agri-it/`, hash routing, service worker, offline, add to home screen, photo reader served from the app's own `ocr/` folder, file backups and print work). Output `dist-pages/`.
 - CI job `pages` in `.github/workflows/ci.yml` publishes it after the app checks pass on `main`, the same pattern as Gauntlet. It only runs once the repo is **public** and **Settings > Pages > Source = GitHub Actions**. Can also be run by hand (Actions > CI > Run workflow).
 - The Pages build takes its path from CI (`PAGES_BASE` from `actions/configure-pages` `base_path`), so it works at a project path (`/agri-it/`) or at the root of its own address with no code change.
 - Manifest has a fixed `id` (`/agri-it/app`): Feargal's first Android install left a broken "already installed" entry; never change this id again or every phone sees a second app.
-- **Shared origin with Gauntlet:** both live on `fergtech-ireland.github.io`, so they share localStorage, IndexedDB and Cache Storage. Keys do not clash (`agri-it:` prefixes). Gauntlet's `sw.js` activate step deletes every cache not in its KEEP list, which wipes Agri-It's offline copy when Gauntlet updates. Agri-It repairs itself (`src/lib/offlineHeal.ts`): each time it opens with signal it checks its precache and, if missing, installs its worker afresh (`sw.js?repair=...`, because re-registering the same URL is ignored). Gauntlet is not changed. Agri-It only ever deletes its own keys and databases (`agri-it:*`, `agri-it-files`, `agri-it-photos`). `scripts/e2e/with_gauntlet.py` serves both apps on one address and checks all of this (8/8). Never clear site data for the origin: it would delete both apps' records.
+- **Shared origin with Gauntlet (until the 7 Oct move; the repair stays as a safety net):** both lived on `fergtech-ireland.github.io`, so they share localStorage, IndexedDB and Cache Storage. Keys do not clash (`agri-it:` prefixes). Gauntlet's `sw.js` activate step deletes every cache not in its KEEP list, which wipes Agri-It's offline copy when Gauntlet updates. Agri-It repairs itself (`src/lib/offlineHeal.ts`): each time it opens with signal it checks its precache and, if missing, installs its worker afresh (`sw.js?repair=...`, because re-registering the same URL is ignored). Gauntlet is not changed. Agri-It only ever deletes its own keys and databases (`agri-it:*`, `agri-it-files`, `agri-it-photos`). `scripts/e2e/with_gauntlet.py` serves both apps on one address and checks all of this (8/8). Never clear site data for the origin: it would delete both apps' records.
 - Checked when served under `/agri-it/`: `scripts/e2e/phone.py` all pass; service worker active and in control; manifest `standalone`; reopens offline with the farm; camera capture on; sample docket read in about 3 s; no requests to any outside site.
 
 ### Earlier: phone-only build (7 Oct, afternoon)
@@ -301,7 +301,7 @@ Navigation: bottom bar Today / Forecast / **Record (hi-vis centre button)** / Mo
 ## 11. Next steps (suggested order)
 
 1. Use the phone-only link for real on the farm; share it from the page's Share menu; note friction points.
-2. Switch on GitHub Pages (repo public, Pages source GitHub Actions); then https://fergtech-ireland.github.io/agri-it/ is the link to install and share. The Claude artifact link becomes a fallback.
+2. Install https://fergtech-agri-it-ireland.github.io/agri-it/ on Android and share that link (Pages is live). The Claude artifact link is a fallback.
 3. Re-verify supplier numbers; decide on Arrabawn Tipperary contact.
 4. Finish the Supabase project `agri-it`: apply migrations 2 to 4 (`supabase link --project-ref xgudpylxmrlywegpdvps`, `supabase db push`), load reference data only (top half of `seed.sql`, not the demo user), then add "move my phone data to my account" using the backup JSON.
 5. Deploy `dist/` (Vercel, Netlify or Cloudflare Pages) with env vars; set auth redirect URLs; turn on email confirmation.
@@ -315,7 +315,7 @@ Navigation: bottom bar Today / Forecast / **Record (hi-vis centre button)** / Mo
 
 ## 12. How to start the next chat
 
-Start a new chat inside the **Agri-It** Project, attach the GitHub repo `fergtech-ireland/agri-it`, and paste the starter prompt (also kept in this Project as `Agri-It-New-Chat-Prompt.md`).
+Start a new chat inside the **Agri-It** Project, attach the GitHub repo `fergtech-agri-it-ireland/agri-it`, and paste the starter prompt (also kept in this Project as `Agri-It-New-Chat-Prompt.md`).
 
 Working rules for any chat on this project:
 - No em dashes anywhere (copy, docs, commit messages).

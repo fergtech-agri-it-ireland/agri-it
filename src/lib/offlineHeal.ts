@@ -1,6 +1,7 @@
 /**
- * GitHub Pages build only. Agri-It shares its web address (fergtech-ireland.github.io)
- * with Gauntlet, and the two apps share the phone's offline file store for that address.
+ * GitHub Pages build only. Agri-It used to share its web address (fergtech-ireland.github.io)
+ * with Gauntlet; since 7 Oct 2026 it has its own (fergtech-agri-it-ireland.github.io), and this
+ * stays as a safety net. Two apps on one address share the phone's offline file store.
  * Gauntlet's service worker clears every offline cache it does not own when it updates,
  * which removes Agri-It's offline copy (records are never touched: they live elsewhere
  * and each app only removes its own keys).

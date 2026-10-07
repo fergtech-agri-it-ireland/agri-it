@@ -32,7 +32,7 @@ jobs:
       - run: supabase db lint --level error
 
   pages:
-    # Publishes the phone-only app to https://fergtech-ireland.github.io/agri-it/ after the
+    # Publishes the phone-only app to https://fergtech-agri-it-ireland.github.io/agri-it/ after the
     # app checks pass, like Gauntlet. Records stay on each phone; no server is involved.
     # Needs the repo public (free GitHub plan) and Settings > Pages > Source set to "GitHub Actions".
     needs: app

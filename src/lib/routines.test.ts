@@ -72,12 +72,24 @@ describe('checklist: the 2 kg per heifer example', () => {
   it('rules switched off for ticking stay out of the list', () => {
     expect(buildChecklist(bundle({ rules: [rule({ confirm_daily: false })] }), TODAY)).toHaveLength(0);
   });
-  it('routines due in the last week appear once, until ticked', () => {
-    const weekly: Routine = { ...base, id: 'w', kind: 'job', title: 'Check troughs', frequency: 'weekly', weekday: 1, day_of_month: null, amount: null };
-    const items = buildChecklist(bundle({ rules: [], routines: [weekly, base] }), TODAY);
-    expect(items.map((i) => [i.title, i.date, i.overdue])).toEqual([['Check troughs', '2026-10-05', true]]);
-    const done = buildChecklist(bundle({ rules: [], routines: [weekly], completions: [{ id: 'c', farm_id: 'f', routine_id: 'w', due_date: '2026-10-05', status: 'done', amount: null, record_table: null, record_id: null, done_on: '2026-10-05', created_at: '' }] }), TODAY);
-    expect(done).toHaveLength(0);
+  it('a missed routine stays on the list until ticked, however long ago (review: alerts that stay)', () => {
+    const weekly: Routine = { ...base, id: 'w', kind: 'job', title: 'Check troughs', frequency: 'weekly', weekday: 1, day_of_month: null, amount: null, start_date: '2026-09-14', created_at: '2026-09-14T09:00:00Z' };
+    const items = buildChecklist(bundle({ rules: [], routines: [weekly] }), TODAY);
+    // One line per routine: the oldest missed day, with the others gathered under it
+    expect(items.map((i) => [i.title, i.date, i.overdue, i.missedDates])).toEqual([['Check troughs', '2026-09-14', true, ['2026-09-21', '2026-09-28', '2026-10-05']]]);
+    const c = (due: string, status: 'done' | 'skipped' = 'done') => ({ id: due, farm_id: 'f', routine_id: 'w', due_date: due, status, amount: null, record_table: null, record_id: null, done_on: due, created_at: '' });
+    // Ticking the oldest moves the line on to the next missed one
+    const next = buildChecklist(bundle({ rules: [], routines: [weekly], completions: [c('2026-09-14')] }), TODAY);
+    expect(next.map((i) => [i.date, i.missedDates])).toEqual([['2026-09-21', ['2026-09-28', '2026-10-05']]]);
+    const all = buildChecklist(bundle({ rules: [], routines: [weekly], completions: ['2026-09-14', '2026-09-21', '2026-09-28', '2026-10-05'].map((d) => c(d, 'skipped')) }), TODAY);
+    expect(all).toHaveLength(0);
+  });
+  it('a moved occurrence shows on its new day and stays until dealt with', () => {
+    const weekly: Routine = { ...base, id: 'w', kind: 'job', title: 'Check troughs', frequency: 'weekly', weekday: 1, day_of_month: null, amount: null, start_date: '2026-10-05', created_at: '2026-10-05T07:00:00Z' };
+    const moved = { id: 'm', farm_id: 'f', routine_id: 'w', due_date: '2026-10-05', status: 'moved' as const, moved_to: '2026-10-07', amount: null, record_table: null, record_id: null, done_on: '2026-10-05', created_at: '' };
+    expect(buildChecklist(bundle({ rules: [], routines: [weekly], completions: [moved] }), TODAY)).toHaveLength(0);
+    const later = buildChecklist(bundle({ rules: [], routines: [weekly], completions: [moved] }), '2026-10-09');
+    expect(later.map((i) => [i.date, i.due, i.movedFrom, i.overdue])).toEqual([['2026-10-07', '2026-10-05', '2026-10-05', true]]);
   });
 });
 

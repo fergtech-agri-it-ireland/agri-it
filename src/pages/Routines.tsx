@@ -42,7 +42,7 @@ export default function Routines() {
           {rules.map((r) => {
             const g = groups.get(r.animal_group_id);
             const p = b.products.find((x) => x.id === r.feed_product_id);
-            const daily = headsFor(r, groups) * Number(r.kg_per_head_per_feed) * Number(r.feeds_per_day);
+            const daily = headsFor(r, groups, todayISO()) * Number(r.kg_per_head_per_feed) * Number(r.feeds_per_day);
             const id = `tick-${r.id}`;
             return (
               <li key={r.id} className="flex min-h-[4.5rem] items-center gap-3 px-4 py-2">

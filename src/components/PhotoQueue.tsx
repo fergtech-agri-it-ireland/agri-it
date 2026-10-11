@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Clock, ScanText, X } from 'lucide-react';
 import { useFarmCtx, useFarmData } from '../lib/data/farm';
-import { interpret, readWaiting } from '../lib/docket/flow';
+import { formFor, interpret, readWaiting } from '../lib/docket/flow';
 import { dropToRead, listToRead, subscribePhotos, type ToRead } from '../lib/docket/photoStore';
 import { kindLabel, usable, type DocketRead } from '../lib/docket/extract';
 import { setPendingPhoto } from '../lib/pendingPhoto';
@@ -48,7 +48,7 @@ export function PhotoQueueList() {
           const read = p.status === 'read' && p.lines ? interpret(p.lines, p.reader ?? 'Read on this phone', b) : null;
           const open = () => {
             setPendingPhoto(new File([p.blob], p.name, { type: p.blob.type || 'image/jpeg' }), read, p.id);
-            nav(read?.route === 'cost' ? '/record/cost' : read ? '/record/delivery' : '/record/cost');
+            nav(formFor(read, b));
           };
           return (
             <div key={p.id} className="flex min-h-[4.5rem] items-center gap-3 py-2 pl-3 pr-1.5">

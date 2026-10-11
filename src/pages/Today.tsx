@@ -2,7 +2,8 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronRight, CircleCheck, MessageCircleQuestion, Moon, Phone, Sun, X } from 'lucide-react';
 import { useFarmData } from '../lib/data/farm';
-import { useDerived } from '../lib/data/derived';
+import { useDerived, WHEN_LABEL, type Priority, type When } from '../lib/data/derived';
+import { addDays } from '../lib/format';
 import { cashDial, silageDial } from '../lib/dials';
 import { useTheme } from '../lib/theme';
 import { buildChecklist, checklistProgress } from '../lib/routines';
@@ -294,17 +295,31 @@ export default function Today() {
   const checklist = useMemo(() => buildChecklist(b, today), [b, today]);
   const progress = checklistProgress(checklist, today);
   const [allNext, setAllNext] = useState(false);
+  // Information can be hidden for a week; anything owed or overdue cannot
+  const hideKey = `agri-it:hidden:${b.farm.id}`;
+  const [hidden, setHidden] = useState<Record<string, string>>(() => { try { return JSON.parse(localStorage.getItem(hideKey) ?? '{}'); } catch { return {}; } });
+  const hide = (id: string) => {
+    const next = { ...Object.fromEntries(Object.entries(hidden).filter(([, until]) => until > today)), [id]: addDays(today, 7) };
+    setHidden(next);
+    try { localStorage.setItem(hideKey, JSON.stringify(next)); } catch { /* ignore */ }
+  };
 
   const silage = silageDial(d.forage);
   const cash = cashDial(d.cash, d.cash90.lowest);
   const toneOf = (t: string) => (t === 'urgent' ? 'danger' : t === 'warn' ? 'warn' : t === 'ok' ? 'field' : 'muted') as 'danger' | 'warn' | 'field' | 'muted';
   const showSilage = animals || b.silage.length > 0;
+  const money = b.role !== 'worker';
 
   // The feed card already says when to order the feed that runs out first
   const live = b.products.filter((p) => !p.archived);
   const firstFeed = [...live].sort((a, c) => (d.feed.get(a.id)?.daysRemaining ?? 9999) - (d.feed.get(c.id)?.daysRemaining ?? 9999))[0];
-  const next = d.priorities.filter((p) => !(firstFeed && p.id === `feed-${firstFeed.id}`));
-  const shown = allNext ? next : next.slice(0, 3);
+  const next = d.priorities.filter((p) => !(firstFeed && p.id === `feed-${firstFeed.id}`) && !(p.dismissable && hidden[p.id] && hidden[p.id] > today));
+  // Overdue and today always show in full; the rest is folded after a few
+  const pressing = next.filter((p) => p.when === 'overdue' || p.when === 'today');
+  const rest = next.filter((p) => p.when !== 'overdue' && p.when !== 'today');
+  const shown = [...pressing, ...(allNext ? rest : rest.slice(0, Math.max(0, 3 - pressing.length)))];
+  const folded = next.length - shown.length;
+  const byWhen = (['overdue', 'today', 'soon', 'later'] as When[]).map((w) => ({ w, items: shown.filter((p) => p.when === w) })).filter((g) => g.items.length);
 
   return (
     <div className="pad-bottom mx-auto w-full max-w-xl">
@@ -326,13 +341,13 @@ export default function Today() {
         <GuideCard b={b} />
         {(animals || live.length > 0) && <FeedCard b={b} d={d} />}
 
-        <div className={`grid gap-3 ${showSilage ? 'grid-cols-2' : 'grid-cols-1'}`}>
+        <div className={`grid gap-3 ${showSilage && money ? 'grid-cols-2' : 'grid-cols-1'}`}>
           {showSilage && (
             <Mini title="Silage" value={silage.value === '?' ? 'Add details' : silage.value} sub={silage.value === '?' ? 'Is there enough for winter?' : `of winter. ${silage.status}`}
               fraction={silage.fraction} tone={silage.tone === 'ok' ? 'silage' : toneOf(silage.tone)} to={silage.value === '?' ? '/farm/silage' : '/progress?tab=forage'} />
           )}
-          <Mini title="Cash" value={d.cash ? eur(d.cash.balance) : 'Add balance'} sub={d.cash ? cash.status : 'Unlocks the cash forecast'}
-            fraction={cash.fraction} tone={cash.tone === 'ok' ? 'money' : toneOf(cash.tone)} to={d.cash ? '/progress?tab=cash' : '/settings'} />
+          {money && <Mini title="Cash" value={d.cash ? eur(d.cash.balance) : 'Add balance'} sub={d.cash ? cash.status : 'Unlocks the cash forecast'}
+            fraction={cash.fraction} tone={cash.tone === 'ok' ? 'money' : toneOf(cash.tone)} to={d.cash ? '/progress?tab=cash' : '/settings'} />}
         </div>
 
         {checklist.length > 0 && (
@@ -350,22 +365,32 @@ export default function Today() {
         <PhotoQueueNudge />
 
         {next.length > 0 && (
-          <section aria-label="Do next" className="overflow-hidden rounded-[1.125rem] bg-card shadow-lift">
-            <h2 className="px-4 pt-4 text-[1.0625rem] font-bold">Do next</h2>
-            <ul className="mt-1 divide-y divide-line">
-              {shown.map((p) => (
-                <li key={p.id}>
-                  <Link to={p.to} className="flex min-h-[3.5rem] items-center gap-3 px-4 py-2 hover:bg-pasture">
-                    <ToneIcon tone={p.tone} className="h-5 w-5 shrink-0" />
-                    <span className="min-w-0 flex-1"><b className="block text-[0.9375rem] font-semibold leading-snug">{p.title}</b><span className="text-[0.8125rem] text-muted">{p.detail}</span></span>
-                    <ChevronRight className="h-4 w-4 shrink-0 text-muted" aria-hidden />
-                  </Link>
-                </li>
-              ))}
-            </ul>
-            {next.length > 3 && (
-              <button className="min-h-[2.75rem] w-full border-t border-line px-4 text-left text-sm font-bold text-accent" onClick={() => setAllNext(!allNext)}>
-                {allNext ? 'Show fewer' : `Show ${next.length - 3} more`}
+          <section aria-label="Needs your attention" className="overflow-hidden rounded-[1.125rem] bg-card shadow-lift">
+            <h2 className="px-4 pt-4 text-[1.0625rem] font-bold">Needs your attention</h2>
+            {byWhen.map(({ w, items }) => (
+              <div key={w}>
+                <p className={`mt-2 px-4 text-[0.75rem] font-bold uppercase tracking-wide ${w === 'overdue' ? 'text-danger' : 'text-muted'}`}>{WHEN_LABEL[w]}</p>
+                <ul className="divide-y divide-line">
+                  {items.map((p: Priority) => (
+                    <li key={p.id} className="flex items-center hover:bg-pasture">
+                      <Link to={p.to} className="flex min-h-[3.5rem] min-w-0 flex-1 items-center gap-3 px-4 py-2">
+                        <ToneIcon tone={p.tone} className="h-5 w-5 shrink-0" />
+                        <span className="min-w-0 flex-1"><b className="block text-[0.9375rem] font-semibold leading-snug">{p.title}</b><span className="text-[0.8125rem] text-muted">{p.detail}</span></span>
+                        {!p.dismissable && <ChevronRight className="h-4 w-4 shrink-0 text-muted" aria-hidden />}
+                      </Link>
+                      {p.dismissable && (
+                        <button onClick={() => hide(p.id)} aria-label={`Hide for a week: ${p.title}`} className="mr-2 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted hover:bg-card">
+                          <X className="h-4 w-4" aria-hidden />
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+            {(folded > 0 || allNext) && rest.length > 0 && (
+              <button className="mt-1 min-h-[2.75rem] w-full border-t border-line px-4 text-left text-sm font-bold text-accent" onClick={() => setAllNext(!allNext)}>
+                {allNext ? 'Show fewer' : `Show ${folded} more`}
               </button>
             )}
           </section>
@@ -374,7 +399,7 @@ export default function Today() {
         {types.includes('dairy') && <MilkCard b={b} />}
         {grows(types) && <CropsCard b={b} today={today} />}
         <StockCard b={b} />
-        <MonthCard b={b} d={d} today={today} />
+        {money && <MonthCard b={b} d={d} today={today} />}
         {checklist.length > 0 && <ReminderNudge />}
       </main>
     </div>

@@ -125,7 +125,9 @@ def run(p):
     check('Category: Vet & medicine', pg.get_by_role('button', name='Vet & medicine').get_attribute('aria-pressed') == 'true')
     check('Amount 202.60 filled in', pg.get_by_label('Amount').input_value() in ('202.6', '202.60'))
     check('Payee read from the header', pg.get_by_label('Paid to').input_value() == 'Suir Valley Veterinary Clinic', pg.get_by_label('Paid to').input_value())
-    check('Receipt number and VAT in the note', 'Receipt 20871' in pg.get_by_label('Note (optional)').input_value() and 'VAT €24.10 (13.5%)' in pg.get_by_label('Note (optional)').input_value(), pg.get_by_label('Note (optional)').input_value())
+    # The receipt number and VAT now have their own fields (they reach the accountant pack as figures)
+    check('Receipt number and VAT in their own fields', pg.get_by_label('Invoice no. (optional)').input_value() == '20871' and pg.get_by_label('VAT in it (optional)').input_value() == '24.1' and '13.5%' in pg.get_by_label('Note (optional)').input_value(),
+          f"{pg.get_by_label('Invoice no. (optional)').input_value()} | {pg.get_by_label('VAT in it (optional)').input_value()} | {pg.get_by_label('Note (optional)').input_value()}")
     check('VAT sum checked', 'Net €178.50 + VAT €24.10 = total €202.60' in pg.locator('[data-testid=read-summary]').inner_text())
     pg.screenshot(path=f'{OUT}/ocr-bill-form.png', full_page=True)
     pg.get_by_role('button', name='Save cost').click()

@@ -27,6 +27,7 @@ export const SUGGESTED = [
   'When do I need to order meal?',
   'Am I okay for silage this winter?',
   'What is my cash position?',
+  'What do I owe?',
   'How much have I spent on feed this year?',
   'What did I pay for meal?',
   'What is my milk price this year?',
@@ -45,6 +46,20 @@ export function ask(question: string, b: FarmBundle, d: Derived): Answer {
       text: 'Agri-It does not recommend feeding rates. It works out stock and run-out dates from the plan you set.',
       details: ['For rates, talk to your nutritionist or advisor with your silage analysis.', 'You can record their advice as a feeding plan and Agri-It will forecast from it.'],
       confidence: null, basis: 'Product rule: farmer controls feeding decisions', links: [{ label: 'Open feed', to: '/forecast' }]
+    };
+  }
+
+  // Bills: owed, overdue, committed (kept apart, never double counted)
+  if (has(q, 'owe', 'bills', 'overdue', 'to pay', 'outstanding', 'on order', 'committed')) {
+    if (b.role === 'worker') return { text: 'Money is kept to whoever looks after the farm accounts.', details: [], confidence: null, basis: 'Your role on this farm', links: [] };
+    const m = d.money;
+    return {
+      text: m.owed.length ? `You owe ${eur(m.owedTotal)} on ${m.owed.length} bill${m.owed.length > 1 ? 's' : ''}${m.overdueCount ? `, ${eur(m.overdueTotal)} of it overdue` : ''}.` : 'No bills are recorded as owed.',
+      details: [
+        ...m.owed.slice(0, 6).map((o) => `${o.payee}: ${eur(Number(o.cost.amount_eur), true)}, ${o.dueOn ? `${o.state === 'overdue' ? 'was due' : 'due'} ${fmtDay(o.dueOn)}` : 'no due date'}`),
+        ...(m.committedTotal > 0 ? [`On order, not billed yet: ${eur(m.committedTotal)}`] : [])
+      ],
+      confidence: null, basis: 'Bills you saved as still to pay, feed on account, and open orders', links: [{ label: 'Bills to pay', to: '/money/bills' }]
     };
   }
 

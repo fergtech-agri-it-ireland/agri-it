@@ -34,31 +34,43 @@ insert into public.suppliers (id, name, network, coverage, central_phone, centra
 ('10000000-0000-0000-0000-000000000001','Tirlán FarmLife','GAIN Feeds','{ROI}','0818 321 321','Customer services',
   null,null,'https://www.tirlanfarmlife.com',
   'Customer services can connect you to your local Business Manager. Use the Tirlán store finder with your Eircode or town.',
-  'https://www.tirlanfarmlife.com/about-us/contact-us/contact','2026-09-01',false),
+  'https://www.tirlanfarmlife.com/about-us/contact-us/contact','2026-10-11',false),
 ('10000000-0000-0000-0000-000000000002','Dairygold Agri Business',null,'{ROI}','025 24411','Agri Business',
   '022 31644','Inside Sales','https://www.dairygoldagri.ie',
-  'Regional dairy, beef and tillage advisory territories where current; otherwise Inside Sales.',
-  'https://www.dairygoldagri.ie/contact-us/','2026-09-01',false),
+  'Dairygold publishes its dairy, beef and tillage sales advisers by team. Inside Sales can put you through to yours; save them as your rep once you know them.',
+  'https://www.dairygoldagri.ie/contact-us/our-team/','2026-10-11',false),
 ('10000000-0000-0000-0000-000000000003','Lakeland Dairies Agribusiness',null,'{ROI,NI}','0818 474720','ROI agribusiness',
   '+44 28 3026 2311','NI agribusiness','https://lakelanddairies.com',
-  'Agribusiness and member-relations contacts. No named rep is publicly mapped, so use the central number.',
-  'https://lakelanddairies.com/contact-us','2026-09-01',false),
+  'These numbers come from the September 2026 product document and could not be re-checked on 11 Oct 2026. Check them on the Lakeland contact page before relying on them.',
+  'https://lakelanddairies.com/contact-us',null,false),
 ('10000000-0000-0000-0000-000000000004','Aurivo Agribusiness','Nutrias','{ROI}','071 9186500','Agribusiness',
   null,null,'https://www.aurivo.ie',
   'Current Aurivo agribusiness contact or branch data; central number as fallback.',
-  'https://www.aurivo.ie/overview/','2026-09-01',false),
+  'https://www.aurivo.ie/overview/','2026-10-11',false),
 ('10000000-0000-0000-0000-000000000005','Arrabawn Tipperary Co-op','Dan O''Connor Feeds','{ROI}',null,null,
   null,null,null,
   'Arrabawn and Tipperary Co-op merged in Feb 2025. Contacts must come from the merged co-op''s live directory, not legacy Arrabawn data.',
   'https://www.rte.ie/news/business/2025/0228/1499516-arrabawn-tipperary-co-operative-society/',null,true),
-('10000000-0000-0000-0000-000000000006','Drummonds',null,'{ROI}','01 825 5011','Head office',
+('10000000-0000-0000-0000-000000000006','Drummonds',null,'{ROI}','01 825 5011','Head office (Clonee)',
   null,null,'https://drummonds.ie',
-  'Drummonds publishes branch managers, agronomists and branch phones. Map your farm to the nearest branch.',
-  'https://drummonds.ie/contact-us/','2026-09-01',false),
-('10000000-0000-0000-0000-000000000007','Fane Valley Feeds',null,'{NI}','028 9261 9620','Central',
+  'Branch phones are listed by county. If there is more than one branch in your county, pick yours with Set my rep.',
+  'https://drummonds.ie/contact-us/','2026-10-11',false),
+('10000000-0000-0000-0000-000000000007','Fane Valley Feeds',null,'{NI}','028 9261 9620','Fane Valley main line',
   null,null,'https://fanevalley.com',
-  'Northern Ireland coverage. Use the current advisor or branch directory; central number as fallback.',
-  'https://fanevalley.com/','2026-09-01',false);
+  'The Fane Valley site lists one main number and no separate Feeds line. Ask for Feeds, then save your adviser as your rep.',
+  'https://fanevalley.com/','2026-10-11',false);
+
+-- Drummonds branches (drummonds.ie/contact-us, checked 11 Oct 2026). Each serves its own county.
+insert into public.supplier_branches (id, supplier_id, name, town, counties, phone, source_url, verified_on) values
+('11000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000006','Drummonds Ardee','Ardee','{Louth}','041 685 3332','https://drummonds.ie/contact-us/','2026-10-11'),
+('11000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000006','Drummonds Drogheda','Drogheda','{Louth}','041 983 8986','https://drummonds.ie/contact-us/','2026-10-11'),
+('11000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000006','Drummonds Dromone','Oldcastle','{Meath}','044 967 2650','https://drummonds.ie/contact-us/','2026-10-11'),
+('11000000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000006','Drummonds Knockbridge','Dundalk','{Louth}','042 937 4480','https://drummonds.ie/contact-us/','2026-10-11'),
+('11000000-0000-0000-0000-000000000005','10000000-0000-0000-0000-000000000006','Drummonds Lusk','Lusk','{Dublin}','01 525 2903','https://drummonds.ie/contact-us/','2026-10-11'),
+('11000000-0000-0000-0000-000000000006','10000000-0000-0000-0000-000000000006','Drummonds Mullingar','Mullingar','{Westmeath}','044 936 2022','https://drummonds.ie/contact-us/','2026-10-11'),
+('11000000-0000-0000-0000-000000000007','10000000-0000-0000-0000-000000000006','Drummonds Navan','Navan','{Meath}','046 902 1641','https://drummonds.ie/contact-us/','2026-10-11'),
+('11000000-0000-0000-0000-000000000008','10000000-0000-0000-0000-000000000006','Drummonds Rathcoffey','Rathcoffey','{Kildare}','087 400 3896','https://drummonds.ie/contact-us/','2026-10-11')
+on conflict (id) do nothing;
 
 -- ---------------------------------------------------------------------------
 -- Demo login: demo@agri-it.local / agri-it-demo

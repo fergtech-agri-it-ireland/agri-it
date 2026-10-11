@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useFarmData } from '../lib/data/farm';
 import { useDerived, silageWithFedOut } from '../lib/data/derived';
 import { forecastForage } from '../lib/forecast/forage';
+import { cashForecast90 } from '../lib/forecast/money';
 import { eur, fmtDay, fmtMonth, fmtNum, todayISO } from '../lib/format';
 import { primaryRoute } from '../lib/suppliers';
 import { Card, ConfidenceBadge, Explain, LinkButton, Screen, Stepper, ToneIcon } from '../components/ui';
@@ -109,9 +110,12 @@ function ForageTab() {
   );
 }
 
+const NO_WHAT_IF = (today: string) => ({ incomePct: 0, costPct: 0, oneOff: 0, oneOffOn: today });
+
 function CashTab() {
   const b = useFarmData();
   const d = useDerived(b);
+  const [whatIf, setWhatIf] = useState(() => NO_WHAT_IF(d.today));
   if (!d.cash) {
     return (
       <Card>
@@ -121,31 +125,47 @@ function CashTab() {
       </Card>
     );
   }
-  const max = Math.max(1, ...d.cash90.rows.map((r) => Math.abs(r.closing)), Math.abs(d.cash.balance));
+  const plan = whatIf.incomePct || whatIf.costPct || whatIf.oneOff ? cashForecast90(b.farm, b.income, b.costs, b.budget, d.today, { incomePct: whatIf.incomePct, costPct: whatIf.costPct, oneOffEur: whatIf.oneOff, oneOffOn: whatIf.oneOffOn }) : d.cash90;
+  const max = Math.max(1, ...plan.rows.map((r) => Math.abs(r.closing)), Math.abs(d.cash.balance));
   return (
     <>
       <Card>
         <p className="text-muted">Recorded cash now</p>
         <p className="numeral text-5xl">{eur(d.cash.balance)}</p>
-        <p className="text-sm text-muted">From {eur(d.cash.opening)} on {fmtDay(d.cash.openingDate)}. Not a bank statement.</p>
+        <p className="text-sm text-muted">From {eur(d.cash.opening)} on {fmtDay(d.cash.openingDate)}, counting bills when they are paid. Not a bank statement.</p>
+        {d.money.owedTotal > 0 && <p className="mt-1 text-[0.9375rem]"><Link to="/money/bills" className="font-bold text-accent underline">{eur(d.money.owedTotal)} of bills owed</Link> come off in the forecast below, on their due dates{d.money.undatedCount || d.money.overdueCount ? ' (overdue or undated ones this month)' : ''}.</p>}
       </Card>
-      <Card>
-        <p className="mb-3 font-bold">Next 90 days</p>
+      <Card className={plan.scenario ? 'border-2 border-hivis' : ''}>
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <p className="font-bold">Next 90 days</p>
+          {plan.scenario && <ConfidenceBadge level="scenario" />}
+        </div>
         <div className="space-y-3">
-          {d.cash90.rows.map((r) => (
+          {plan.rows.map((r) => (
             <div key={r.month}>
               <div className="flex justify-between font-bold"><span>{fmtMonth(r.month)}</span><span>{eur(r.closing)}</span></div>
               <div className="mt-1 h-3 overflow-hidden rounded-full bg-pasture">
                 <div className={`h-full ${r.closing < 0 ? 'bg-danger' : 'bg-field'}`} style={{ width: `${(Math.abs(r.closing) / max) * 100}%` }} />
               </div>
               <p className="text-sm text-muted">
-                Known: +{eur(r.knownIn)} / −{eur(r.knownOut)}
+                Known: +{eur(r.knownIn)} / −{eur(r.knownOut)}{r.owedOut > 0 && <> (bills owed {eur(r.owedOut)})</>}
                 {(r.assumedIn > 0 || r.assumedOut > 0) && <>. Budget: +{eur(r.assumedIn)} / −{eur(r.assumedOut)}</>}
               </p>
             </div>
           ))}
         </div>
-        {!d.cash90.hasBudget && <p className="mt-3 text-sm">Only items you've entered with future dates are included. <Link className="underline" to="/money/budget">Add a budget</Link> to project regular income and costs.</p>}
+        {!d.cash90.hasBudget && <p className="mt-3 text-sm">Only items you've entered with future dates and bills owed are included. <Link className="underline" to="/money/budget">Add a budget</Link> to project regular income and costs.</p>}
+        {d.money.committedTotal > 0 && <p className="mt-2 text-sm text-muted">Not counted: {eur(d.money.committedTotal)} on order. It becomes a bill when it is delivered.</p>}
+      </Card>
+      <Card className="space-y-3">
+        <p className="font-bold">What if?</p>
+        <p className="text-sm text-muted">Try a change without recording anything. Shown as a scenario, never as the forecast.</p>
+        <Stepper label="Income (milk price, sales)" value={whatIf.incomePct} min={-50} step={5} onChange={(n) => setWhatIf({ ...whatIf, incomePct: n })} unit="%" />
+        <Stepper label="Costs (feed, fertiliser, bills)" value={whatIf.costPct} min={-50} step={5} onChange={(n) => setWhatIf({ ...whatIf, costPct: n })} unit="%" />
+        <Stepper label="A one-off spend" value={whatIf.oneOff} step={1000} onChange={(n) => setWhatIf({ ...whatIf, oneOff: n })} unit="€" />
+        {whatIf.oneOff > 0 && <label className="block"><span className="label">On</span><input type="date" className="input" value={whatIf.oneOffOn} min={d.today} onChange={(e) => setWhatIf({ ...whatIf, oneOffOn: e.target.value })} /></label>}
+        {plan.scenario && plan.lowest && <p className="font-bold">{plan.lowest.closing < 0 ? `Goes overdrawn: about ${eur(plan.lowest.closing)} by the end of ${fmtMonth(plan.lowest.month)}` : `Lowest about ${eur(plan.lowest.closing)} in ${fmtMonth(plan.lowest.month)}`}</p>}
+        {plan.scenario && <button className="min-h-tap text-sm font-bold text-accent" onClick={() => setWhatIf(NO_WHAT_IF(d.today))}>Back to the forecast</button>}
       </Card>
       <Explain>
         <p>Closing balance = recorded cash now + known future items + budget amounts for months where nothing is entered yet.</p>

@@ -4,9 +4,10 @@ import { useFarmData, useFarmCtx, useSave } from '../lib/data/farm';
 import { supabase } from '../lib/supabase';
 import { COUNTIES_NI, COUNTIES_ROI, type Farm } from '../lib/types';
 import { todayISO } from '../lib/format';
-import { Button, Card, Chips, DateChips, Field, NumberInput, Screen, SectionTitle, Stepper, TextInput } from '../components/ui';
+import { Button, Card, Chips, DateChips, Field, List, NumberInput, Row, Screen, SectionTitle, Stepper, TextInput } from '../components/ui';
+import { ChevronRight, History, Users } from 'lucide-react';
 import { useTheme, type DawnPref } from '../lib/theme';
-import { useDerived } from '../lib/data/derived';
+import { reminderHeadlines, useDerived } from '../lib/data/derived';
 import { RemindersCard } from '../components/Reminders';
 import { PhoneStorageCard } from '../components/PhoneStorage';
 import { IS_LOCAL } from '../lib/env';
@@ -28,9 +29,11 @@ export default function Settings() {
   const [housing, setHousing] = useState(f.housing_start ?? '');
   const [turnout, setTurnout] = useState(f.turnout_date ?? '');
   const [feedTarget, setFeedTarget] = useState(f.feed_target_days ?? 30);
+  const [billDays, setBillDays] = useState(f.bill_warning_days ?? 7);
+  const [orderDays, setOrderDays] = useState(f.order_warning_days ?? 7);
   const theme = useTheme();
   const d = useDerived(b);
-  const urgent = useMemo(() => d.priorities.filter((p) => p.tone === 'urgent').map((p) => p.title), [d.priorities]);
+  const urgent = useMemo(() => reminderHeadlines(d.priorities), [d.priorities]);
   const [params] = useSearchParams();
   useEffect(() => {
     if (params.get('section') === 'reminders') document.getElementById('reminders')?.scrollIntoView({ block: 'start' });
@@ -40,7 +43,8 @@ export default function Settings() {
     const patch: Partial<Farm> = {
       name, county, eircode: eircode || null, opening_cash_eur: cash === '' ? null : Number(cash), opening_cash_date: cash === '' ? null : cashDate,
       financial_year_start_month: Number(fyMonth), default_lead_time_days: knowLead ? lead : null, forage_reserve_percent: reserve,
-      housing_start: housing || null, turnout_date: turnout || null, feed_target_days: feedTarget
+      housing_start: housing || null, turnout_date: turnout || null, feed_target_days: feedTarget,
+      bill_warning_days: billDays, order_warning_days: orderDays
     };
     await save([{ kind: 'update', table: 'farms', match: { id: f.id }, patch }], { label: 'Settings saved', patch: (x) => ({ ...x, farm: { ...x.farm, ...patch } }) });
   }
@@ -60,6 +64,12 @@ export default function Settings() {
 
       <div id="reminders" className="scroll-mt-20"><SectionTitle>Reminders</SectionTitle></div>
       <RemindersCard b={b} urgentToday={urgent} />
+
+      <SectionTitle>Alerts on Today</SectionTitle>
+      <Card className="space-y-4">
+        <Stepper label="Warn before a bill is due" value={billDays} min={0} onChange={setBillDays} unit="days" hint="Overdue bills always stay on Today until they are paid." />
+        <Stepper label="Warn before the order-by date" value={orderDays} min={0} onChange={setOrderDays} unit="days" hint="Safety stock is set on each feed. Missed jobs and routines stay until ticked, moved or skipped." />
+      </Card>
 
       <SectionTitle>Farm</SectionTitle>
       <Card className="space-y-4">
@@ -94,6 +104,12 @@ export default function Settings() {
         <Stepper label="Silage reserve" value={reserve} step={5} onChange={setReserve} unit="%" hint="Teagasc suggests roughly 15 to 20% extra for a bad spring (S3)." />
       </Card>
       <Button block onClick={submit}>Save settings</Button>
+
+      <SectionTitle>People and history</SectionTitle>
+      <List>
+        <Row to="/settings/people" icon={<Users className="h-6 w-6 text-accent" />} title="People on this farm" sub="Family, farm worker (no money), adviser (read only)" right={<ChevronRight className="h-5 w-5 text-muted" />} />
+        <Row to="/settings/changes" icon={<History className="h-6 w-6 text-accent" />} title="Change history" sub="Who added, changed or removed what, and when" right={<ChevronRight className="h-5 w-5 text-muted" />} />
+      </List>
 
       {farms.length > 1 && (
         <>

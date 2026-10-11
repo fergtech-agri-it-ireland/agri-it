@@ -1,4 +1,4 @@
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { CalendarDays, Pencil, Phone } from 'lucide-react';
 import { useFarmData, useSave } from '../lib/data/farm';
@@ -19,6 +19,10 @@ export default function FeedDetail() {
   const save = useSave();
   const product = b.products.find((p) => p.id === id);
   const f = product ? d.feed.get(product.id) : undefined;
+  const [params] = useSearchParams();
+  const nav = useNavigate();
+  const dupe = b.txns.find((t) => t.id === params.get('dupe') && t.txn_type === 'delivery');
+  const twin = dupe ? b.txns.find((t) => t.id !== dupe.id && t.txn_type === 'delivery' && t.feed_product_id === dupe.feed_product_id && t.effective_on === dupe.effective_on && Math.abs(Number(t.quantity_kg) - Number(dupe.quantity_kg)) < 0.5) : undefined;
 
   // Forecast history (governance): what the forecast said before, and why it moved
   const snaps = useQuery({
@@ -36,13 +40,13 @@ export default function FeedDetail() {
   const prices = priceHistory(d.prices, product.id, d.today);
   const rules = b.rules.filter((r) => r.feed_product_id === product.id).sort((a, c) => Number(a.is_temporary) - Number(c.is_temporary));
   const txns = b.txns.filter((t) => t.feed_product_id === product.id).sort((a, c) => c.effective_on.localeCompare(a.effective_on));
-  const variances = countVariances(txns, rules, b.groups, b.feedLogs.filter((l) => l.feed_product_id === product.id));
+  const variances = countVariances(txns, rules, b.groups, b.feedLogs.filter((l) => l.feed_product_id === product.id), b.headHistory);
   const supplier = b.suppliers.find((s) => s.id === product.supplier_id);
   const contacts = supplier ? resolveContacts(supplier, b.branches, b.supplierSettings.find((s) => s.supplier_id === supplier.id), b.farm) : null;
   const prev = (snaps.data ?? []).find((s) => s.output.run_out !== f.runOutDate);
 
   // The sum (after MyFitnessPal's remaining-calories equation): stock minus each stretch of planned use
-  const steps = f.stockKg !== null && f.stockKg > 0 ? runoutSteps(f.stockKg, rules, b.groups, d.today, f.confirmedTodayKg > 0 ? f.remainingTodayKg : undefined) : [];
+  const steps = f.stockKg !== null && f.stockKg > 0 ? runoutSteps(f.stockKg, rules, b.groups, d.today, f.confirmedTodayKg > 0 ? f.remainingTodayKg : undefined, b.headHistory) : [];
   const lastCount = [...txns].find((t) => t.txn_type === 'count' || t.txn_type === 'opening');
   const deliveredSince = lastCount ? txns.filter((t) => t.txn_type === 'delivery' && t.effective_on > lastCount.effective_on).reduce((s, t) => s + Number(t.quantity_kg), 0) : 0;
   const stockBasis = lastCount
@@ -64,6 +68,17 @@ export default function FeedDetail() {
   return (
     <Screen title={product.name} back="/" sub={[product.storage_location, supplier ? `from ${supplier.name}` : null].filter(Boolean).join(', ')}
       right={<Link to={`/feed/${product.id}/edit`} aria-label="Edit feed" className="flex min-h-tap min-w-tap items-center justify-center rounded-full hover:bg-field-light"><Pencil className="h-6 w-6" /></Link>}>
+
+      {dupe && twin && (
+        <Card className="space-y-2 bg-warn-bg">
+          <p className="font-bold text-warn">{fmtKg(Number(dupe.quantity_kg))} on {fmtDay(dupe.effective_on)} is recorded twice</p>
+          <p className="text-[0.9375rem]">Often the same truck saved on two phones. If only one load came, remove the second: its cost goes with it.</p>
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant="danger" onClick={async () => { const ok = await save([{ kind: 'rpc', fn: 'undo_feed_delivery', args: { p_id: dupe.id } }], { label: 'Second delivery removed. Stock and costs updated', patch: (x) => ({ ...x, txns: x.txns.filter((t) => t.id !== dupe.id), costs: x.costs.filter((c) => c.feed_transaction_id !== dupe.id) }) }); if (ok) nav(`/feed/${product?.id}`, { replace: true }); }}>Remove the second</Button>
+            <Button variant="secondary" onClick={async () => { const ok = await save([{ kind: 'update', table: 'feed_transactions', match: { id: dupe.id }, patch: { notes: `${dupe.notes ? `${dupe.notes} ` : ''}[not a duplicate]` } }], { label: 'Kept both', patch: (x) => ({ ...x, txns: x.txns.map((t) => (t.id === dupe.id ? { ...t, notes: `${t.notes ? `${t.notes} ` : ''}[not a duplicate]` } : t)) }) }); if (ok) nav(`/feed/${product?.id}`, { replace: true }); }}>Two loads came</Button>
+          </div>
+        </Card>
+      )}
 
       {f.stockKg === null ? (
         <Empty title="How much is in the bin?" body="Add a stock count and Agri-It works out when it runs out." action={<LinkButton to={`/feed/${product.id}/count`} variant="hivis">Add a stock count</LinkButton>} />
@@ -112,10 +127,23 @@ export default function FeedDetail() {
         </section>
       )}
 
+      <Explain title="What this forecast is worked out from">
+        <dl className="space-y-2 text-[0.9375rem]">
+          <div><dt className="font-bold">Stock</dt><dd>{lastCount ? `${lastCount.txn_type === 'count' ? 'Counted' : 'Opening stock'} ${fmtDay(lastCount.effective_on)} (${EVIDENCE_LABEL[lastCount.evidence].toLowerCase()})` : 'No count yet: built from deliveries only'}{deliveredSince ? `, plus ${fmtKg(deliveredSince)} delivered since` : ''}.</dd></div>
+          <div><dt className="font-bold">Animals</dt><dd>{f.activeRules.length ? f.activeRules.map((r) => `${r.groupName} ${r.heads} head${r.headsSource === 'override' ? ' (fixed on the plan)' : r.headsAsOf ? `, count from ${fmtDay(r.headsAsOf.slice(0, 10))}` : ''}`).join('; ') : 'None on a feeding plan today'}. Past days use the count in force on each day.</dd></div>
+          <div><dt className="font-bold">Your feeding plan</dt><dd>{f.activeRules.length ? f.activeRules.map((r) => `${r.groupName}: ${fmtNum(r.kgPerHeadPerFeed)} kg × ${fmtNum(r.feedsPerDay)} a day${r.temporary ? ` (${r.label ?? 'temporary'})` : ''}`).join('; ') : 'Not set'}. Your rates, not a recommendation.</dd></div>
+          {f.upcomingChanges.length > 0 && <div><dt className="font-bold">Changes ahead</dt><dd>{f.upcomingChanges.map((c) => `${fmtDay(c.date)}: ${c.reason}, ${fmtKg(c.dailyUseKg)} a day`).join('; ')}.</dd></div>}
+          <div><dt className="font-bold">Delivery time</dt><dd>{f.leadTimeDays === null ? 'Not set, so there is no order-by date. Agri-It never guesses it.' : `${f.leadTimeDays} days, from ${f.leadTimeSource === 'feed' ? 'this feed' : f.leadTimeSource === 'supplier' ? 'the supplier setting' : 'your farm default'}`}. Spare kept: {f.safetyLabel}.</dd></div>
+          {f.openOrders.length > 0 && <div><dt className="font-bold">On order</dt><dd>{fmtKg(f.openOrders.reduce((s2, o) => s2 + o.kg, 0))}, not counted until it arrives.</dd></div>}
+          <div><dt className="font-bold">How sure</dt><dd><ConfidenceBadge level={f.confidence} /> {f.reasons.length ? f.reasons.join(' ') : 'Recent count, current head counts, explicit plan and confirmed deliveries.'}</dd></div>
+          <div><dt className="font-bold">Worked out</dt><dd>{d.computedAt.toLocaleTimeString('en-IE', { hour: '2-digit', minute: '2-digit' })} today, with rule {String(f.inputs.rule_version)}. It updates the moment anything above changes.</dd></div>
+        </dl>
+      </Explain>
+
       {f.openOrders.length > 0 && (
         <List>
           {f.openOrders.map((o) => (
-            <Row key={o.id} to={`/record/delivery?feed=${product.id}&order=${o.id}`} title={`Ordered ${fmtKg(o.kg)}, not delivered`}
+            <Row key={o.id} to={`/record/delivery?feed=${product.id}&order=${o.id}`} title={`${fmtKg(o.kg)} still to come on an order`}
               sub={o.expected ? `Expected ${fmtDay(o.expected)}. Not counted as stock until you confirm it arrived.` : 'Not counted as stock until delivered.'}
               right={<span className="font-bold text-accent">Confirm</span>} />
           ))}

@@ -64,7 +64,7 @@ with sync_playwright() as p:
     # 5. Change the amount
     pg.locator('li', has_text='Calves: 27 kg Calf ration').get_by_role('button', name='Change').click()
     dlg = pg.get_by_role('dialog')
-    dlg.locator('input').fill('20')
+    dlg.locator('input').first.fill('20')
     dlg.get_by_role('button', name='Fed 20 kg').click()
     pg.wait_for_timeout(500)
     while pg.get_by_role('button', name=re.compile(r'Show done')).count(): pg.get_by_role('button', name=re.compile(r'Show done')).first.click(); pg.wait_for_timeout(100)
@@ -75,8 +75,8 @@ with sync_playwright() as p:
     # 6. A bill with a different amount creates the cost
     pg.locator('li', has_text='Loan repayment').get_by_role('button', name='Change').click()
     dlg = pg.get_by_role('dialog')
-    check('Bill amount prefilled from routine', dlg.locator('input').input_value() == '5200', dlg.locator('input').input_value())
-    dlg.locator('input').fill('5000')
+    check('Bill amount prefilled from routine', dlg.locator('input').first.input_value() == '5200', dlg.locator('input').first.input_value())
+    dlg.locator('input').first.fill('5000')
     dlg.get_by_role('button', name='Paid €5,000').click()
     pg.wait_for_timeout(500)
     check('Loan gone from the list', 'Loan repayment' not in checklist().inner_text())

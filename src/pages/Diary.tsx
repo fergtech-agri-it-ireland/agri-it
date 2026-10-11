@@ -5,6 +5,7 @@ import { useFarmData } from '../lib/data/farm';
 import { useDerived } from '../lib/data/derived';
 import { buildChecklist } from '../lib/routines';
 import { stockAt, usageModel, rulesForDay, headsFor } from '../lib/forecast/feed';
+import { withHistory } from '../lib/heads';
 import { addOptions, farmTypes } from '../lib/farmTypes';
 import { Checklist } from '../components/Checklist';
 import { DiaryHistory } from '../components/DiaryHistory';
@@ -39,7 +40,7 @@ function Line({ title, sub, right, to }: { title: string; sub?: string; right?: 
 
 /** Start − fed + delivered = in the bin, for one feed on one day (the food diary's sum at the top). */
 function binSum(b: FarmBundle, productId: string, day: string, today: string) {
-  const groups = new Map(b.groups.map((g) => [g.id, g]));
+  const groups = new Map(withHistory(b.groups, b.headHistory).map((g) => [g.id, g]));
   const txns = b.txns.filter((t) => t.feed_product_id === productId);
   const rules = b.rules.filter((r) => r.feed_product_id === productId);
   const logs = b.feedLogs.filter((l) => l.feed_product_id === productId);
@@ -77,10 +78,10 @@ export default function Diary() {
   const moneyAdd = addOptions(types).find((o) => o.relevant && (o.id === 'milk' || o.id === 'grain'));
 
   // A past day: what was fed, from the plan and anything ticked off
-  const groups = new Map(b.groups.map((g) => [g.id, g]));
+  const groups = new Map(withHistory(b.groups, b.headHistory).map((g) => [g.id, g]));
   const pastFeeding = isToday ? [] : live.flatMap((p) => rulesForDay(b.rules.filter((r) => r.feed_product_id === p.id), day).map((r) => {
     const g = groups.get(r.animal_group_id);
-    const planned = headsFor(r, groups) * Number(r.kg_per_head_per_feed) * Number(r.feeds_per_day);
+    const planned = headsFor(r, groups, day) * Number(r.kg_per_head_per_feed) * Number(r.feeds_per_day);
     const log = b.feedLogs.find((l) => l.feeding_rule_id === r.id && l.used_on === day);
     const kg = log ? Number(log.actual_kg) : planned;
     return { key: r.id, title: `${g?.name ?? 'Group'}: ${p.name}`, sub: log ? (log.status === 'skipped' ? 'Skipped' : 'Ticked off') : 'From your plan, not ticked off', kg };

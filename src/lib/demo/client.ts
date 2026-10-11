@@ -19,7 +19,7 @@ const DB_KEY = IS_LOCAL ? 'agri-it:phone-db' : 'agri-it:demo-db';
 const SIGNED_OUT_KEY = 'agri-it:demo-signed-out';
 // Demo: bump when the seed's shape changes so stored demo data is rebuilt.
 // Phone: the farmer's own records. NEVER thrown away on a version change; migrate instead.
-const VERSION = IS_LOCAL ? 1 : 5;
+const VERSION = IS_LOCAL ? 1 : 6;
 const LOCAL_USER = { id: '20000000-0000-0000-0000-0000000000aa', email: 'This phone' };
 const USER = IS_LOCAL ? LOCAL_USER : DEMO_USER;
 const fresh = (): DB => (IS_LOCAL ? buildReference() : buildSeed());
@@ -40,6 +40,9 @@ function load(): DB {
   return fresh();
 }
 let db: DB = load();
+/** Tests only: the in-memory tables, and a way to start again from the seed or from reference data. */
+export const _testDb = () => db;
+export function _testReset(reference = false) { db = reference ? buildReference() : buildSeed(); }
 /** False when this browser refused to keep the last change (blocked or full storage). */
 export let browserKeepsData = true;
 function persist() {
@@ -154,7 +157,33 @@ function withDefaults(t: string, r: Row): Row {
   const base: Row = { ...(DEFAULTS[t]?.() ?? {}) };
   if (!('id' in r) && t !== 'farm_supplier_settings' && t !== 'farm_members') base.id = uuid();
   if (t !== 'forecast_snapshots') base.created_at = nowISO();
-  return { ...base, ...r };
+  if (TOUCHED.has(t)) base.updated_at = nowISO();
+  return paymentDates(t, { ...base, ...r });
+}
+
+/** Tables with updated_at (mirrors the migration), so an offline edit can spot a newer change. */
+const TOUCHED = new Set(['farms', 'animal_groups', 'feed_products', 'feed_transactions', 'feeding_rules', 'silage_stores', 'budget_lines', 'farm_records', 'jobs', 'routines', 'crops', 'documents', 'costs', 'income', 'farm_supplier_settings']);
+/** Same as the costs_payment_dates trigger: a paid cost has a paid date, an owed one never does. */
+function paymentDates(t: string, r: Row): Row {
+  if (t !== 'costs') return r;
+  if (r.payment_status === 'owed') r.paid_on = null;
+  else if (!r.paid_on) r.paid_on = r.occurred_on ?? null;
+  return r;
+}
+
+/** Same as the audit_row trigger: who changed what and when. On this phone, "who" is the phone. */
+const AUDITED = new Set(['costs', 'income', 'feed_transactions', 'animal_groups', 'feeding_rules', 'documents', 'farm_records', 'budget_lines', 'jobs', 'feed_products', 'silage_stores']);
+let auditSeq = 0;
+function audit(t: string, action: 'insert' | 'update' | 'delete', oldRow: Row | null, newRow: Row | null) {
+  if (!AUDITED.has(t)) return;
+  const strip = (r: Row | null) => { if (!r) return null; const { updated_at: _u, ...rest } = r; return rest; }; // eslint-disable-line @typescript-eslint/no-unused-vars
+  const o = strip(oldRow); const n = strip(newRow);
+  if (action === 'update' && JSON.stringify(o) === JSON.stringify(n)) return;
+  const row = (n ?? o)!;
+  const log = table('audit_log');
+  log.push({ id: `${Date.now()}-${++auditSeq}`, farm_id: row.farm_id, table_name: t, row_id: row.id, action, changed_by: USER.id, changed_by_label: IS_LOCAL ? 'This phone' : USER.email, changed_at: nowISO(), old_row: o, new_row: n });
+  // Keep the trail to the last 2,000 changes so phone storage doesn't fill up
+  if (log.length > 2000) db.audit_log = log.slice(-2000);
 }
 /** ON DELETE CASCADE / SET NULL rules the app relies on. */
 function cascade(t: string, removed: Row[]) {
@@ -246,6 +275,7 @@ class Query implements PromiseLike<{ data: unknown; error: { message: string } |
       case 'insert': {
         const added = this.payload.map((r) => withDefaults(this.t, r));
         rows.push(...added);
+        added.forEach((r) => audit(this.t, 'insert', null, r));
         persist();
         return ok(added);
       }
@@ -254,11 +284,17 @@ class Query implements PromiseLike<{ data: unknown; error: { message: string } |
         for (const r of this.payload) {
           const existing = rows.find((x) => this.conflict.every((k) => r[k] !== undefined && x[k] === r[k]));
           if (existing) {
-            if (!this.ignoreDup) Object.assign(existing, r);
+            if (!this.ignoreDup) {
+              const before = { ...existing };
+              Object.assign(existing, r, TOUCHED.has(this.t) ? { updated_at: nowISO() } : {});
+              paymentDates(this.t, existing);
+              audit(this.t, 'update', before, existing);
+            }
             out.push(existing);
           } else {
             const added = withDefaults(this.t, r);
             rows.push(added);
+            audit(this.t, 'insert', null, added);
             out.push(added);
           }
         }
@@ -267,13 +303,19 @@ class Query implements PromiseLike<{ data: unknown; error: { message: string } |
       }
       case 'update': {
         const changed = rows.filter(hit);
-        changed.forEach((r) => Object.assign(r, this.patch));
+        changed.forEach((r) => {
+          const before = { ...r };
+          Object.assign(r, this.patch, TOUCHED.has(this.t) ? { updated_at: nowISO() } : {});
+          paymentDates(this.t, r);
+          audit(this.t, 'update', before, r);
+        });
         persist();
-        return ok(changed);
+        return ok(changed.map((r) => ({ ...r })));
       }
       case 'delete': {
         const removed = rows.filter(hit);
         db[this.t] = rows.filter((r) => !hit(r));
+        removed.forEach((r) => audit(this.t, 'delete', r, null));
         cascade(this.t, removed);
         persist();
         return ok(removed);
@@ -314,13 +356,30 @@ class Query implements PromiseLike<{ data: unknown; error: { message: string } |
 type Args = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 const find = (t: string, id: unknown) => table(t).find((r) => r.id === id);
 
-function setHeadCount(groupId: string, heads: number, reason = 'manual', effectiveOn = todayISO()) {
+/** Same as public.heads_on: the count in force on a day. */
+function headsOnDay(groupId: string, day: string): number {
+  const g = find('animal_groups', groupId);
+  const h = table('head_count_history').filter((x) => x.animal_group_id === groupId)
+    .sort((a, c) => String(a.effective_on).localeCompare(String(c.effective_on)) || String(a.created_at).localeCompare(String(c.created_at)));
+  const upTo = h.filter((x) => String(x.effective_on) <= day);
+  if (upTo.length) return Number(upTo.at(-1)!.head_count);
+  if (h.length && h[0].previous_count !== null && h[0].previous_count !== undefined) return Number(h[0].previous_count);
+  return Number(g?.head_count ?? 0);
+}
+
+/** Same as public.set_head_count: dated, keeps the count it replaced, current count = today's. */
+function setHeadCount(groupId: string, heads: number, reason = 'manual', effectiveOn = todayISO(), id?: string) {
   if (heads < 0) throw new Error('Head count cannot be negative');
+  if (id && table('head_count_history').some((x) => x.id === id)) return;
   const g = find('animal_groups', groupId);
   if (!g) throw new Error('Group not found');
-  g.head_count = heads;
+  const before = headsOnDay(groupId, effectiveOn);
+  table('head_count_history').push(withDefaults('head_count_history', { ...(id ? { id } : {}), farm_id: g.farm_id, animal_group_id: groupId, head_count: heads, previous_count: before, effective_on: effectiveOn, reason }));
+  const old = { ...g };
+  g.head_count = headsOnDay(groupId, todayISO());
   g.head_count_updated_at = nowISO();
-  table('head_count_history').push(withDefaults('head_count_history', { farm_id: g.farm_id, animal_group_id: groupId, head_count: heads, effective_on: effectiveOn, reason }));
+  g.updated_at = nowISO();
+  audit('animal_groups', 'update', old, g);
 }
 
 const rpcs: Record<string, (a: Args) => unknown> = {
@@ -335,27 +394,37 @@ const rpcs: Record<string, (a: Args) => unknown> = {
     if (find('feed_transactions', a.p_id)) return a.p_id;
     const qty = Number(a.p_quantity_kg);
     if (!qty || qty <= 0) throw new Error('Quantity must be more than zero');
+    const payment = a.p_payment ?? 'paid';
+    if (payment !== 'paid' && payment !== 'account') throw new Error('Unknown payment choice');
     let total: number | null = a.p_total_price_eur ?? null;
     let ppt: number | null = a.p_price_per_tonne_eur ?? null;
     if (total === null && ppt !== null) total = Math.round(ppt * qty / 10) / 100;
     if (ppt === null && total !== null) ppt = Math.round((total / (qty / 1000)) * 100) / 100;
-    table('feed_transactions').push(withDefaults('feed_transactions', {
+    const txn = withDefaults('feed_transactions', {
       id: a.p_id, farm_id: a.p_farm_id, feed_product_id: a.p_feed_product_id, txn_type: 'delivery', quantity_kg: qty,
       order_date: a.p_order_date ?? null, delivery_date: a.p_delivery_date, effective_on: a.p_delivery_date, supplier_id: a.p_supplier_id ?? null,
       total_price_eur: total, price_per_tonne_eur: ppt, evidence: a.p_evidence ?? 'confirmed_docket', linked_order_id: a.p_linked_order_id ?? null,
       document_id: a.p_document_id ?? null, notes: a.p_notes ?? null
-    }));
+    });
+    table('feed_transactions').push(txn);
+    audit('feed_transactions', 'insert', null, txn);
     if (a.p_linked_order_id) {
       const o = find('feed_transactions', a.p_linked_order_id);
-      if (o && o.txn_type === 'order') o.order_status = 'delivered';
+      if (o && o.txn_type === 'order') {
+        const delivered = table('feed_transactions').filter((t) => t.txn_type === 'delivery' && t.linked_order_id === o.id).reduce((s2, t) => s2 + Number(t.quantity_kg), 0);
+        if (a.p_close_order !== false || delivered >= Number(o.quantity_kg)) o.order_status = 'delivered';
+      }
     }
     if (total !== null && total > 0) {
       const product = find('feed_products', a.p_feed_product_id);
       const supplier = find('suppliers', a.p_supplier_id);
-      table('costs').push(withDefaults('costs', {
+      const cost = withDefaults('costs', {
         farm_id: a.p_farm_id, category: 'feed', occurred_on: a.p_delivery_date, amount_eur: total, supplier_id: a.p_supplier_id ?? null,
-        supplier_name: supplier?.name ?? null, feed_transaction_id: a.p_id, description: `${product?.name ?? 'Feed'} ${Math.round(qty / 10) / 100} t`, document_id: a.p_document_id ?? null
-      }));
+        supplier_name: supplier?.name ?? null, feed_transaction_id: a.p_id, description: `${product?.name ?? 'Feed'} ${Math.round(qty / 10) / 100} t`, document_id: a.p_document_id ?? null,
+        payment_status: payment === 'account' ? 'owed' : 'paid', due_on: payment === 'account' ? a.p_due_on ?? null : null
+      });
+      table('costs').push(cost);
+      audit('costs', 'insert', null, cost);
     }
     if (a.p_supplier_id) {
       const s = table('farm_supplier_settings').find((x) => x.farm_id === a.p_farm_id && x.supplier_id === a.p_supplier_id);
@@ -370,11 +439,34 @@ const rpcs: Record<string, (a: Args) => unknown> = {
     const t = find('feed_transactions', a.p_id);
     if (!t || t.txn_type !== 'delivery') return null;
     db.feed_transactions = table('feed_transactions').filter((x) => x !== t);
+    audit('feed_transactions', 'delete', t, null);
     cascade('feed_transactions', [t]);
-    if (t.linked_order_id) { const o = find('feed_transactions', t.linked_order_id); if (o) o.order_status = 'open'; }
+    if (t.linked_order_id) {
+      const o = find('feed_transactions', t.linked_order_id);
+      if (o) {
+        const delivered = table('feed_transactions').filter((x) => x.txn_type === 'delivery' && x.linked_order_id === o.id).reduce((s2, x) => s2 + Number(x.quantity_kg), 0);
+        if (delivered < Number(o.quantity_kg)) o.order_status = 'open';
+      }
+    }
     return null;
   },
-  set_head_count: (a) => { setHeadCount(a.p_group_id, Number(a.p_head_count), a.p_reason ?? 'manual', a.p_effective_on ?? todayISO()); return null; },
+  move_animals: (a) => {
+    if (table('head_count_history').some((x) => x.id === a.p_id)) return a.p_id;
+    if (a.p_from === a.p_to) throw new Error('Pick two different groups');
+    const n = Number(a.p_count);
+    if (!n || n <= 0) throw new Error('Enter how many to move');
+    const from = table('animal_groups').find((x) => x.id === a.p_from && x.farm_id === a.p_farm_id);
+    const to = table('animal_groups').find((x) => x.id === a.p_to && x.farm_id === a.p_farm_id);
+    if (!from || !to) throw new Error('Group not found');
+    const on = a.p_effective_on ?? todayISO();
+    const fromN = headsOnDay(String(from.id), on);
+    const toN = headsOnDay(String(to.id), on);
+    if (n > fromN) throw new Error(`${from.name} only has ${fromN} head on that day`);
+    setHeadCount(String(from.id), fromN - n, `moved to ${to.name}`, on, a.p_id);
+    setHeadCount(String(to.id), toN + n, `moved from ${from.name}`, on);
+    return a.p_id;
+  },
+  set_head_count: (a) => { setHeadCount(a.p_group_id, Number(a.p_head_count), a.p_reason ?? 'manual', a.p_effective_on ?? todayISO(), a.p_id ?? undefined); return null; },
   record_animal_sale: (a) => {
     if (find('income', a.p_id)) return a.p_id;
     const n = Number(a.p_head_count);
@@ -385,7 +477,7 @@ const rpcs: Record<string, (a: Args) => unknown> = {
       id: a.p_id, farm_id: a.p_farm_id, income_type: 'livestock', occurred_on: a.p_occurred_on, amount_eur: a.p_amount_eur,
       counterparty: a.p_counterparty ?? null, animal_group_id: a.p_group_id, head_count: n, description: `${n} sold from ${g.name}`
     }));
-    if (a.p_reduce_group !== false) setHeadCount(a.p_group_id, Math.max(0, Number(g.head_count) - n), 'sale', a.p_occurred_on);
+    if (a.p_reduce_group !== false) setHeadCount(a.p_group_id, Math.max(0, headsOnDay(String(g.id), a.p_occurred_on) - n), 'sale', a.p_occurred_on);
     return a.p_id;
   },
   undo_animal_sale: (a) => {
@@ -393,7 +485,7 @@ const rpcs: Record<string, (a: Args) => unknown> = {
     db.income = table('income').filter((x) => x.id !== a.p_income_id);
     if (i?.animal_group_id && i.head_count) {
       const g = find('animal_groups', i.animal_group_id);
-      if (g) setHeadCount(String(g.id), Number(g.head_count) + Number(i.head_count), 'sale undone');
+      if (g) setHeadCount(String(g.id), headsOnDay(String(g.id), String(i.occurred_on)) + Number(i.head_count), 'sale undone', String(i.occurred_on));
     }
     return null;
   }

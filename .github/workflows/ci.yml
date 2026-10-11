@@ -30,6 +30,8 @@ jobs:
       - run: supabase db start
       - run: supabase db reset
       - run: supabase db lint --level error
+      # Review fixes: paid/owed, part deliveries, dated head counts, roles, invites, audit trail
+      - run: psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -q -f scripts/e2e/db_review.sql
 
   pages:
     # Publishes the phone-only app to https://fergtech-agri-it-ireland.github.io/agri-it/ after the

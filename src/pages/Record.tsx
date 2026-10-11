@@ -8,7 +8,7 @@ import { eur, fmtDay, fmtKg, fmtNum } from '../lib/format';
 import { setPendingPhoto } from '../lib/pendingPhoto';
 import { Button, Sheet } from '../components/ui';
 import { IN_FRAME, IS_DEMO, IS_LOCAL } from '../lib/env';
-import { interpret, isReferenceNote, NotReadable, readLines } from '../lib/docket/flow';
+import { formFor, interpret, isReferenceNote, NotReadable, readLines } from '../lib/docket/flow';
 import { warmReader, type ReadProgress } from '../lib/docket/reader';
 import { keepToRead } from '../lib/docket/photoStore';
 import { kindLabel, type DocketRead } from '../lib/docket/extract';
@@ -20,6 +20,7 @@ type Icon = ComponentType<{ className?: string }>;
 /** What a docket photo can be, and which form it opens with the photo attached. */
 const PHOTO_KINDS: { to: string; label: string; sub: string; Icon: Icon }[] = [
   { to: '/record/delivery', label: 'Feed docket', sub: 'Meal or nuts delivered', Icon: PackageCheck },
+  { to: '/record/invoice', label: 'Feed invoice', sub: 'For feed already delivered', Icon: Receipt },
   { to: '/record/cost', label: 'Bill or invoice', sub: 'Vet, contractor, fertiliser, ESB', Icon: Receipt },
   { to: '/record/milk', label: 'Milk statement', sub: 'Monthly cheque', Icon: Milk },
   { to: '/records/new', label: 'Other record', sub: 'Medicine, movement, spreading', Icon: ClipboardList }
@@ -247,7 +248,7 @@ export default function Record() {
               <p className="mt-0.5 text-lg">{readHeadline(phase.read)}</p>
               {phase.read.missing.length > 0 && <p className="mt-1 text-[0.95rem] text-muted">To fill in yourself: {phase.read.missing.join(', ')}</p>}
             </div>
-            <Button block className="mt-3" onClick={() => open(phase.read.route === 'delivery' ? '/record/delivery' : '/record/cost', phase.read)}>
+            <Button block className="mt-3" onClick={() => open(formFor(phase.read, b), phase.read)}>
               Check and save
             </Button>
             <p className="mb-2 mt-4 font-bold">Not right? It&apos;s a:</p>
@@ -269,7 +270,7 @@ export default function Record() {
 
         <div className={`grid gap-2 pb-2 ${phase?.stage === 'reading' ? 'hidden' : ''}`}>
           {PHOTO_KINDS.map(({ to, label, sub, Icon }) => (
-            <button key={to} onClick={() => open(to, phase?.stage === 'read' && (to === '/record/delivery' || to === '/record/cost') ? phase.read : null)}
+            <button key={to} onClick={() => open(to, phase?.stage === 'read' && (to === '/record/delivery' || to === '/record/cost' || to === '/record/invoice') ? phase.read : null)}
               className="flex min-h-[3.75rem] items-center gap-3 rounded-2xl border border-line bg-card px-4 text-left hover:border-field active:bg-field-light">
               <Icon className="h-6 w-6 shrink-0 text-accent" aria-hidden />
               <span><b className="block font-semibold leading-tight">{label}</b><span className="text-[0.8125rem] text-muted">{sub}</span></span>

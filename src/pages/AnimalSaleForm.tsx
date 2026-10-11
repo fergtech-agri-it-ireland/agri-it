@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useFarmData, useFarmCtx, useSave } from '../lib/data/farm';
 import { eur, fmtDay, todayISO, uuid } from '../lib/format';
+import { headChangeRow } from '../lib/heads';
 import { forecastFeed } from '../lib/forecast/feed';
 import { fyRange } from '../lib/forecast/money';
 import { showSaved, type SavedRow } from '../lib/saved';
@@ -35,6 +36,7 @@ export default function AnimalSaleForm() {
       patch: (x) => ({
         ...x,
         groups: reduce ? x.groups.map((g) => (g.id === groupId ? { ...g, head_count: Math.max(0, g.head_count - count), head_count_updated_at: new Date().toISOString() } : g)) : x.groups,
+        headHistory: reduce && group ? [...x.headHistory, headChangeRow(group, Math.max(0, group.head_count - count), date, 'sale')] : x.headHistory,
         income: [{ id, farm_id: farmId!, income_type: 'livestock', occurred_on: date, amount_eur: Number(amount), counterparty: buyer || null, milk_litres: null, fat_kg: null, protein_kg: null, animal_group_id: groupId, head_count: count, description: `${count} sold`, document_id: null }, ...x.income]
       }),
       undo: [{ kind: 'rpc', fn: 'undo_animal_sale', args: { p_income_id: id } }],
@@ -47,9 +49,9 @@ export default function AnimalSaleForm() {
     const remaining = Math.max(0, group.head_count - count);
     const groupsAfter = b.groups.map((g) => (g.id === group.id ? { ...g, head_count: remaining } : g));
     const feedRows: SavedRow[] = reduce ? b.products.filter((p) => !p.archived && b.rules.some((r) => r.feed_product_id === p.id && r.animal_group_id === group.id)).flatMap((p) => {
-      const input = { product: p, txns: b.txns.filter((t) => t.feed_product_id === p.id), rules: b.rules.filter((r) => r.feed_product_id === p.id), supplierSetting: b.supplierSettings.find((s) => s.supplier_id === p.supplier_id), farmLeadTimeDays: b.farm.default_lead_time_days, today, logs: b.feedLogs.filter((l) => l.feed_product_id === p.id) };
-      const before = forecastFeed({ ...input, groups: b.groups });
-      const after = forecastFeed({ ...input, groups: groupsAfter });
+      const input = { product: p, txns: b.txns.filter((t) => t.feed_product_id === p.id), rules: b.rules.filter((r) => r.feed_product_id === p.id), supplierSetting: b.supplierSettings.find((s) => s.supplier_id === p.supplier_id), farmLeadTimeDays: b.farm.default_lead_time_days, today, logs: b.feedLogs.filter((l) => l.feed_product_id === p.id), warnDays: b.farm.order_warning_days };
+      const before = forecastFeed({ ...input, groups: b.groups, headHistory: b.headHistory });
+      const after = forecastFeed({ ...input, groups: groupsAfter, headHistory: [...b.headHistory, headChangeRow(group, remaining, date, 'sale')] });
       return after.runOutDate ? [{ label: `${p.name} lasts to`, before: before.runOutDate ? fmtDay(before.runOutDate) : null, after: fmtDay(after.runOutDate) }] : [];
     }) : [];
     const fy = fyRange(b.farm, today);

@@ -4,9 +4,9 @@ import { Banknote, Briefcase, Check, ClipboardCheck, Minus, Package, Receipt, Ru
 import { useFarmCtx, useSave } from '../lib/data/farm';
 import type { FeedForecast } from '../lib/forecast/feed';
 import { checklistProgress, type ChecklistItem, type ChecklistKind } from '../lib/routines';
-import { completeRoutine, tickAllFeeding, tickFeeding, untick, type TickAction } from '../lib/routineActions';
+import { completeRoutine, moveRoutine, skipMissed, tickAllFeeding, tickFeeding, untick, type TickAction } from '../lib/routineActions';
 import type { FarmBundle } from '../lib/types';
-import { eur, fmtDay, fmtKg, fmtNum } from '../lib/format';
+import { addDays, eur, fmtDay, fmtKg, fmtNum } from '../lib/format';
 import { Button, NumberInput, Sheet } from './ui';
 
 const ICON: Record<ChecklistKind, ComponentType<{ className?: string }>> = {
@@ -52,6 +52,7 @@ export function Checklist({ b, items: all, today, feed, title, kinds, footer, em
   const [editing, setEditing] = useState<ChecklistItem | null>(null);
   const [amount, setAmount] = useState('');
   const [showDone, setShowDone] = useState(false);
+  const [moveTo, setMoveTo] = useState('');
   if (items.length === 0 && !empty) return null;
 
   const progress = checklistProgress(items, today);
@@ -79,7 +80,13 @@ export function Checklist({ b, items: all, today, feed, title, kinds, footer, em
   }
   function openEdit(i: ChecklistItem) {
     setAmount(i.planned !== null ? String(i.planned) : '');
+    setMoveTo('');
     setEditing(i);
+  }
+  async function move(to: string) {
+    const i = editing!;
+    setEditing(null);
+    return run(moveRoutine(i, to));
   }
   async function saveEdit(skip: boolean) {
     const i = editing!;
@@ -101,8 +108,15 @@ export function Checklist({ b, items: all, today, feed, title, kinds, footer, em
           </p>
           <p className="text-[0.8125rem] text-muted">
             {i.date < today && <b className="text-warn">{fmtDay(i.date)}. </b>}
+            {i.movedFrom && <b className="text-ink">Moved from {fmtDay(i.movedFrom)}. </b>}
             {done ? doneText(i) : i.sub}
           </p>
+          {!done && !!i.missedDates?.length && (
+            <p className="mt-1 flex flex-wrap items-center gap-x-2 text-[0.8125rem] font-bold text-warn">
+              Also missed {i.missedDates.length} other day{i.missedDates.length === 1 ? '' : 's'}, up to {fmtDay(i.missedDates.at(-1)!)}
+              <button onClick={() => run(skipMissed(i))} className="min-h-[2.5rem] rounded-full px-2 text-accent hover:bg-field-light">Skip those</button>
+            </p>
+          )}
         </div>
         {!done && i.kind !== 'count' && (
           <button onClick={() => openEdit(i)} className="min-h-[2.5rem] shrink-0 rounded-full px-2 text-sm font-bold text-accent hover:bg-field-light">Change</button>
@@ -153,7 +167,7 @@ export function Checklist({ b, items: all, today, feed, title, kinds, footer, em
           <li className="flex min-h-[3rem] items-center gap-2 px-4 text-[0.9375rem] font-bold text-ok"><Check className="h-5 w-5" aria-hidden />All done for today</li>
         )}
         {earlier.length > 0 && (
-          <li className="bg-warn-bg px-4 py-2 text-[0.8125rem] font-bold text-warn">From earlier, not ticked off yet</li>
+          <li className="bg-warn-bg px-4 py-2 text-[0.8125rem] font-bold text-warn">From earlier: stays here until ticked, moved or skipped</li>
         )}
         {earlier.map(row)}
         {doneToday.length > 0 && (
@@ -180,6 +194,17 @@ export function Checklist({ b, items: all, today, feed, title, kinds, footer, em
               {SAVE_VERB[editing.kind]}{editing.unit && amount !== '' ? ` ${amountText(editing, Number(amount))}` : ''}
             </Button>
             <Button block variant="secondary" onClick={() => saveEdit(true)}>Skip this time</Button>
+            {editing.kind !== 'feeding' && (
+              <div className="space-y-2 border-t border-line pt-3">
+                <p className="font-bold">Not today? Move it</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button variant="secondary" onClick={() => move(addDays(today, 1))}>Tomorrow</Button>
+                  <input type="date" aria-label="Move to a day" className="input" min={addDays(today, 1)} value={moveTo} onChange={(e) => setMoveTo(e.target.value)} />
+                </div>
+                {moveTo && <Button block variant="secondary" onClick={() => move(moveTo)}>Move to {fmtDay(moveTo)}</Button>}
+                <p className="text-sm text-muted">It stays on your list until it is done or skipped.</p>
+              </div>
+            )}
           </div>
         )}
       </Sheet>

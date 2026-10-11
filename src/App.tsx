@@ -36,6 +36,11 @@ import Routines from './pages/Routines';
 import RoutineForm from './pages/RoutineForm';
 import Crops from './pages/Crops';
 import FarmTypes from './pages/FarmTypes';
+import InvoiceForm from './pages/InvoiceForm';
+import Bills from './pages/Bills';
+import People from './pages/People';
+import Changes from './pages/Changes';
+import Join from './pages/Join';
 
 export default function App() {
   if (!supabaseConfigured) return <MissingConfig />;
@@ -43,6 +48,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/onboarding" element={<Onboarding />} />
+      <Route path="/join/:token" element={<Join />} />
       <Route element={<RequireFarm />}>
         <Route index element={<Today />} />
         <Route path="forecast" element={<Forecast />} />
@@ -63,6 +69,10 @@ export default function App() {
         <Route path="record/sale" element={<AnimalSaleForm />} />
         <Route path="record/cost" element={<CostForm />} />
         <Route path="record/income" element={<IncomeForm />} />
+        <Route path="record/invoice" element={<InvoiceForm />} />
+        <Route path="money/bills" element={<Bills />} />
+        <Route path="settings/people" element={<People />} />
+        <Route path="settings/changes" element={<Changes />} />
         <Route path="money" element={<Money />} />
         <Route path="money/year-end" element={<YearEnd />} />
         <Route path="diary" element={<Diary />} />

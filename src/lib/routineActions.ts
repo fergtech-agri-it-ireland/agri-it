@@ -123,17 +123,55 @@ export function completeRoutine(item: ChecklistItem, b: FarmBundle, amount: numb
     label = `Fed out ${fmtNum(amount)} t silage`;
   }
 
+  // Saved under the occurrence's own due date, even when it was moved to another day
+  const due = item.due ?? item.date;
   const completion = {
-    farm_id: farmId, routine_id: r.id, due_date: item.date, status: skipped ? 'skipped' as const : 'done' as const,
-    amount: skipped ? null : amount, record_table: recordTable, record_id: recordTable ? recordId : null, done_on: todayISO()
+    farm_id: farmId, routine_id: r.id, due_date: due, status: skipped ? 'skipped' as const : 'done' as const,
+    amount: skipped ? null : amount, record_table: recordTable, record_id: recordTable ? recordId : null, done_on: todayISO(), moved_to: null
   };
   ops.push({ kind: 'upsert', table: 'routine_completions', row: completion, onConflict: 'routine_id,due_date' });
-  undo.unshift({ kind: 'delete', table: 'routine_completions', match: { routine_id: r.id, due_date: item.date } });
+  if (item.completion?.status === 'moved') {
+    // Undo puts it back to "moved", not back to never-dealt-with
+    const { id: _i, created_at: _c, ...moved } = item.completion; // eslint-disable-line @typescript-eslint/no-unused-vars
+    undo.unshift({ kind: 'upsert', table: 'routine_completions', row: moved, onConflict: 'routine_id,due_date' });
+  } else {
+    undo.unshift({ kind: 'delete', table: 'routine_completions', match: { routine_id: r.id, due_date: due } });
+  }
   const local: RoutineCompletion = { ...completion, id: uuid(), created_at: now() };
   return {
     ops,
-    patch: (x) => patchRecord({ ...x, completions: [...x.completions.filter((c) => !(c.routine_id === r.id && c.due_date === item.date)), local] }),
+    patch: (x) => patchRecord({ ...x, completions: [...x.completions.filter((c) => !(c.routine_id === r.id && c.due_date === due)), local] }),
     undo,
     label
+  };
+}
+
+/** Put an occurrence off to another day. It shows on that day and stays until it is ticked or skipped. */
+export function moveRoutine(item: ChecklistItem, to: string): TickAction {
+  const r = item.routine!;
+  const due = item.due ?? item.date;
+  const row = { farm_id: r.farm_id, routine_id: r.id, due_date: due, status: 'moved' as const, moved_to: to, amount: null, record_table: null, record_id: null, done_on: todayISO() };
+  const local: RoutineCompletion = { ...row, id: uuid(), created_at: now() };
+  const undo: Op[] = item.completion
+    ? [{ kind: 'upsert', table: 'routine_completions', row: stripLocal(item.completion), onConflict: 'routine_id,due_date' }]
+    : [{ kind: 'delete', table: 'routine_completions', match: { routine_id: r.id, due_date: due } }];
+  return {
+    ops: [{ kind: 'upsert', table: 'routine_completions', row, onConflict: 'routine_id,due_date' }],
+    patch: (x) => ({ ...x, completions: [...x.completions.filter((c) => !(c.routine_id === r.id && c.due_date === due)), local] }),
+    undo,
+    label: `Moved to ${to === addDays(todayISO(), 1) ? 'tomorrow' : to}: ${r.title}`
+  };
+}
+
+/** Skip the other missed days a gathered line stands for (the line's own day stays to tick or skip). */
+export function skipMissed(item: ChecklistItem): TickAction {
+  const r = item.routine!;
+  const days = item.missedDates ?? [];
+  const rows = days.map((d) => ({ farm_id: r.farm_id, routine_id: r.id, due_date: d, status: 'skipped' as const, moved_to: null, amount: null, record_table: null, record_id: null, done_on: todayISO() }));
+  return {
+    ops: rows.map((row) => ({ kind: 'upsert' as const, table: 'routine_completions', row, onConflict: 'routine_id,due_date' })),
+    patch: (x) => ({ ...x, completions: [...x.completions.filter((c) => !(c.routine_id === r.id && days.includes(c.due_date))), ...rows.map((row) => ({ ...row, id: uuid(), created_at: now() }))] }),
+    undo: days.map((d) => ({ kind: 'delete' as const, table: 'routine_completions', match: { routine_id: r.id, due_date: d } })),
+    label: `Skipped ${days.length} missed day${days.length === 1 ? '' : 's'}: ${r.title}`
   };
 }

@@ -1,6 +1,6 @@
 # Agri-It MVP: Handover
 
-**Last updated:** 7 October 2026, night (new fitness-tracker style UI: Dashboard, Diary, Add, Progress, More; sign-up open to any mix of farming, any animal class, breeds; crops for tillage. Earlier 7 Oct: Agri-It live at its own address, fergtech-agri-it-ireland.github.io/agri-it; earlier: phone-only build: your own farm kept on the phone, shareable link; earlier 7 Oct: photo reading for dockets, receipts and invoices; 6 Oct: daily reminders, supplier price history, budget variance alerts, white-page fix, routines and tick-off checklist, UI redesign)
+**Last updated:** 11 October 2026 (third-party review fixes: bills owed vs paid, invoices matched to deliveries, part deliveries, dated head counts and moving animals, alerts that stay until dealt with, offline conflict checks, roles/invites/change history, accountant zip pack, records vault, re-verified suppliers. See `docs/REVIEW-RESPONSE.md`. Earlier: 7 October 2026, night (new fitness-tracker style UI: Dashboard, Diary, Add, Progress, More; sign-up open to any mix of farming, any animal class, breeds; crops for tillage. Earlier 7 Oct: Agri-It live at its own address, fergtech-agri-it-ireland.github.io/agri-it; earlier: phone-only build: your own farm kept on the phone, shareable link; earlier 7 Oct: photo reading for dockets, receipts and invoices; 6 Oct: daily reminders, supplier price history, budget variance alerts, white-page fix, routines and tick-off checklist, UI redesign)
 **Owner:** Feargal
 **Status:** MVP code complete and on GitHub (moved 7 Oct to `fergtech-agri-it-ireland/agri-it`, public, CI green, latest work on `main`). Phone-only build live as a private Claude artifact (real farm, data kept on the phone, no server). Installable app live on GitHub Pages at https://fergtech-agri-it-ireland.github.io/agri-it/. Browser demo also live. Supabase cloud project `agri-it` created with tables only (see 2).
 
@@ -24,18 +24,36 @@ It is not a herd, grassland or accounting system. It does not prescribe rations,
 | --- | --- |
 | Code | P0 scope complete, plus the redesign, recurring routines with tick-offs, and (6 Oct, night) daily reminders, supplier price history and budget variance alerts |
 | Typecheck | Clean (`tsc -b`) |
-| Unit tests | 103/103 passing (farm types, breeds, getting-started guide and add options in `farmTypes.test.ts`; (forecast engines, run-out steps, Today dials, routine schedules, checklist, actual-vs-planned feeding, reminders, price history, budget alerts, docket reading and matching) |
-| Browser tests | `scripts/e2e/` (Python + Playwright, run against the demo build at phone size): `ui.py` 115 checks (dashboard, diary, add, more, farm types, crops, breeds), `routines.py` 47 checks (tick-offs now in the Diary), `stale_cache.py` 5 checks, `p1.py` 30 checks (reminders, prices, budget alerts), `ocr.py` 53 checks (photo reading), `phone.py` 17 checks (sign-up with dairy, sheep and tillage, breeds, crops, skip farm types; run against `build:phone` and `build:pages`). All pass on any day and at any time (dates in `ui.py` are now relative to today) |
+| Unit tests | 139/139 passing: forecast engines, run-out steps, Today dials, routines (missed ones stay, moving), reminders, prices, budget alerts, docket reading, farm types; plus (11 Oct) `bills.test.ts` (paid/owed, invoices, commitments, duplicates, year-end ledger), `heads.test.ts` (dated head counts in the ledger), `offline/outbox.test.ts` (UAT-06 exactly-once, UAT-07 conflicts) and `uat.test.ts` (the review's UAT-01 to UAT-10 end to end on the in-browser database) |
+| Browser tests | `scripts/e2e/` (Python + Playwright, run against the demo build at phone size): `ui.py` 115 checks (dashboard, diary, add, more, farm types, crops, breeds), `routines.py` 47 checks (tick-offs now in the Diary), `stale_cache.py` 5 checks, `p1.py` 30 checks (reminders, prices, budget alerts), `ocr.py` 53 checks (photo reading), `phone.py` 19 checks (sign-up with dairy, sheep and tillage, breeds, crops, skip farm types, opening bank balance; run against `build:phone` and `build:pages`), `review.py` 43 checks (11 Oct: bills, pay, match invoice, part delivery, forecast inputs, move animals, jobs, missed routines, records search, people, change history, what-if, no sideways scroll). All pass on any day and at any time (dates in `ui.py` are now relative to today) |
 | Production build | Clean, PWA service worker generated |
-| Database | All five migrations + seed validated against real Postgres 16 with Supabase auth/storage stubs (`scripts/e2e/supabase_stub.sql`); RLS isolation and unique constraints tested |
+| Database | All eight migrations + seed validated against real Postgres 16 with Supabase auth/storage stubs (`scripts/e2e/supabase_stub.sql`); RLS isolation and unique constraints tested; `scripts/e2e/db_review.sql` (31 checks: paid/owed trigger, part deliveries, retries, older clients, dated head counts, move animals, worker/adviser/family roles, invites, audit trail, farm delete) also runs in CI after `supabase db reset` |
 | GitHub | `fergtech-agri-it-ireland/agri-it` (public), CI green. The Claude GitHub app is installed on the org, so a chat can push |
-| Supabase cloud | `agri-it` (ref `xgudpylxmrlywegpdvps`, eu-west-1) created 7 Oct. Only migration 1 (tables) applied; migrations 2 to 5 are not. RLS is switched on for every table with **no policies yet**, so the API returns nothing until migration 2 (policies, storage bucket, RPCs) runs; migrations 3 and 4 and the reference data are not applied. Not used by the app yet. Feargal's Supabase org also holds `gauntlet` / `gauntlet-test` for another project with devs: do not pause or change those |
+| Supabase cloud | `agri-it` (ref `xgudpylxmrlywegpdvps`, eu-west-1) created 7 Oct. Only migration 1 (tables) applied; migrations 2 to 8 are not. RLS is switched on for every table with **no policies yet**, so the API returns nothing until migration 2 (policies, storage bucket, RPCs) runs; migrations 3 and 4 and the reference data are not applied. Not used by the app yet. Feargal's Supabase org also holds `gauntlet` / `gauntlet-test` for another project with devs: do not pause or change those |
 | Phone-only app | **Live for real use**: https://claude.ai/artifact/WNRa3dHK8DcwjK4KYB1ePC (version 1). Starts empty, farmer sets up their own farm, everything stays on that phone. Private until shared from the page's Share menu |
 | Deployed | Live app: https://fergtech-agri-it-ireland.github.io/agri-it/ (GitHub Pages, publishes from `main`). Browser-only demo (sample farm, no database, data kept in the phone's browser) is a private artifact: https://claude.ai/artifact/PrDSDf2cB5EgRaDSMe7UJw (version 7). UI concept canvas: https://claude.ai/artifact/UkQ1sRPKTTE3QN9rX11QF8 |
 
 **Important:** the build sandbox resets between chats. Attach the GitHub repo `fergtech-agri-it-ireland/agri-it` in a new chat and clone it.
 
-### NEW (7 Oct, night): fitness-tracker UI and open farm types
+### NEW (11 Oct): fixes from the third-party review
+A product review (8 Oct, written from the README only) listed P0 and P1 gaps. All are answered in `docs/REVIEW-RESPONSE.md` (gap by gap, with the test that covers each, and the UAT table). In short:
+
+- **Bills** (`lib/forecast/bills.ts`, rule `bills@1.0`): `costs.payment_status` ('paid'/'owed', default paid so every older insert path is unchanged), `paid_on` (a trigger keeps it in step: paid without a date = the day it happened, owed = null), `due_on`, `invoice_ref`, `vat_eur`, `enterprise`. Cash (`cash-flow@1.1`) counts a cost on its paid date; owed bills come off the 90-day forecast on their due date (overdue or undated: this month). Budgets and the year-end summary still use the date incurred.
+- **Deliveries**: `record_feed_delivery` takes `p_payment` ('paid' default = old behaviour for queued calls, 'account' = owed), `p_due_on`, `p_close_order` (false = more to come; the order stays open for the rest; `undo_feed_delivery` reopens it). Orders can carry an agreed €/t: shown as **On order** (committed), never a cost. The delivery form prefills what is still to come and the agreed price, defaults Paid/On account from that supplier's last delivery, and warns on likely duplicates.
+- **Invoices**: `/record/invoice` (`InvoiceForm`, `planInvoice()`): pick the deliveries an invoice covers; the invoice replaces their docket costs (split by docket cost, or by kg if any had no price, to the cent), so nothing is counted twice. A feed invoice photo opens it when a matching uninvoiced delivery exists (`formFor()`); "Paid a bill" with category Feed offers it too.
+- **Bills to pay** `/money/bills`: owed by supplier, overdue first, Pay one or the whole statement, recently paid with "Not paid". Money shows Cash now / To pay / On order, loans and capital (new categories `loan_repayment`, `capital`) kept out of running costs, by-enterprise view when tagged. Cash tab has **What if?** (income %, costs %, one-off spend), always labelled a scenario.
+- **Dated head counts** (`lib/heads.ts`, `feed-runout@1.1`): `head_count_history.previous_count`; the bundle now loads `headHistory`; each ledger day uses the count in force that day; future-dated changes only affect the forecast from then; the group's current count is today's (`normalizeBundle` applies `groupsAsOf`). SQL `heads_on()`, `set_head_count(..., p_id)` (idempotent), `move_animals()`. Groups screen: "Since when?", count history, **Move animals**.
+- **Alerts that stay**: missed routines no longer drop off after 7 days; each routine's missed days are one line (oldest first) with "Skip those"; **Move** to tomorrow or a date (`routine_completions.status 'moved'`, `moved_to`). Jobs: Move, or "No longer needed" (`jobs.dismissed_at`). Today's **Needs your attention** groups Overdue / Today / Coming up / Later; overdue and today never fold; only info can be hidden for a week. Settings > Alerts: `farms.bill_warning_days`, `order_warning_days`. Reminders lead with overdue bills, late orders and feed to order (`reminderHeadlines`).
+- **Offline conflicts**: `updated_at` + touch trigger on every editable table. `useSave` adds the version an edit was made against (`withVersions`, hosted build only); the outbox refuses to overwrite a newer change (`ConflictError`), shows **Keep theirs / Use mine** in Sync, recognises its own already-landed retry, and chains two offline edits to one record. Duplicate deliveries (two phones) show on Today; the feed screen offers "Remove the second / Two loads came".
+- **Roles, invites, history** (hosted build): role `worker` (records feed, deliveries, counts, jobs; RLS hides costs, income and budget; a worker's priced delivery records no cost), `can_see_money`/`can_write_money`, `farm_members.email`, `farm_invites` + `create_farm_invite`/`accept_farm_invite`, `/join/:token`, Settings > People. `audit_log` with an `audit_row()` trigger on money, feed, animals, records, jobs; Settings > Change history (`lib/audit.ts` puts it in words). The phone build keeps its own on-phone history (last 2,000 changes).
+- **Exports and records**: Year-end **accountant pack (zip)** with summary, every transaction (`ledgerCsv`, totals match), records and attachments (`fflate`, `lib/exportPack.ts`). Records is a searchable vault (`lib/vault.ts`) across records, invoices, dockets and photos, linked to supplier, group or feed, with an "evidence, not an official register" note.
+- **Forecast trust**: feed screen "What this forecast is worked out from" (stock basis and evidence, head counts and their date, plan, changes ahead, delivery time and source, on order, confidence, time worked out).
+- **Setup**: last onboarding step asks money in the bank today, financial year and (optional) delivery days.
+- **Suppliers**: re-checked 11 Oct (migration `20261011000300_supplier_directory.sql` and `seed.sql`): Tirlán, Dairygold (+ team page), Aurivo, Drummonds, Fane Valley verified; Drummonds' 8 branches loaded; Lakeland now shows **not verified** (site blocks automated checks).
+- Migrations: `20261011000100_review_enums.sql`, `20261011000200_review_fixes.sql`, `20261011000300_supplier_directory.sql`. `CACHE_VERSION` `v5-review`; demo `VERSION` 6 (owed bills, part-delivered calf order, ticked routine history). Phone `VERSION` still 1: older phone records need no migration (no payment fields = paid on the day; no `previous_count` = today's count).
+- `useDerived` is now a thin wrapper over pure `derive(b, today)` (tested directly).
+
+### Earlier: NEW (7 Oct, night): fitness-tracker UI and open farm types
 Feargal disliked the old UI ("for 2 year olds or 92 year olds") and the restricted sign-up. Rebuilt in the style of MyFitnessPal (the Design canvas "Agri-It Simple Prototypes" holds the agreed prototype and walkthrough: https://claude.ai/artifact/2jeDd6ezur6KXuPrxyHwZL).
 
 - **Look:** Figtree type (replaces Atkinson Hyperlegible and Barlow Condensed), white cards on a soft grey-green ground, one green accent (#0B7A55), amber only for "do something", pill buttons, 48px tap targets (was 56). Tokens are still CSS variables in `src/index.css` (new `--money`, `--silage`); dawn and sunlight modes still work. Theme colour #F1F4F2 (dawn #0B110E). Manifest `id` unchanged.
@@ -137,7 +155,9 @@ Demo farm: Glenview Farm, Co. Tipperary, dairy. Four groups, two feeds (one with
 
 **Phone-only build** (real farm, data on the phone): `npm run build:phone` writes `dist-phone/index.html`. To republish the artifact, strip `<!doctype>/<html>/<head>/<body>`, the charset and viewport metas and the icon links, keep `<title>Agri-It</title>`, the theme-color meta, styles, `<div id="root">` and the script, then publish to https://claude.ai/artifact/WNRa3dHK8DcwjK4KYB1ePC.
 
-**Browser tests:** serve `dist-demo` (`cd dist-demo && python3 -m http.server 4331`) then `python3 scripts/e2e/ui.py http://localhost:4331/ out/`, same for `routines.py`, `p1.py` and `ocr.py`, and `stale_cache.py` (one argument). Needs `pip install playwright` and a Chromium.
+**Browser tests:** serve `dist-demo` (`cd dist-demo && python3 -m http.server 4331`) then `python3 scripts/e2e/ui.py http://localhost:4331/ out/`, same for `routines.py`, `p1.py`, `ocr.py` and `review.py`, and `stale_cache.py` (one argument). Needs `pip install playwright` and a Chromium.
+
+**Database checks:** on a scratch Postgres 16: the stub, every migration, `seed.sql`, then `psql -v ON_ERROR_STOP=1 -f scripts/e2e/db_review.sql` (CI runs it against `supabase db reset`).
 
 Other commands: `npm run supabase:reset` (rebuild + reseed), `supabase:status`, `supabase:stop`, `npm test`, `npm run typecheck`, `npm run build`. Studio at http://127.0.0.1:54323.
 
@@ -157,6 +177,9 @@ supabase/
     20261006000100_feed_target.sql              farms.feed_target_days (fills the Feed dial)
     20261006000200_routines.sql                 routines, routine_completions, feed_use_logs, feeding_rules.confirm_daily
     20261007000100_farm_types.sql               farms.enterprises (any mix), new animal classes, animal_groups.breed, crops, crop income, seed_sprays cost
+    20261011000100_review_enums.sql             loan_repayment and capital costs, worker role, moved routine status
+    20261011000200_review_fixes.sql             bills (paid/owed/due/invoice/VAT), part deliveries, dated head counts, move_animals, updated_at, roles, invites, audit_log
+    20261011000300_supplier_directory.sql       supplier numbers re-verified 11 Oct, Drummonds branches
   seed.sql                        evidence sources, Teagasc allowances, suppliers, DEMO user + farm
 src/
   main.tsx, App.tsx               providers, routes
@@ -204,7 +227,9 @@ Feed is always stored in **kg**. Money is `numeric(12,2)` euro.
 | `farm_members` | user to farm, role `owner` / `member` / `advisor` (advisor = read-only) |
 | `crops` | tillage crop: name, variety, acres, harvest year, archived |
 | `animal_groups` | class, breed (free text), head count, `head_count_updated_at`, optional farm-history forage t/head/month, housed flag |
-| `head_count_history` | audit of every head count change |
+| `head_count_history` | every head count change with its effective date and `previous_count`; the feed ledger reads it (count in force each day) |
+| `farm_invites` | email + role + one-time token (14 days); accepted through `accept_farm_invite` |
+| `audit_log` | who (`changed_by`, `changed_by_label`) added, changed or removed which row, when, with old and new values; owner and adviser read it |
 | `suppliers` | `farm_id` null = shared verified directory (read-only); non-null = farm-added. Central/secondary phones, `verified_on`, `source_url`, `needs_live_directory` |
 | `supplier_branches` | branch/territory contacts with counties served. **Empty**: only load verified data |
 | `farm_supplier_settings` | "My rep" override, supplier lead time, account no, last used |
@@ -288,7 +313,8 @@ Navigation: bottom bar Today / Forecast / **Record (hi-vis centre button)** / Mo
 - Saved screen after delivery/sale/milk: before and after, then Done / add photo / another / Undo.
 - Feed screen shows the run-out as a sum in kg that matches the forecast exactly.
 - Farm diary: milk cheques by month (best month marked) and one timeline, including ticked-off feeding per day, jobs done and skips.
-- Routines: anything recurring is ticked off on Today; ticks record what actually happened and update stock, costs and cash. Nothing is auto-posted.
+- Routines: anything recurring is ticked off on Today; ticks record what actually happened and update stock, costs and cash. Nothing is auto-posted. Missed ones stay until ticked, moved or skipped (11 Oct).
+- Money: paid, owed and committed are always shown apart; an invoice replaces docket prices on the deliveries it covers and never adds a second cost; cash moves only on the paid date (11 Oct).
 - Reminders point at the checklist and never record anything; no buzz while the app is open; calendar alarms as the fallback that works on every phone.
 - Prices are only what the farmer paid; Agri-It never quotes or predicts a supplier price.
 - Photo reading fills in only what it read with reasonable confidence; everything else is blank or a "tap to use" suggestion, every value says it came from the photo, and nothing is recorded until Save.
@@ -307,8 +333,8 @@ Navigation: bottom bar Today / Forecast / **Record (hi-vis centre button)** / Mo
 
 ## 10. Known gaps and risks
 
-1. **Supplier phone numbers** come from the MVP doc and are stamped `verified_on 2026-09-01`. Re-verify each against its `source_url` before real users. Arrabawn Tipperary has no number on purpose (post-merger directory not confirmed).
-2. **`supplier_branches` is empty**, so branch routing falls back to central numbers.
+1. **Supplier phone numbers** were re-checked on 11 Oct 2026 against each `source_url`. **Lakeland** could not be (its site blocks automated checks) and shows as not verified: check it by hand. Arrabawn Tipperary has no number on purpose (post-merger directory not confirmed).
+2. **`supplier_branches`** holds Drummonds' 8 branches only. Other suppliers fall back to central numbers and "My rep".
 3. **`seed.sql` creates a demo login.** Do not run it in production; load only the reference data from its top half.
 4. Email confirmation is **off** locally; turn on for production.
 5. Whole-farm bundle loads ~2 years in one query. Fine at family-farm scale; page it later if needed.
@@ -325,12 +351,12 @@ Navigation: bottom bar Today / Forecast / **Record (hi-vis centre button)** / Mo
 1. Use the phone-only link for real on the farm; share it from the page's Share menu; note friction points.
 2. Share https://fergtech-agri-it-ireland.github.io/agri-it/ with testers (installed and working on Feargal's Android). The Claude artifact link is a fallback.
 3. Re-verify supplier numbers; decide on Arrabawn Tipperary contact.
-4. Finish the Supabase project `agri-it`: apply migrations 2 to 5 (`supabase link --project-ref xgudpylxmrlywegpdvps`, `supabase db push`), load reference data only (top half of `seed.sql`, not the demo user), then add "move my phone data to my account" using the backup JSON.
+4. Finish the Supabase project `agri-it`: apply migrations 2 to 8 (`supabase link --project-ref xgudpylxmrlywegpdvps`, `supabase db push`), load reference data only (top half of `seed.sql`, not the demo user), then add "move my phone data to my account" using the backup JSON. That also switches on people, roles, invites and the shared change history.
 5. Deploy `dist/` (Vercel, Netlify or Cloudflare Pages) with env vars; set auth redirect URLs; turn on email confirmation.
 6. Server push for reminders once hosted (needed for iPhone with the app closed): VAPID keys, a `push_subscriptions` table, and a scheduled Supabase edge function that sends the same message the digest builds. The service worker already shows pushes.
-7. P1 from spec still open: accountant pack export polish. (Photo reading, price history and budget alerts done.)
+7. Review release gate 3: watch dairy, suckler and beef farmers use it in the yard (setup under 10 minutes, a repeat entry under 20 seconds) and note where they hesitate or go back to paper. Partial payment of a single bill is not built (statements pay in full).
 8. Photo reading next: try it on real dockets from the yard; add the server reader once hosted (better on handwriting and poor photos); read PDFs (e-invoices usually carry text, so pdf.js text first); consider `costs.vat_eur` and `reference` columns so VAT reaches the year-end pack as a figure, not a note.
-9. Farm sharing: invite screen for family members and advisors (database already supports roles).
+9. Farm sharing is built (roles, invites, change history) and works once hosted (step 4).
 10. P2: integrations (ICBF, AgFood, Herdwatch, PastureBase, co-op, accounting) where available.
 
 ---

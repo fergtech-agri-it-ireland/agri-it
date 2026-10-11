@@ -155,7 +155,8 @@ export function addOptions(types: FarmType[]): AddOption[] {
     { id: 'sale', label: has('sheep') && !has('suckler', 'beef', 'calf_rearing', 'dairy') ? 'Sold lambs or sheep' : 'Sold animals', sub: 'Mart, factory or private sale', to: '/record/sale', relevant: animals },
     { id: 'grain', label: 'Grain or straw sale', sub: 'Crop income', to: '/record/income?type=crop', relevant: has('tillage') },
     { id: 'inputs', label: 'Seed, spray or fertiliser', sub: 'Crop inputs', to: '/record/cost?category=seed_sprays', relevant: has('tillage') },
-    { id: 'cost', label: 'Bill paid', sub: 'Vet, contractor, ESB, anything', to: '/record/cost', relevant: true },
+    { id: 'cost', label: 'Bill', sub: 'Paid or still to pay: vet, contractor, ESB, anything', to: '/record/cost', relevant: true },
+    { id: 'invoice', label: 'Feed invoice', sub: 'Match it to deliveries already recorded', to: '/record/invoice', relevant: animals },
     { id: 'count', label: 'Stock count', sub: 'Dipped the bin or counted bags', to: '/record/count', relevant: animals },
     { id: 'income', label: 'Other income', sub: 'Grants, schemes, contracting', to: '/record/income', relevant: true },
     { id: 'record', label: 'Farm record', sub: 'Medicine, movement, spreading', to: '/records/new', relevant: true }
@@ -169,4 +170,16 @@ export const COMMON_CROPS = ['Winter wheat', 'Spring barley', 'Winter barley', '
 export function currentHarvest(today = todayISO()) {
   const y = Number(today.slice(0, 4));
   return Number(today.slice(5, 7)) >= 8 ? y + 1 : y;
+}
+
+/**
+ * Which part of the farm an entry most likely belongs to, for mixed farms (review: enterprise
+ * costs). A guess only from what the entry itself says; the farmer can change it, and
+ * anything unclear stays "whole farm" rather than being split by a made-up rule.
+ */
+export function defaultEnterprise(kind: string, types: FarmType[]): FarmType | null {
+  if (types.length < 2) return null;
+  if (kind === 'milk') return types.includes('dairy') ? 'dairy' : null;
+  if (kind === 'crop' || kind === 'seed_sprays') return types.includes('tillage') ? 'tillage' : null;
+  return null;
 }

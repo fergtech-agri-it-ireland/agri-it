@@ -6,11 +6,12 @@ import { supabase } from '../lib/supabase';
 import { useFarmCtx } from '../lib/data/farm';
 import { COMMON_CROPS, currentHarvest, grows, keepsAnimals, speciesOf, suggestedClasses } from '../lib/farmTypes';
 import { ANIMAL_CLASS_LABEL, COUNTIES_NI, COUNTIES_ROI, type AnimalClass, type FarmType, type Jurisdiction } from '../lib/types';
-import { Button, Chips, Field, SaveBar, TextInput } from '../components/ui';
+import { Button, Chips, Field, NumberInput, SaveBar, TextInput } from '../components/ui';
+import { todayISO } from '../lib/format';
 import { BreedField, ClassPicker, FarmTypePicker } from '../components/FarmPickers';
 import { Logo } from '../components/Logo';
 
-type Step = 'farm' | 'types' | 'animals' | 'crops';
+type Step = 'farm' | 'types' | 'animals' | 'crops' | 'money';
 interface AnimalRow { key: string; cls: AnimalClass; count: number; breed: string }
 
 /**
@@ -33,6 +34,9 @@ export default function Onboarding() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<string | null>(null);
+  const [cash, setCash] = useState('');
+  const [fyMonth, setFyMonth] = useState(1);
+  const [lead, setLead] = useState('');
 
   // Leave only once the new farm is in the farm list the app shell reads. Leaving straight
   // after the refetch raced the list update, and the shell sent new farmers back to step 1.
@@ -45,6 +49,7 @@ export default function Onboarding() {
     const s: Step[] = ['farm', 'types'];
     if (keepsAnimals(types) || types.length === 0) s.push('animals');
     if (grows(types)) s.push('crops');
+    s.push('money');
     return s;
   }, [types]);
   const at = steps.indexOf(step);
@@ -73,6 +78,11 @@ export default function Onboarding() {
       p_name: name, p_county: county, p_eircode: eircode || null, p_jurisdiction: jurisdiction, p_enterprises: types
     });
     if (error || !farmId) { setBusy(false); setError(error?.message ?? 'Could not create farm'); return; }
+    // Opening balances: the bank balance today starts the cash forecast; a lead time is only ever what the farmer says
+    const farmPatch: Record<string, unknown> = { financial_year_start_month: fyMonth };
+    if (cash !== '') { farmPatch.opening_cash_eur = Number(cash); farmPatch.opening_cash_date = todayISO(); }
+    if (lead !== '') farmPatch.default_lead_time_days = Math.max(0, Math.min(60, Math.round(Number(lead))));
+    await supabase.from('farms').update(farmPatch).eq('id', farmId as string);
     const groups = animals.filter((a) => a.count > 0).map((a, i) => ({
       farm_id: farmId, name: ANIMAL_CLASS_LABEL[a.cls], animal_class: a.cls, breed: a.breed.trim() || null, head_count: a.count, sort_order: i,
       // Pigs, poultry and horses are not part of the silage budget
@@ -92,7 +102,8 @@ export default function Onboarding() {
     farm: ['Your farm', 'Used to find your nearest supplier branch. We never need GPS.'],
     types: ['What do you farm?', 'Pick everything you do. Dairy and sheep and tillage is fine. Not sure? Skip it for now.'],
     animals: ['Your animals', 'Rough numbers are fine. Add any kind of animal and its breed. You can change all of this later.'],
-    crops: ['Your crops', `Acres for harvest ${currentHarvest()}. Skip any you don't grow.`]
+    crops: ['Your crops', `Acres for harvest ${currentHarvest()}. Skip any you don't grow.`],
+    money: ['Money and feed', 'Two numbers that make the forecasts work from day one. Both can be left blank and added later.']
   };
   const used = animals.map((a) => a.cls);
 
@@ -162,6 +173,19 @@ export default function Onboarding() {
               <li key={c} className="flex items-center gap-2 px-3.5 py-2.5"><p className="min-w-0 flex-1 font-semibold">{c}</p><MiniStepper label={`${c} acres`} value={crops[c] ?? 0} step={5} unit="ac" onChange={(n) => setCrops({ ...crops, [c]: n })} /></li>
             ))}
           </ul>
+        )}
+        {step === 'money' && (
+          <div className="space-y-5">
+            <NumberInput label="Money in the bank today (optional)" value={cash} onChange={setCash} unit="€"
+              hint="Starts your cash position. Agri-It adds income and takes off bills as you pay them. It is never shared." />
+            <Field label="Your financial year starts" htmlFor="fy">
+              <select id="fy" className="input" value={fyMonth} onChange={(e) => setFyMonth(Number(e.target.value))}>
+                {['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'].map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+              </select>
+            </Field>
+            <NumberInput label="Days from ordering feed to delivery (optional)" value={lead} onChange={setLead} unit="days" integer
+              hint="From your own experience. Agri-It never guesses this: without it there is no order-by date." />
+          </div>
         )}
         {error && <p role="alert" className="rounded-xl bg-danger-bg p-3 font-bold text-danger">{error}</p>}
       </div>

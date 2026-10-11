@@ -3,8 +3,15 @@
  *
  * Reminder model (as in accounting software's "reminder" recurring transactions): an
  * occurrence is proposed on its due day and nothing is recorded until the farmer
- * confirms it, changes the amount, or skips it. Unticked occurrences stay visible for a
- * short while ("from earlier") and then drop off, so a missed week never piles up.
+ * confirms it, changes the amount, moves it to another day, or skips it.
+ *
+ * Missed occurrences stay on the list until one of those happens: a bill, job, count or
+ * order never disappears just because a few days went by. Each routine's missed days are
+ * gathered into one line, oldest first ("also missed 5 other days", with "skip those"),
+ * so a busy fortnight doesn't bury today. Ticking it deals with that day and the line
+ * moves on to the next missed one.
+ * Feeding is different: a day nobody ticked already counts as fed to plan in the stock
+ * ledger, so unticked feeding only shows for 3 days.
  *
  * Feeding needs no separate routine: every feeding rule is already a daily plan, so
  * each active rule (with confirm_daily on) is one tick a day.
@@ -13,8 +20,10 @@ import type { FarmBundle, FeedUseLog, ISODate, Routine, RoutineCompletion, Routi
 import { COST_LABEL, INCOME_LABEL, type CostCategory, type IncomeType } from './types';
 import { addDays, daysBetween, eur, fmtKg, fmtNum, parseISO, toISO } from './format';
 import { headsFor, rulesForDay } from './forecast/feed';
+import { withHistory } from './heads';
 
-export const ROUTINE_LOOKBACK_DAYS = 7; // bills, jobs, counts stay "from earlier" for a week
+/** How far back missed routines are looked for (a routine older than this starts from here). */
+export const ROUTINE_LOOKBACK_DAYS = 400;
 export const FEEDING_LOOKBACK_DAYS = 3; // feeding older than this just uses the plan
 
 const lastDayOfMonth = (y: number, m0: number) => new Date(Date.UTC(y, m0 + 1, 0)).getUTCDate();
@@ -83,7 +92,14 @@ export type ChecklistKind = 'feeding' | RoutineKind;
 export interface ChecklistItem {
   key: string;
   kind: ChecklistKind;
+  /** The day it shows on: its due date, or the day it was moved to. */
   date: ISODate;
+  /** The occurrence's own due date (the key its tick is saved under). */
+  due: ISODate;
+  /** Set when the farmer moved it from its due date to `date`. */
+  movedFrom?: ISODate;
+  /** Other missed days of the same routine, gathered into this line (this line is the oldest). */
+  missedDates?: ISODate[];
   overdue: boolean;
   title: string;
   sub: string;
@@ -110,11 +126,11 @@ const timesADay = (n: number) => (n === 1 ? 'once a day' : n === 2 ? 'twice a da
  * created never appear, so a new farm doesn't open on a backlog.
  */
 export function buildChecklist(
-  b: Pick<FarmBundle, 'rules' | 'groups' | 'products' | 'silage' | 'routines' | 'completions' | 'feedLogs'>,
+  b: Pick<FarmBundle, 'rules' | 'groups' | 'products' | 'silage' | 'routines' | 'completions' | 'feedLogs'> & { headHistory?: FarmBundle['headHistory'] },
   today: ISODate
 ): ChecklistItem[] {
   const items: ChecklistItem[] = [];
-  const groups = new Map(b.groups.map((g) => [g.id, g]));
+  const groups = new Map(withHistory(b.groups, b.headHistory).map((g) => [g.id, g]));
 
   // Feeding: one tick per rule per day, straight from the feeding plan
   const liveProducts = new Map(b.products.filter((p) => !p.archived).map((p) => [p.id, p]));
@@ -128,12 +144,12 @@ export function buildChecklist(
         if (day < created) continue;
         const g = groups.get(r.animal_group_id);
         if (!g || g.archived) continue;
-        const heads = headsFor(r, groups);
+        const heads = headsFor(r, groups, day);
         const planned = heads * Number(r.kg_per_head_per_feed) * Number(r.feeds_per_day);
         if (planned <= 0) continue;
         const log = b.feedLogs.find((l) => l.feeding_rule_id === r.id && l.used_on === day);
         items.push({
-          key: `feed:${r.id}:${day}`, kind: 'feeding', date: day, overdue: day < today && !log,
+          key: `feed:${r.id}:${day}`, kind: 'feeding', date: day, due: day, overdue: day < today && !log,
           title: `${g.name}: ${fmtKg(planned)} ${product.name}`,
           sub: `${heads} head, ${fmtNum(Number(r.kg_per_head_per_feed))} kg ${timesADay(Number(r.feeds_per_day))}${r.is_temporary && r.label ? `. ${r.label}` : ''}`,
           planned, unit: 'kg',
@@ -151,19 +167,35 @@ export function buildChecklist(
     if (r.feed_product_id && !liveProducts.has(r.feed_product_id)) continue;
     const created = toISO(new Date(r.created_at));
     const from = [addDays(today, -ROUTINE_LOOKBACK_DAYS), r.start_date, created].sort().at(-1)!;
+    const missed: ISODate[] = [];
+    const base = () => ({
+      kind: r.kind, title: r.title, sub: routineSummary(r, b),
+      planned: r.amount !== null ? Number(r.amount) : null, unit: unitFor(r.kind), routine: r
+    });
     for (const day of dueDates(r, from, today)) {
       const c = b.completions.find((x) => x.routine_id === r.id && x.due_date === day);
-      if (day < today && c) {
-        // ticked off already: only today's items stay on the list once done
-        continue;
-      }
+      if (c?.status === 'moved') continue; // shows on the day it was moved to (below)
+      if (day < today && c) continue; // ticked off already: only today's items stay on the list once done
+      if (day < today) { missed.push(day); continue; }
       items.push({
-        key: `routine:${r.id}:${day}`, kind: r.kind, date: day, overdue: day < today && !c,
-        title: r.title, sub: routineSummary(r, b),
-        planned: r.amount !== null ? Number(r.amount) : null, unit: unitFor(r.kind),
+        ...base(), key: `routine:${r.id}:${day}`, date: day, due: day, overdue: day < today && !c,
         status: !c ? 'pending' : c.status === 'skipped' ? 'skipped' : 'done',
         actual: c?.amount !== null && c?.amount !== undefined ? Number(c.amount) : null,
-        routine: r, completion: c
+        completion: c
+      });
+    }
+    if (missed.length) {
+      const first = missed[0];
+      items.push({
+        ...base(), key: `routine:${r.id}:${first}`, date: first, due: first, overdue: true, status: 'pending', actual: null,
+        missedDates: missed.slice(1)
+      });
+    }
+    // Moved occurrences: on their new day, and every day after until dealt with
+    for (const c of b.completions.filter((x) => x.routine_id === r.id && x.status === 'moved' && x.moved_to && x.moved_to <= today)) {
+      items.push({
+        ...base(), key: `routine:${r.id}:${c.due_date}`, date: c.moved_to!, due: c.due_date, movedFrom: c.due_date,
+        overdue: c.moved_to! < today, status: 'pending', actual: null, completion: c
       });
     }
   }
@@ -181,6 +213,9 @@ export function checklistProgress(items: ChecklistItem[], today: ISODate) {
   const todays = items.filter((x) => x.date === today);
   return { done: todays.filter((x) => x.status !== 'pending').length, total: todays.length, earlier: items.filter((x) => x.date < today).length };
 }
+
+/** Every due date a checklist line stands for (a gathered line covers its missed days too). */
+export const allDue = (i: ChecklistItem): ISODate[] => [i.due, ...(i.missedDates ?? [])];
 
 export type RepeatChoice = 'none' | 'weekly' | 'monthly';
 

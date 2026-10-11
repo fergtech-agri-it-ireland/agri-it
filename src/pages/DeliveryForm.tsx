@@ -12,9 +12,11 @@ import { dropToRead } from '../lib/docket/photoStore';
 import { NotReadTag, ReadSummary, ReadTag } from '../components/PhotoRead';
 import { showSaved } from '../lib/saved';
 import { useToast } from '../components/Toast';
-import { Button, Card, Chips, DateChips, Empty, LinkButton, NumberInput, SaveBar, Screen } from '../components/ui';
+import { Button, Card, Chips, DateChips, Empty, Field, LinkButton, NumberInput, SaveBar, Screen } from '../components/ui';
 import { FeedPicker, PhotoInput, QuantityInput, SupplierPicker } from '../components/pickers';
 import { priceCheck, pricePoints } from '../lib/forecast/prices';
+import { orderRemainingKg, similarDelivery } from '../lib/forecast/bills';
+import { addDays } from '../lib/format';
 import { PriceCheckNote } from '../components/Prices';
 
 /** "Feed arrived": feed → quantity → Save. Everything else is prefilled from history. */
@@ -47,16 +49,33 @@ export default function DeliveryForm() {
   const [feedId, setFeedId] = useState<string | null>(initialFeed);
   const [orderId, setOrderId] = useState<string | null>(initialOrder?.id ?? null);
   const [supplierId, setSupplierId] = useState<string | null>(read ? rSupplier : initialOrder?.supplier_id ?? b.products.find((p) => p.id === initialFeed)?.supplier_id ?? null);
-  const [kg, setKg] = useState(read ? (rKg !== undefined ? String(rKg) : '') : initialOrder ? String(initialOrder.quantity_kg) : initialLast ? String(initialLast.quantity_kg) : '');
+  // From an order: what is still to come on it, at the price agreed on it
+  const [kg, setKg] = useState(read ? (rKg !== undefined ? String(rKg) : '') : initialOrder ? String(orderRemainingKg(initialOrder, b.txns)) : initialLast ? String(initialLast.quantity_kg) : '');
   const [unit, setUnit] = useState<'kg' | 't'>('t');
   const [date, setDate] = useState(rDate ?? today);
   const [priceMode, setPriceMode] = useState<'per_t' | 'total'>(read && rPerT === undefined && rTotal !== undefined ? 'total' : 'per_t');
-  const [price, setPrice] = useState(read ? String(rPerT ?? rTotal ?? '') : initialLast?.price_per_tonne_eur ? String(initialLast.price_per_tonne_eur) : '');
+  const [price, setPrice] = useState(read ? String(rPerT ?? rTotal ?? '') : initialOrder?.price_per_tonne_eur ? String(initialOrder.price_per_tonne_eur) : initialLast?.price_per_tonne_eur ? String(initialLast.price_per_tonne_eur) : '');
   // A docket in hand is checked as you save; an invoice is not proof of what arrived until confirmed
   const [evidence, setEvidence] = useState<Evidence>(!read ? 'confirmed_docket' : read.kind === 'docket' ? 'confirmed_docket' : read.kind === 'unknown' ? 'unconfirmed' : 'invoice_derived');
   const [photo, setPhoto] = useState<File | null>(() => peekPendingPhoto());
   useEffect(() => () => clearPendingPhoto(), []);
   const [busy, setBusy] = useState(false);
+  const money = b.role !== 'worker';
+  // Paid now or on account: default to how the last priced delivery from this supplier was settled
+  const lastSettled = (sid: string | null) => b.costs
+    .filter((c) => c.feed_transaction_id && b.txns.find((t) => t.id === c.feed_transaction_id)?.supplier_id === sid)
+    .sort((a, c) => c.occurred_on.localeCompare(a.occurred_on))[0];
+  const [payment, setPayment] = useState<'account' | 'paid'>(() => {
+    const last = lastSettled(supplierId);
+    return last && last.payment_status !== 'owed' ? 'paid' : 'account';
+  });
+  const [dueOn, setDueOn] = useState<string>(() => {
+    const last = lastSettled(supplierId);
+    if (last?.due_on) return addDays(date, Math.max(0, Math.round((Date.parse(last.due_on) - Date.parse(last.occurred_on)) / 86_400_000)));
+    return '';
+  });
+  // Part deliveries: more to come keeps the order open for the rest
+  const [moreToCome, setMoreToCome] = useState(true);
 
   function pickFeed(id: string) {
     setFeedId(id);
@@ -71,8 +90,8 @@ export default function DeliveryForm() {
     const last = lastDelivery(id);
     setOrderId(o?.id ?? null);
     setSupplierId(o?.supplier_id ?? b.products.find((p) => p.id === id)?.supplier_id ?? null);
-    setKg(o ? String(o.quantity_kg) : last ? String(last.quantity_kg) : '');
-    setPrice(last?.price_per_tonne_eur ? String(last.price_per_tonne_eur) : '');
+    setKg(o ? String(orderRemainingKg(o, b.txns)) : last ? String(last.quantity_kg) : '');
+    setPrice(o?.price_per_tonne_eur ? String(o.price_per_tonne_eur) : last?.price_per_tonne_eur ? String(last.price_per_tonne_eur) : '');
   }
 
   const edited = {
@@ -85,6 +104,10 @@ export default function DeliveryForm() {
   const changed = Object.entries(edited).filter(([, v]) => v).map(([k]) => k);
 
   const qty = Number(kg);
+  const linkedOrder = orderId ? b.txns.find((t) => t.id === orderId) ?? null : null;
+  const orderLeft = linkedOrder ? orderRemainingKg(linkedOrder, b.txns) : 0;
+  const partial = !!linkedOrder && qty > 0 && qty < orderLeft - 0.5;
+  const dupe = feedId && qty > 0 ? similarDelivery(b, { productId: feedId, kg: qty, date, ref: usable(read?.docNumber) ?? null }) : undefined;
   const total = price === '' ? null : priceMode === 'total' ? Number(price) : (Number(price) * qty) / 1000;
   const perT = price === '' ? null : priceMode === 'per_t' ? Number(price) : qty > 0 ? Number(price) / (qty / 1000) : null;
 
@@ -102,7 +125,7 @@ export default function DeliveryForm() {
   const preview = useMemo(() => {
     if (!draft) return null;
     const p = b.products.find((x) => x.id === feedId)!;
-    const input = { product: p, rules: b.rules.filter((r) => r.feed_product_id === feedId), groups: b.groups, supplierSetting: b.supplierSettings.find((s) => s.supplier_id === supplierId), farmLeadTimeDays: b.farm.default_lead_time_days, today, logs: b.feedLogs.filter((l) => l.feed_product_id === feedId) };
+    const input = { product: p, rules: b.rules.filter((r) => r.feed_product_id === feedId), groups: b.groups, supplierSetting: b.supplierSettings.find((s) => s.supplier_id === supplierId), farmLeadTimeDays: b.farm.default_lead_time_days, today, logs: b.feedLogs.filter((l) => l.feed_product_id === feedId), headHistory: b.headHistory, warnDays: b.farm.order_warning_days };
     const txns = b.txns.filter((t) => t.feed_product_id === feedId);
     return { before: forecastFeed({ ...input, txns }), after: forecastFeed({ ...input, txns: [...txns, draft] }) };
   }, [draft?.quantity_kg, draft?.effective_on, feedId, supplierId, b]); // eslint-disable-line
@@ -123,14 +146,16 @@ export default function DeliveryForm() {
         p_total_price_eur: priceMode === 'total' && price !== '' ? Number(price) : null,
         p_price_per_tonne_eur: priceMode === 'per_t' && price !== '' ? Number(price) : null,
         p_evidence: evidence, p_linked_order_id: orderId, p_document_id: documentId,
-        p_notes: reference ? `${read?.kind === 'invoice' ? 'Invoice' : read?.kind === 'receipt' ? 'Receipt' : 'Docket'} ${reference}` : null
+        p_notes: reference ? `${read?.kind === 'invoice' ? 'Invoice' : read?.kind === 'receipt' ? 'Receipt' : 'Docket'} ${reference}` : null,
+        p_payment: payment, p_due_on: payment === 'account' && dueOn ? dueOn : null,
+        p_close_order: !(partial && moreToCome)
       }
     }], {
       label: 'Delivery saved',
       quiet: true,
       patch: (x) => ({
         ...x,
-        txns: [...x.txns.map((t) => (t.id === orderId ? { ...t, order_status: 'delivered' as const } : t)), { ...draft, id, document_id: documentId }]
+        txns: [...x.txns.map((t) => (t.id === orderId && !(partial && moreToCome) ? { ...t, order_status: 'delivered' as const } : t)), { ...draft, id, document_id: documentId }]
       }),
       undo: [{ kind: 'rpc', fn: 'undo_feed_delivery', args: { p_id: id } }],
       undoLabel: 'Delivery removed'
@@ -162,9 +187,12 @@ export default function DeliveryForm() {
         ...(after?.orderByDate ? [{ label: 'Order by', before: before?.orderByDate ? fmtDay(before.orderByDate) : null, after: fmtDay(after.orderByDate) }] : []),
         ...(total ? [{ label: 'Feed spend this year', before: eur(feedSpend), after: eur(feedSpend + total), sub: feedBudget > 0 ? `of ${eur(feedBudget)} budget so far` : undefined }] : [])
       ],
-      note: total
-        ? `Also added ${eur(total)} to ${fmtMonth(date.slice(0, 7))} costs${supplierName ? ` and ${supplierName}'s history` : ''}.${check && check.trend !== 'same' ? ` That's ${eur(Math.abs(check.diffPerT))}/t ${check.trend === 'up' ? 'more' : 'less'} than last time (${eur(check.against.eurPerT)}/t).` : ''}`
-        : 'No price entered, so costs and cash are unchanged. You can add the invoice later.',
+      note: [
+        total
+          ? `Also added ${eur(total)} to ${fmtMonth(date.slice(0, 7))} costs${supplierName ? ` and ${supplierName}'s history` : ''}. ${payment === 'account' ? `Owed${supplierName ? ` to ${supplierName}` : ''}${dueOn ? `, due ${fmtDay(dueOn)}` : ''}: cash moves when you mark it paid.` : 'Paid, so it comes off cash today.'}${check && check.trend !== 'same' ? ` That's ${eur(Math.abs(check.diffPerT))}/t ${check.trend === 'up' ? 'more' : 'less'} than last time (${eur(check.against.eurPerT)}/t).` : ''}`
+          : 'No price entered, so costs and cash are unchanged. Match the invoice when it comes.',
+        partial && moreToCome ? `${fmtKg(orderLeft - qty)} still to come on the order.` : ''
+      ].filter(Boolean).join(' '),
       undo: [{ kind: 'rpc', fn: 'undo_feed_delivery', args: { p_id: id } }],
       undoLabel: 'Delivery removed',
       photo: documentId || photoQueued ? undefined : { table: 'feed_transactions', id, recordType: 'feed_docket' },
@@ -190,13 +218,25 @@ export default function DeliveryForm() {
         {order && (
           <label className="flex min-h-tap items-center gap-3 rounded-xl bg-hivis/30 px-3 font-bold">
             <input type="checkbox" className="h-6 w-6 accent-field" checked={!!orderId} onChange={(e) => setOrderId(e.target.checked ? order.id : null)} />
-            This is the {fmtKg(Number(order.quantity_kg))} ordered {fmtDay(order.order_date)}
+            {orderRemainingKg(order, b.txns) < Number(order.quantity_kg)
+              ? `Part of the ${fmtKg(Number(order.quantity_kg))} ordered ${fmtDay(order.order_date)} (${fmtKg(orderRemainingKg(order, b.txns))} still to come)`
+              : `This is the ${fmtKg(Number(order.quantity_kg))} ordered ${fmtDay(order.order_date)}`}
           </label>
         )}
         <div>
-          <QuantityInput label="How much came?" kg={kg} onKg={setKg} unit={unit} onUnit={setUnit} hint={!read && lastDelivery(feedId) ? 'Filled in from your last delivery' : undefined} />
+          <QuantityInput label="How much came?" kg={kg} onKg={setKg} unit={unit} onUnit={setUnit} hint={read ? undefined : orderId ? 'Filled in from what is still to come on the order' : lastDelivery(feedId) ? 'Filled in from your last delivery' : undefined} />
           {read && (read.quantity ? <ReadTag field="quantity" read={read.quantity} edited={edited.quantity} /> : <NotReadTag field="quantity" what="the quantity" />)}
         </div>
+        {partial && (
+          <Chips label={`Only ${fmtKg(qty)} of ${fmtKg(orderLeft)} came. Is more coming?`} columns={2} value={moreToCome ? 'more' : 'done'} onChange={(v) => setMoreToCome(v === 'more')}
+            options={[{ value: 'more', label: 'Yes, the rest is coming' }, { value: 'done', label: "No, that's all" }]}
+            hint={moreToCome ? `The order stays open for ${fmtKg(orderLeft - qty)}. It isn't counted as stock until it arrives.` : 'The order is closed. The rest is not expected.'} />
+        )}
+        {dupe && (
+          <p role="alert" className="rounded-xl bg-warn-bg p-3 text-[0.9375rem] font-semibold text-warn">
+            {fmtKg(Number(dupe.quantity_kg))} of this feed is already recorded for {fmtDay(dupe.effective_on)}. Check it isn&apos;t the same delivery before saving.
+          </p>
+        )}
         <div>
           <DateChips label="Delivered" value={date} onChange={setDate} />
           {read && (read.date && rDate ? <ReadTag field="date" read={read.date} edited={edited.date} /> : <NotReadTag field="date" what="the date (today is filled in)" />)}
@@ -218,6 +258,7 @@ export default function DeliveryForm() {
             ? <ReadTag field="supplier" read={{ ...read.supplier, confidence: rSupplier ? read.supplier.confidence : 'low', note: rSupplier ? read.supplier.note : `Read "${read.supplier.value.text}". Not in your suppliers: pick one`, }} edited={edited.supplier && !!rSupplier} />
             : <NotReadTag field="supplier" what="the supplier" />)}
         </div>
+        {money && <>
         <Chips label="Price" columns={2} value={priceMode} onChange={setPriceMode} options={[{ value: 'per_t', label: '€ per tonne' }, { value: 'total', label: 'Total €' }]} />
         <NumberInput label={priceMode === 'per_t' ? 'Price per tonne' : 'Total price'} value={price} onChange={setPrice} unit="€"
           hint={total !== null && perT !== null
@@ -227,6 +268,20 @@ export default function DeliveryForm() {
           : rTotal !== undefined ? <ReadTag field="price" read={read.total} edited={edited.price} />
           : <NotReadTag field="price" what="a price" />)}
         {!samePrice && <PriceCheckNote c={check} />}
+        {total !== null && total > 0 && (
+          <>
+            <Chips label="Paid?" columns={2} value={payment} onChange={setPayment}
+              options={[{ value: 'account', label: 'On account', sub: 'Pay when the bill comes' }, { value: 'paid', label: 'Paid now' }]}
+              hint={payment === 'account' ? 'Counted as a cost now and as owed. Cash only moves when you mark the bill paid, so nothing is counted twice when the invoice comes.' : 'Comes off cash today.'} />
+            {payment === 'account' && (
+              <Field label="Due by (optional)" htmlFor="due" hint={dueOn ? undefined : 'From the statement or your account terms. Leave blank if you don\'t know yet.'}>
+                <input id="due" type="date" className="input" value={dueOn} min={date} onChange={(e) => setDueOn(e.target.value)} />
+              </Field>
+            )}
+          </>
+        )}
+        </>}
+        {!money && <p className="text-[0.9375rem] text-muted">The price is added by whoever looks after the farm accounts.</p>}
         <Chips label="Quantity checked against" columns={3} value={evidence} onChange={setEvidence} options={[
           { value: 'confirmed_docket', label: 'Docket' }, { value: 'invoice_derived', label: 'Invoice' }, { value: 'unconfirmed', label: 'Not checked' }
         ]} hint={read && read.kind !== 'docket'

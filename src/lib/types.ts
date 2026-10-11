@@ -17,7 +17,10 @@ export type OrderStatus = 'open' | 'delivered' | 'cancelled';
 export type Evidence = 'measured' | 'confirmed_docket' | 'invoice_derived' | 'farmer_estimate' | 'unconfirmed';
 export type IncomeType = 'milk' | 'livestock' | 'crop' | 'grant' | 'other';
 export type CostCategory =
-  | 'feed' | 'fertiliser' | 'seed_sprays' | 'contractor' | 'vet_medicine' | 'machinery_fuel' | 'utilities' | 'other';
+  | 'feed' | 'fertiliser' | 'seed_sprays' | 'contractor' | 'vet_medicine' | 'machinery_fuel' | 'utilities' | 'other'
+  | 'loan_repayment' | 'capital';
+/** Costs that are cash going out but not running costs of the farm. */
+export const NON_OPERATING: CostCategory[] = ['loan_repayment', 'capital'];
 export type RecordType = 'feed_docket' | 'invoice' | 'fertiliser' | 'medicine' | 'movement' | 'other';
 export type SilageMethod = 'acreage' | 'pit_dimensions' | 'bale_count' | 'measured_tonnes';
 export type Confidence = 'high' | 'medium' | 'low' | 'scenario';
@@ -40,6 +43,10 @@ export interface Farm {
   feed_target_days: number;
   housing_start: ISODate | null;
   turnout_date: ISODate | null;
+  /** Warn this many days before a bill falls due (default 7). */
+  bill_warning_days?: number;
+  /** "Order soon" shows this many days before the order-by date (default 7). */
+  order_warning_days?: number;
 }
 
 export interface AnimalGroup {
@@ -72,6 +79,19 @@ export interface Supplier {
   source_url: string | null;
   verified_on: ISODate | null;
   needs_live_directory: boolean;
+}
+
+/** One change to a group's head count, with the day it took effect. */
+export interface HeadCountChange {
+  id: string;
+  farm_id: string;
+  animal_group_id: string;
+  head_count: number;
+  /** The count before this change. Lets the ledger use the right number for earlier days. */
+  previous_count?: number | null;
+  effective_on: ISODate;
+  reason: string;
+  created_at: string;
 }
 
 export interface SupplierBranch {
@@ -177,7 +197,9 @@ export interface RoutineCompletion {
   farm_id: string;
   routine_id: string;
   due_date: ISODate;
-  status: 'done' | 'skipped';
+  /** moved = put off to `moved_to`; it shows again on that day. */
+  status: 'done' | 'skipped' | 'moved';
+  moved_to?: ISODate | null;
   amount: number | null;
   record_table: string | null;
   record_id: string | null;
@@ -261,6 +283,8 @@ export interface Income {
   head_count: number | null;
   description: string | null;
   document_id: string | null;
+  enterprise?: FarmType | null;
+  updated_at?: string;
 }
 
 export interface Cost {
@@ -275,6 +299,21 @@ export interface Cost {
   feed_transaction_id: string | null;
   description: string | null;
   document_id: string | null;
+  /**
+   * The bill's life: `occurred_on` is when the cost was incurred (delivery or invoice date,
+   * used for budgets and the year-end summary); `paid_on` is when the money left the bank
+   * (used for cash). Older records have neither field: treated as paid on the day.
+   */
+  payment_status?: 'paid' | 'owed';
+  /** Paid date. Missing on a paid cost = paid the day it happened. Always null while owed. */
+  paid_on?: ISODate | null;
+  /** When an owed bill must be paid. */
+  due_on?: ISODate | null;
+  invoice_ref?: string | null;
+  vat_eur?: number | null;
+  /** Which part of the farm it belongs to (null = whole farm). */
+  enterprise?: FarmType | null;
+  updated_at?: string;
 }
 
 export interface BudgetLine {
@@ -317,7 +356,31 @@ export interface Job {
   title: string;
   due_on: ISODate | null;
   done_at: string | null;
+  /** Taken off the list without doing it (the farmer said it no longer applies). */
+  dismissed_at?: string | null;
 }
+
+/** Who changed what and when (audit trail). */
+export interface AuditEntry {
+  id: string;
+  farm_id: string;
+  table_name: string;
+  row_id: string;
+  action: 'insert' | 'update' | 'delete';
+  changed_by: string | null;
+  changed_by_label: string | null;
+  changed_at: string;
+  old_row: Record<string, unknown> | null;
+  new_row: Record<string, unknown> | null;
+}
+
+export type MemberRole = 'owner' | 'member' | 'worker' | 'advisor';
+export const ROLE_LABEL: Record<MemberRole, string> = {
+  owner: 'Owner',
+  member: 'Family or partner',
+  worker: 'Farm worker',
+  advisor: 'Adviser or accountant'
+};
 
 /** Everything the app needs for one farm, fetched in one go and cached offline. */
 /** A tillage crop for one harvest. */
@@ -355,6 +418,10 @@ export interface FarmBundle {
   routines: Routine[];
   completions: RoutineCompletion[];
   feedLogs: FeedUseLog[];
+  /** Every dated head count change: the feed ledger uses the count in force each day. */
+  headHistory: HeadCountChange[];
+  /** This user's role on the farm (owner when not known, e.g. the phone-only build). */
+  role?: MemberRole;
 }
 
 export const ANIMAL_CLASS_LABEL: Record<AnimalClass, string> = {
@@ -387,7 +454,9 @@ export const COST_LABEL: Record<CostCategory, string> = {
   vet_medicine: 'Vet & medicine',
   machinery_fuel: 'Machinery & fuel',
   utilities: 'Utilities',
-  other: 'Other'
+  other: 'Other',
+  loan_repayment: 'Loan repayments',
+  capital: 'Machinery, buildings, land'
 };
 
 export const INCOME_LABEL: Record<IncomeType, string> = {

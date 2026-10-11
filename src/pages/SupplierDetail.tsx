@@ -45,6 +45,24 @@ export default function SupplierDetail() {
           </div>
         ))}
         {c.note && <p className="text-muted">{c.note}</p>}
+        {(() => {
+          const near = b.branches.filter((x) => x.supplier_id === supplier.id && x.phone && x.counties.some((k) => k.toLowerCase() === b.farm.county.toLowerCase()));
+          const all = b.branches.filter((x) => x.supplier_id === supplier.id && x.phone);
+          if (near.length < 2 && !(near.length === 0 && all.length)) return null;
+          const list = near.length >= 2 ? near : all;
+          return (
+            <div className="space-y-2 border-t border-line pt-3">
+              <p className="font-bold">{near.length >= 2 ? `${near.length} branches in ${b.farm.county}` : 'Branches'}</p>
+              {list.map((x) => (
+                <div key={x.id} className="flex items-center justify-between gap-2">
+                  <span><b className="block">{x.name}</b><span className="text-sm text-muted">{x.counties.join(', ')}. Verified {fmtDate(x.verified_on)}</span></span>
+                  <Button variant="secondary" onClick={() => { setRepName(x.name); setRepPhone(x.phone!); }}>Use as mine</Button>
+                </div>
+              ))}
+              <p className="text-sm text-muted">Pick the branch you deal with, then Save under My rep. Agri-It doesn't guess which one is yours.</p>
+            </div>
+          );
+        })()}
         {supplier.source_url && <a href={supplier.source_url} target="_blank" rel="noreferrer" className="inline-flex min-h-tap items-center gap-1 font-bold text-accent underline">Check the supplier's own contact page <ExternalLink className="h-4 w-4" /></a>}
         {spend > 0 && <p className="text-sm">You've spent {eur(spend)} with them in the last two years.</p>}
       </Card>

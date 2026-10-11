@@ -12,11 +12,17 @@
  *   A temporary rule replaces that group's normal rule(s) for its date window.
  */
 import type {
-  AnimalGroup, Confidence, Evidence, FarmSupplierSetting, FeedProduct, FeedTransaction, FeedUseLog, FeedingRule, ISODate
+  AnimalGroup, Confidence, Evidence, FarmSupplierSetting, FeedProduct, FeedTransaction, FeedUseLog, FeedingRule, HeadCountChange, ISODate
 } from '../types';
 import { addDays, daysBetween, hashString } from '../format';
+import { headsOn, withHistory, type GroupWithHistory } from '../heads';
+import { orderRemainingKg } from './bills';
 
-export const FEED_RULE_VERSION = 'feed-runout@1.0';
+/**
+ * 1.1: each day uses the head count in force that day (dated head count history);
+ * open orders count only the kg still to come after part deliveries.
+ */
+export const FEED_RULE_VERSION = 'feed-runout@1.1';
 const HORIZON_DAYS = 400;
 const STALE_COUNT_DAYS = 30; // group head counts older than this lower confidence
 const STALE_STOCK_DAYS = 45; // a baseline older than this lowers confidence
@@ -29,6 +35,8 @@ export interface RuleUse {
   groupName: string;
   heads: number;
   headsSource: 'group' | 'override';
+  /** When the head count used was last set or confirmed. */
+  headsAsOf: string | null;
   kgPerHeadPerFeed: number;
   feedsPerDay: number;
   dailyKg: number;
@@ -92,6 +100,10 @@ export interface FeedForecastInput {
   now?: Date; // for staleness checks (defaults to today)
   /** Ticked-off feeding (Today checklist). Confirmed amounts replace the plan for that day and group. */
   logs?: FeedUseLog[];
+  /** Dated head count changes: each day of the ledger uses the count in force that day. */
+  headHistory?: HeadCountChange[];
+  /** "Order soon" this many days before the order-by date (farm setting, default 7). */
+  warnDays?: number;
 }
 
 function ruleActive(r: FeedingRule, day: ISODate) {
@@ -105,14 +117,17 @@ export function rulesForDay(rules: FeedingRule[], day: ISODate): FeedingRule[] {
   return active.filter((r) => r.is_temporary || !tempGroups.has(r.animal_group_id));
 }
 
-export function headsFor(rule: FeedingRule, groups: Map<string, AnimalGroup>): number {
+/** Heads a rule feeds: its own fixed number, else the group's count (on `day`, when history is attached). */
+export function headsFor(rule: FeedingRule, groups: Map<string, GroupWithHistory>, day?: ISODate): number {
   if (rule.head_count_override !== null && rule.head_count_override !== undefined) return rule.head_count_override;
-  return groups.get(rule.animal_group_id)?.head_count ?? 0;
+  const g = groups.get(rule.animal_group_id);
+  if (!g) return 0;
+  return day && g.history ? headsOn(g, day, g.history) : g.head_count;
 }
 
-export function dailyUse(rules: FeedingRule[], groups: Map<string, AnimalGroup>, day: ISODate): number {
+export function dailyUse(rules: FeedingRule[], groups: Map<string, GroupWithHistory>, day: ISODate): number {
   return rulesForDay(rules, day).reduce(
-    (sum, r) => sum + headsFor(r, groups) * Number(r.kg_per_head_per_feed) * Number(r.feeds_per_day),
+    (sum, r) => sum + headsFor(r, groups, day) * Number(r.kg_per_head_per_feed) * Number(r.feeds_per_day),
     0
   );
 }
@@ -133,26 +148,26 @@ export interface UsageModel {
   hasLogs: boolean;
 }
 
-export function usageModel(rules: FeedingRule[], groups: Map<string, AnimalGroup>, logs: FeedUseLog[] = []): UsageModel {
+export function usageModel(rules: FeedingRule[], groups: Map<string, GroupWithHistory>, logs: FeedUseLog[] = []): UsageModel {
   const byDay = new Map<string, Map<string, number>>();
   for (const l of logs) {
     const m = byDay.get(l.used_on) ?? new Map<string, number>();
     m.set(l.feeding_rule_id, Number(l.actual_kg));
     byDay.set(l.used_on, m);
   }
-  const planned = (r: FeedingRule) => headsFor(r, groups) * Number(r.kg_per_head_per_feed) * Number(r.feeds_per_day);
+  const planned = (r: FeedingRule, day: ISODate) => headsFor(r, groups, day) * Number(r.kg_per_head_per_feed) * Number(r.feeds_per_day);
   return {
     hasLogs: logs.length > 0,
     use(day) {
       const m = byDay.get(day);
       const active = rulesForDay(rules, day);
-      let t = active.reduce((s, r) => s + (m?.has(r.id) ? m.get(r.id)! : planned(r)), 0);
+      let t = active.reduce((s, r) => s + (m?.has(r.id) ? m.get(r.id)! : planned(r, day)), 0);
       if (m) for (const [rid, kg] of m) if (!active.some((r) => r.id === rid)) t += kg; // fed outside the plan
       return t;
     },
     remaining(day) {
       const m = byDay.get(day);
-      return rulesForDay(rules, day).reduce((s, r) => s + (m?.has(r.id) ? 0 : planned(r)), 0);
+      return rulesForDay(rules, day).reduce((s, r) => s + (m?.has(r.id) ? 0 : planned(r, day)), 0);
     },
     confirmed(day) {
       let t = 0;
@@ -161,7 +176,7 @@ export function usageModel(rules: FeedingRule[], groups: Map<string, AnimalGroup
     },
     allConfirmed(day) {
       const m = byDay.get(day);
-      return rulesForDay(rules, day).filter((r) => r.confirm_daily !== false && planned(r) > 0).every((r) => m?.has(r.id));
+      return rulesForDay(rules, day).filter((r) => r.confirm_daily !== false && planned(r, day) > 0).every((r) => m?.has(r.id));
     }
   };
 }
@@ -176,7 +191,7 @@ export function findBaseline(txns: FeedTransaction[], day: ISODate): FeedTransac
 
 /** Stock at the start of `day` from the ledger, or null if nothing to anchor on. */
 export function stockAt(
-  txns: FeedTransaction[], rules: FeedingRule[], groups: Map<string, AnimalGroup>, day: ISODate,
+  txns: FeedTransaction[], rules: FeedingRule[], groups: Map<string, GroupWithHistory>, day: ISODate,
   ledger?: LedgerLine[], logs: FeedUseLog[] = []
 ): { stock: number | null; baseline: FeedTransaction | null; firstDate: ISODate | null } {
   const usage = usageModel(rules, groups, logs);
@@ -257,7 +272,8 @@ export function resolveLeadTime(
 
 export function forecastFeed(input: FeedForecastInput): FeedForecast {
   const { product, txns, rules, today } = input;
-  const groups = new Map(input.groups.map((g) => [g.id, g]));
+  const groups = new Map<string, GroupWithHistory>(withHistory(input.groups, input.headHistory).map((g) => [g.id, g]));
+  const warnDays = input.warnDays ?? 7;
   const now = input.now ?? new Date(today + 'T12:00:00Z');
   const reasons: string[] = [];
   const ledger: LedgerLine[] = [];
@@ -278,13 +294,16 @@ export function forecastFeed(input: FeedForecastInput): FeedForecast {
   const dailyUseKg = dailyUse(rules, groups, today);
 
   const activeRules: RuleUse[] = todays.map((r) => {
-    const heads = headsFor(r, groups);
+    const heads = headsFor(r, groups, today);
+    const g = groups.get(r.animal_group_id);
+    const lastChange = g?.history?.filter((h) => h.effective_on <= today).map((h) => h.created_at).sort().at(-1);
     return {
       ruleId: r.id,
       groupId: r.animal_group_id,
-      groupName: groups.get(r.animal_group_id)?.name ?? 'Unknown group',
+      groupName: g?.name ?? 'Unknown group',
       heads,
       headsSource: r.head_count_override !== null ? 'override' : 'group',
+      headsAsOf: r.head_count_override !== null ? null : [g?.head_count_updated_at, lastChange].filter(Boolean).sort().at(-1) ?? null,
       kgPerHeadPerFeed: Number(r.kg_per_head_per_feed),
       feedsPerDay: Number(r.feeds_per_day),
       dailyKg: heads * Number(r.kg_per_head_per_feed) * Number(r.feeds_per_day),
@@ -304,7 +323,11 @@ export function forecastFeed(input: FeedForecastInput): FeedForecast {
     if (Math.abs(u - prev) > 0.001) {
       const starting = rules.find((r) => r.start_date === d);
       const ending = rules.find((r) => r.end_date === addDays(d, -1));
-      const reason = starting ? `${starting.label ?? 'New feeding plan'} starts` : ending ? `${ending.label ?? 'Temporary plan'} ends` : 'Feeding plan changes';
+      const headChange = (input.headHistory ?? []).find((h) => h.effective_on === d && rules.some((r) => r.animal_group_id === h.animal_group_id));
+      const reason = starting ? `${starting.label ?? 'New feeding plan'} starts`
+        : ending ? `${ending.label ?? 'Temporary plan'} ends`
+        : headChange ? `${groups.get(headChange.animal_group_id)?.name ?? 'Group'} goes to ${headChange.head_count} head`
+        : 'Feeding plan changes';
       upcomingChanges.push({ date: d, dailyUseKg: u, reason });
       prev = u;
     }
@@ -319,9 +342,11 @@ export function forecastFeed(input: FeedForecastInput): FeedForecast {
 
   const lead = resolveLeadTime(product, input.supplierSetting, input.farmLeadTimeDays);
 
+  // Part-delivered orders only count what is still to come
   const openOrders = txns
     .filter((t) => t.txn_type === 'order' && t.order_status === 'open')
-    .map((t) => ({ id: t.id, kg: Number(t.quantity_kg), expected: t.expected_delivery_date }));
+    .map((t) => ({ id: t.id, kg: orderRemainingKg(t, txns), expected: t.expected_delivery_date }))
+    .filter((o) => o.kg > 0);
 
   let daysRemaining: number | null = null;
   let runOutDate: ISODate | null = null;
@@ -353,7 +378,7 @@ export function forecastFeed(input: FeedForecastInput): FeedForecast {
   else {
     const trigger = orderByDate ?? reorderDate;
     if (trigger && trigger <= today) status = 'order_now';
-    else if (trigger && daysBetween(today, trigger) <= 7) status = 'order_soon';
+    else if (trigger && daysBetween(today, trigger) <= warnDays) status = 'order_soon';
     else status = 'ok';
   }
 
@@ -378,9 +403,9 @@ export function forecastFeed(input: FeedForecastInput): FeedForecast {
   else if (since.some((t) => t.evidence === 'invoice_derived')) lower(1, 'A delivery quantity is from an invoice, not a docket.');
   if (!hasPlan || activeRules.length === 0) lower(2, 'No feeding plan is set for today.');
   const staleGroups = activeRules
-    .filter((r) => r.headsSource === 'group')
+    .filter((r) => r.headsSource === 'group' && (!r.headsAsOf || (now.getTime() - new Date(r.headsAsOf).getTime()) / 86_400_000 > STALE_COUNT_DAYS))
     .map((r) => groups.get(r.groupId))
-    .filter((g): g is AnimalGroup => !!g && (now.getTime() - new Date(g.head_count_updated_at).getTime()) / 86_400_000 > STALE_COUNT_DAYS);
+    .filter((g): g is GroupWithHistory => !!g);
   if (staleGroups.length) lower(1, `Head count not updated in over ${STALE_COUNT_DAYS} days: ${staleGroups.map((g) => g.name).join(', ')}.`);
   if (lead.days === null) reasons.push('No lead time set, so there is no order-by date.');
   // Once the farmer ticks feeding off, days left unticked fall back to the plan: say so
@@ -412,7 +437,9 @@ export function forecastFeed(input: FeedForecastInput): FeedForecast {
     product: { id: product.id, safety: [product.safety_stock_mode, Number(product.safety_stock_value)], lead: lead },
     baseline: baseline ? { id: baseline.id, kg: Number(baseline.quantity_kg), on: baseline.effective_on, evidence: baseline.evidence } : null,
     moves: txns.filter((t) => t.txn_type !== 'order').map((t) => [t.id, t.txn_type, Number(t.quantity_kg), t.effective_on, t.evidence]),
-    rules: rules.map((r) => [r.id, r.animal_group_id, headsFor(r, groups), Number(r.kg_per_head_per_feed), Number(r.feeds_per_day), r.start_date, r.end_date, r.is_temporary]),
+    rules: rules.map((r) => [r.id, r.animal_group_id, headsFor(r, groups, today), Number(r.kg_per_head_per_feed), Number(r.feeds_per_day), r.start_date, r.end_date, r.is_temporary]),
+    heads: (input.headHistory ?? []).filter((h) => rules.some((r) => r.animal_group_id === h.animal_group_id)).map((h) => [h.animal_group_id, h.head_count, h.effective_on]),
+    orders: openOrders.map((o) => [o.id, o.kg, o.expected]),
     logs: logs.map((l) => [l.feeding_rule_id, l.used_on, Number(l.actual_kg)])
   };
 
@@ -455,9 +482,9 @@ export function forecastFeed(input: FeedForecastInput): FeedForecast {
  * We show the variance; we never silently change the farmer's feeding rate.
  */
 export function countVariances(
-  txns: FeedTransaction[], rules: FeedingRule[], groups: AnimalGroup[], logs: FeedUseLog[] = []
+  txns: FeedTransaction[], rules: FeedingRule[], groups: AnimalGroup[], logs: FeedUseLog[] = [], headHistory: HeadCountChange[] = []
 ): { date: ISODate; predictedKg: number; countedKg: number; varianceKg: number; variancePct: number | null }[] {
-  const gm = new Map(groups.map((g) => [g.id, g]));
+  const gm = new Map<string, GroupWithHistory>(withHistory(groups, headHistory).map((g) => [g.id, g]));
   const counts = txns.filter((t) => t.txn_type === 'count').sort((a, b) => a.effective_on.localeCompare(b.effective_on));
   const out = [];
   for (const c of counts) {
@@ -495,9 +522,10 @@ export interface RunoutStep {
 export function runoutSteps(
   stockKg: number, rules: FeedingRule[], groups: AnimalGroup[], today: ISODate,
   /** Today's use still to come, when part of today is already ticked off. */
-  todayRemainingKg?: number
+  todayRemainingKg?: number,
+  headHistory: HeadCountChange[] = []
 ): RunoutStep[] {
-  const gm = new Map(groups.map((g) => [g.id, g]));
+  const gm = new Map<string, GroupWithHistory>(withHistory(groups, headHistory).map((g) => [g.id, g]));
   const steps: RunoutStep[] = [];
   let stock = stockKg;
   let idle = 0;

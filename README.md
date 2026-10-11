@@ -142,7 +142,15 @@ src/
 | Cash: known and assumed kept separate | `cashForecast90()` |
 | Year-end pack labelled as management summary, with missing-data checklist, CSV and print | `YearEnd` |
 | Forecast governance: inputs, rule version and timestamp stored | `forecast_snapshots`, written whenever inputs change |
-| Supplier directory with verification dates and "Set my rep" | `Suppliers`, `SupplierDetail` |
+| Supplier directory with verification dates and "Set my rep" | `Suppliers`, `SupplierDetail`, `supplier_branches` (Drummonds) |
+| Order, delivery, invoice, payment as separate events; no double counting | `lib/forecast/bills.ts`, `Bills`, `InvoiceForm`, `costs.payment_status/paid_on/due_on` |
+| Head counts with dates; moving animals between groups | `lib/heads.ts`, `head_count_history`, `move_animals()` |
+| Overdue work stays until done, moved or skipped | `routines.ts`, `derive()` priorities, `Today` |
+| Offline edits never overwrite a newer change | `offline/outbox.ts` (version check, Keep theirs / Use mine) |
+| Roles, invitations, change history | `People`, `Changes`, `farm_invites`, `audit_log` |
+| Accountant pack with attachments; records vault | `YearEnd`, `Records`, `lib/vault.ts`, `lib/exportPack.ts` |
+
+The third-party review of 8 Oct 2026 and what was done about each point: [`docs/REVIEW-RESPONSE.md`](docs/REVIEW-RESPONSE.md).
 
 ---
 
@@ -156,7 +164,7 @@ Designed for someone standing in a yard with gloves, glare, a patchy signal and 
 - **The sum shown (from MyFitnessPal's calories-remaining equation).** The feed screen shows the run-out date as a sum in kg: stock, minus each stretch of planned use (including a temporary higher rate), equals days left. It always matches the forecast because it uses the same rules.
 - **What changed, then a next step (from Strava's post-activity summary).** After a delivery, sale or milk cheque, a Saved screen shows before and after (days of feed, run-out, order-by, spend against budget, head counts, cash) with clear next steps: Done, add the docket photo, record another, or Undo.
 - **Farm diary (Strava's progress chart and feed).** Milk cheques by month with your best month marked, then everything recorded as one timeline.
-- **Tick it off, and what's left updates (routines).** Anything that repeats shows on Today when due, as a checklist with big round ticks: each feeding plan every day, plus bills, income, jobs, stock counts, standing feed orders and silage feed-out. Like accounting software's "reminder" transactions, nothing is recorded until it's ticked. A tick records what actually happened: a feeding tick replaces the plan for that group and day, a bill tick creates the cost, an order tick creates an open order, a count opens the count form. **Change** records a different amount; **Skip this time** records nothing. **All fed as planned** ticks every feed in one tap. Missed items stay under "From earlier" for a few days, then drop off so a busy week never piles up. Bill, milk and income forms ask "Does this repeat?" so one entry becomes a routine.
+- **Tick it off, and what's left updates (routines).** Anything that repeats shows on Today when due, as a checklist with big round ticks: each feeding plan every day, plus bills, income, jobs, stock counts, standing feed orders and silage feed-out. Like accounting software's "reminder" transactions, nothing is recorded until it's ticked. A tick records what actually happened: a feeding tick replaces the plan for that group and day, a bill tick creates the cost, an order tick creates an open order, a count opens the count form. **Change** records a different amount; **Skip this time** records nothing. **All fed as planned** ticks every feed in one tap. Missed bills, jobs, counts and orders stay under "From earlier" until they are ticked, moved to another day or skipped: each routine's missed days are gathered into one line so a busy week doesn't bury today (unticked feeding already counts as fed to plan, so it drops off after 3 days). Bill, milk and income forms ask "Does this repeat?" so one entry becomes a routine.
 - **Thumb reach.** The bottom tab bar has a central hi-vis **Record** button. Save buttons are pinned to the bottom of the screen.
 - **Big targets, little typing.** Touch targets are at least 56px (above Material's 48dp minimum). Forms use −/+ steppers, Today/Yesterday date chips, numeric keypads and tap-to-choose options instead of dropdowns, plus voice dictation for notes. Forms prefill from the last entry: the last quantity, price, supplier and milk processor.
 - **Readable in sunlight.** Near-black on white, an Atkinson Hyperlegible body font designed for legibility, and a **Sunlight mode** in Settings. Status is always shown with an icon and words, never by colour alone.
@@ -169,9 +177,9 @@ Designed for someone standing in a yard with gloves, glare, a patchy signal and 
 
 ## Known limits and next steps (P1 from the spec)
 
-- **Supplier numbers need re-verifying before launch.** They come from the MVP Overview and are stamped verified on 1 Sep 2026 to match it. Arrabawn Tipperary is deliberately left without a number until its merged directory is confirmed. Branch and territory data (`supplier_branches`) is empty until verified data is loaded.
+- **Supplier numbers** were re-checked against each supplier's own page on 11 Oct 2026 (Drummonds branches loaded). Lakeland's site blocks automated checks, so its numbers show as not verified until checked by hand. Arrabawn Tipperary is deliberately left without a number until its merged directory is confirmed.
 - **Photo reading** reads dockets, receipts and invoices on the phone (Tesseract) and prefills the form; the farmer checks and saves. It is weaker on handwriting and very poor photos, and PDFs are not read yet. A server reader is planned once hosted (see `docs/HANDOVER.md`).
-- **Not yet built:** push notifications for due routines (the checklist is in-app only), supplier price history, and inviting other people to a farm (the database supports members and advisors; the invite screen isn't built).
+- **Needs the hosted (Supabase) app:** inviting people, roles and the shared change history (built and tested in the database; the phone-only build has one person and keeps its own history), and server push for reminders on iPhone.
 - **Data volume.** The app loads one farm's last ~2 years in a single cached query, which is simple and fast at family-farm scale. Move to paged queries if a farm has tens of thousands of rows.
 - **Voice input** uses the browser's speech recognition (Chrome, Edge, Safari). It is hidden where it isn't supported.
 

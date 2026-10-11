@@ -4,10 +4,12 @@
  * management figures only. It never computes taxable profit.
  */
 import type { BudgetLine, Cost, CostCategory, Farm, FarmBundle, ISODate, Income, IncomeType } from '../types';
-import { COST_LABEL, INCOME_LABEL } from '../types';
+import { COST_LABEL, INCOME_LABEL, NON_OPERATING } from '../types';
 import { addDays, daysBetween, monthKey, toISO } from '../format';
+import { owedBills, paidOn, payeeOf } from './bills';
 
-export const CASH_RULE_VERSION = 'cash-flow@1.0';
+/** 1.1: cash moves when a bill is paid, not when it is incurred; owed bills are known future outflows. */
+export const CASH_RULE_VERSION = 'cash-flow@1.1';
 
 export function fyRange(farm: Pick<Farm, 'financial_year_start_month'>, today: ISODate, offset = 0) {
   const m = farm.financial_year_start_month;
@@ -34,20 +36,21 @@ export function monthsBetween(startKey: string, endKey: string): string[] {
 
 export interface MonthFlow { month: string; inflow: number; outflow: number; net: number }
 
+/** Money in and out by month. Cash basis: a cost counts in the month it was paid (owed bills not at all). */
 export function monthlyFlows(income: Income[], costs: Cost[], months: string[]): MonthFlow[] {
   const map = new Map(months.map((m) => [m, { month: m, inflow: 0, outflow: 0, net: 0 }]));
   for (const i of income) { const r = map.get(monthKey(i.occurred_on)); if (r) r.inflow += Number(i.amount_eur); }
-  for (const c of costs) { const r = map.get(monthKey(c.occurred_on)); if (r) r.outflow += Number(c.amount_eur); }
+  for (const c of costs) { const p = paidOn(c); const r = p ? map.get(monthKey(p)) : undefined; if (r) r.outflow += Number(c.amount_eur); }
   for (const r of map.values()) r.net = r.inflow - r.outflow;
   return [...map.values()];
 }
 
-/** Opening cash + dated inflows − dated outflows up to and including today. */
+/** Opening cash + dated inflows − payments made, up to and including today. Owed bills are not cash yet. */
 export function cashPosition(farm: Farm, income: Income[], costs: Cost[], today: ISODate) {
   if (farm.opening_cash_eur === null || !farm.opening_cash_date) return null;
   const from = farm.opening_cash_date;
   const inflow = income.filter((i) => i.occurred_on >= from && i.occurred_on <= today).reduce((s, i) => s + Number(i.amount_eur), 0);
-  const outflow = costs.filter((c) => c.occurred_on >= from && c.occurred_on <= today).reduce((s, c) => s + Number(c.amount_eur), 0);
+  const outflow = costs.filter((c) => { const p = paidOn(c); return p !== null && p >= from && p <= today; }).reduce((s, c) => s + Number(c.amount_eur), 0);
   return { opening: Number(farm.opening_cash_eur), openingDate: from, inflow, outflow, balance: Number(farm.opening_cash_eur) + inflow - outflow };
 }
 
@@ -55,26 +58,36 @@ export interface CashForecastMonth {
   month: string;
   knownIn: number;
   knownOut: number;
+  /** Part of knownOut that is bills still owed (due in this month, or overdue / undated in the first month). */
+  owedOut: number;
   assumedIn: number;
   assumedOut: number;
   closing: number;
 }
 
 /**
- * 90-day view. "Known" = transactions already entered with a future date.
+ * 90-day view. "Known" = income entered with a future date, payments with a future paid date,
+ * and bills still owed: on their due date, or in the first month when overdue or undated
+ * (they have to be paid some time, so they are not left out).
  * "Assumed" = the farmer's own budget for months with no known entries of that kind.
  * The two are always reported separately (spec 10).
  */
-export function cashForecast90(farm: Farm, income: Income[], costs: Cost[], budget: BudgetLine[], today: ISODate) {
+export function cashForecast90(farm: Farm, income: Income[], costs: Cost[], budget: BudgetLine[], today: ISODate, scenario?: CashScenario) {
   const pos = cashPosition(farm, income, costs, today);
   const end = addDays(today, 90);
   const months = monthsBetween(monthKey(today), monthKey(end));
   let running = pos?.balance ?? 0;
   const hasBudget = budget.length > 0;
+  const owed = costs.filter((c) => paidOn(c) === null);
+  const owedWhen = (c: Cost) => (c.due_on && c.due_on > today ? c.due_on : addDays(today, 1));
+  const sc = scenario ?? { incomePct: 0, costPct: 0, oneOffEur: 0, oneOffOn: null };
   const rows: CashForecastMonth[] = months.map((m) => {
     const inRange = (d: ISODate) => monthKey(d) === m && d > today && d <= end;
-    const knownIn = income.filter((i) => inRange(i.occurred_on)).reduce((s, i) => s + Number(i.amount_eur), 0);
-    const knownOut = costs.filter((c) => inRange(c.occurred_on)).reduce((s, c) => s + Number(c.amount_eur), 0);
+    const knownIn = income.filter((i) => inRange(i.occurred_on)).reduce((s, i) => s + Number(i.amount_eur), 0) * (1 + sc.incomePct / 100);
+    const owedOut = owed.filter((c) => inRange(owedWhen(c))).reduce((s, c) => s + Number(c.amount_eur), 0);
+    const scheduled = costs.filter((c) => { const p = paidOn(c); return p !== null && inRange(p); }).reduce((s, c) => s + Number(c.amount_eur), 0);
+    const oneOff = sc.oneOffEur && sc.oneOffOn && inRange(sc.oneOffOn) ? sc.oneOffEur : 0;
+    const knownOut = (scheduled + owedOut) * (1 + sc.costPct / 100) + oneOff;
     const [y, mm] = m.split('-').map(Number);
     const monthLines = budget.filter((b) => b.year === y && b.month === mm);
     // Pro-rate the current and final partial months by the days remaining in-window
@@ -83,15 +96,28 @@ export function cashForecast90(farm: Farm, income: Income[], costs: Cost[], budg
     const windowStart = monthStart > today ? monthStart : addDays(today, 1);
     const windowEnd = monthEnd < end ? monthEnd : end;
     const frac = Math.max(0, daysBetween(windowStart, windowEnd) + 1) / (daysBetween(monthStart, monthEnd) + 1);
-    const assumedIn = knownIn > 0 ? 0 : monthLines.filter((b) => b.kind === 'income').reduce((s, b) => s + Number(b.amount_eur), 0) * frac;
-    const assumedOut = knownOut > 0 ? 0 : monthLines.filter((b) => b.kind === 'cost').reduce((s, b) => s + Number(b.amount_eur), 0) * frac;
+    // Owed bills don't stand in for the budget: they are last month's spending, not this month's
+    const assumedIn = knownIn > 0 ? 0 : monthLines.filter((b) => b.kind === 'income').reduce((s, b) => s + Number(b.amount_eur), 0) * frac * (1 + sc.incomePct / 100);
+    const assumedOut = scheduled > 0 ? 0 : monthLines.filter((b) => b.kind === 'cost').reduce((s, b) => s + Number(b.amount_eur), 0) * frac * (1 + sc.costPct / 100);
     running += knownIn - knownOut + assumedIn - assumedOut;
-    return { month: m, knownIn, knownOut, assumedIn, assumedOut, closing: running };
+    return { month: m, knownIn, knownOut, owedOut, assumedIn, assumedOut, closing: running };
   });
   // Only report a low point if the balance actually dips below where it is today
   const minRow = rows.reduce<CashForecastMonth | null>((lo, r) => (!lo || r.closing < lo.closing ? r : lo), null);
   const lowest = minRow && pos && minRow.closing < pos.balance ? minRow : null;
-  return { start: pos, rows, lowest, hasBudget, ruleVersion: CASH_RULE_VERSION };
+  const isScenario = !!scenario && (sc.incomePct !== 0 || sc.costPct !== 0 || !!sc.oneOffEur);
+  return { start: pos, rows, lowest, hasBudget, ruleVersion: CASH_RULE_VERSION, scenario: isScenario ? sc : null };
+}
+
+/** "What if" on the cash forecast. Always labelled as a scenario, never as the forecast. */
+export interface CashScenario {
+  /** Change every known and budgeted income by this %, e.g. -10 for a milk price drop. */
+  incomePct: number;
+  /** Change every known and budgeted cost by this %. */
+  costPct: number;
+  /** A one-off spend (a machine, a shed) on a date. */
+  oneOffEur: number;
+  oneOffOn: ISODate | null;
 }
 
 export interface VarianceRow {
@@ -242,60 +268,124 @@ export function budgetAlerts(farm: Farm, bundle: Pick<FarmBundle, 'budget' | 'in
 
 export interface MissingItem { id: string; text: string; fix: string; to: string }
 
+/** One line of the accountant's transaction list. */
+export interface LedgerRow {
+  date: ISODate;
+  kind: 'income' | 'cost';
+  category: string;
+  description: string;
+  counterparty: string;
+  amount: number;
+  vat: number | null;
+  invoiceRef: string | null;
+  /** Costs: paid date, or null when still owed. Income: the date received. */
+  paidOn: ISODate | null;
+  dueOn: ISODate | null;
+  enterprise: string | null;
+  documentId: string | null;
+  documentFile: string | null;
+  recordId: string;
+}
+
 /** Management year-end pack (spec 6). Deliberately not statutory accounts or a tax computation. */
 export function yearEndPack(bundle: FarmBundle, today: ISODate, offset = 0) {
   const fy = fyRange(bundle.farm, today, offset);
   const inFy = (d: ISODate) => d >= fy.start && d <= fy.end;
   const income = bundle.income.filter((i) => inFy(i.occurred_on));
-  const costs = bundle.costs.filter((c) => inFy(c.occurred_on));
+  const allCosts = bundle.costs.filter((c) => inFy(c.occurred_on));
+  const costs = allCosts.filter((c) => !NON_OPERATING.includes(c.category));
+  const nonOperating = allCosts.filter((c) => NON_OPERATING.includes(c.category));
 
   const incomeByType = Object.entries(
     income.reduce<Record<string, number>>((a, i) => ({ ...a, [i.income_type]: (a[i.income_type] ?? 0) + Number(i.amount_eur) }), {})
   ).map(([k, v]) => ({ key: k, label: INCOME_LABEL[k as IncomeType], total: v })).sort((a, b) => b.total - a.total);
-  const costsByCategory = Object.entries(
-    costs.reduce<Record<string, number>>((a, c) => ({ ...a, [c.category]: (a[c.category] ?? 0) + Number(c.amount_eur) }), {})
-  ).map(([k, v]) => ({ key: k, label: COST_LABEL[k as CostCategory], total: v })).sort((a, b) => b.total - a.total);
+  const byCategory = (list: Cost[]) => Object.entries(
+    list.reduce<Record<string, number>>((a, c) => ({ ...a, [c.category]: (a[c.category] ?? 0) + Number(c.amount_eur) }), {})
+  ).map(([k, v]) => ({ key: k, label: COST_LABEL[k as CostCategory] ?? k, total: v })).sort((a, b) => b.total - a.total);
+  const costsByCategory = byCategory(costs);
+  const nonOperatingByCategory = byCategory(nonOperating);
   const supplierTotals = Object.entries(
-    costs.reduce<Record<string, number>>((a, c) => {
-      const name = c.supplier_name ?? bundle.suppliers.find((s) => s.id === c.supplier_id)?.name ?? 'Not recorded';
+    allCosts.reduce<Record<string, number>>((a, c) => {
+      const name = payeeOf(c, bundle);
       return { ...a, [name]: (a[name] ?? 0) + Number(c.amount_eur) };
     }, {})
   ).map(([name, total]) => ({ name, total })).sort((a, b) => b.total - a.total);
 
   const totalIncome = income.reduce((s, i) => s + Number(i.amount_eur), 0);
   const totalCosts = costs.reduce((s, c) => s + Number(c.amount_eur), 0);
+  const totalNonOperating = nonOperating.reduce((s, c) => s + Number(c.amount_eur), 0);
+  const totalVat = allCosts.reduce((s, c) => s + Number(c.vat_eur ?? 0), 0);
   const lastMonth = monthKey(today < fy.end ? today : fy.end);
   const months = monthsBetween(monthKey(fy.start), lastMonth);
-  const flows = monthlyFlows(income, costs, months);
+  // Cash by month: costs in the month they were paid, whichever year they were incurred
+  const paidInFy = bundle.costs.filter((c) => { const p = paidOn(c); return p !== null && inFy(p); });
+  const flows = monthlyFlows(income, paidInFy, months);
+  const paidOut = paidInFy.reduce((s, c) => s + Number(c.amount_eur), 0);
+  // Owed at the end of the year (or today, for the year in progress): incurred in the year, not paid by then
+  const cutoff = today < fy.end ? today : fy.end;
+  const owedAtEnd = allCosts.filter((c) => { const p = paidOn(c); return p === null || p > cutoff; });
+  const owedAtEndTotal = owedAtEnd.reduce((s, c) => s + Number(c.amount_eur), 0);
   const milkLitres = income.filter((i) => i.income_type === 'milk').reduce((s, i) => s + Number(i.milk_litres ?? 0), 0);
   const livestockHead = income.filter((i) => i.income_type === 'livestock').reduce((s, i) => s + Number(i.head_count ?? 0), 0);
+
+  // Per enterprise: only when the farmer tagged something, so a single-enterprise farm sees nothing new
+  const ent = (e: string | null | undefined) => e ?? 'whole_farm';
+  const tagged = [...income, ...costs].some((r) => r.enterprise);
+  const enterprises = tagged ? [...new Set([...income.map((i) => ent(i.enterprise)), ...costs.map((c) => ent(c.enterprise))])].map((k) => {
+    const inc = income.filter((i) => ent(i.enterprise) === k).reduce((s, i) => s + Number(i.amount_eur), 0);
+    const out = costs.filter((c) => ent(c.enterprise) === k).reduce((s, c) => s + Number(c.amount_eur), 0);
+    return { key: k, income: inc, costs: out, margin: inc - out };
+  }).sort((a, b) => (a.key === 'whole_farm' ? 1 : b.key === 'whole_farm' ? -1 : b.income - a.income)) : [];
+
+  const docName = (id: string | null) => (id ? bundle.documents.find((d) => d.id === id)?.file_name ?? `${id}` : null);
+  const ledger: LedgerRow[] = [
+    ...income.map((i) => ({
+      date: i.occurred_on, kind: 'income' as const, category: INCOME_LABEL[i.income_type] ?? i.income_type, description: i.description ?? '',
+      counterparty: i.counterparty ?? '', amount: Number(i.amount_eur), vat: null, invoiceRef: null, paidOn: i.occurred_on, dueOn: null,
+      enterprise: i.enterprise ?? null, documentId: i.document_id, documentFile: docName(i.document_id), recordId: i.id
+    })),
+    ...allCosts.map((c) => ({
+      date: c.occurred_on, kind: 'cost' as const, category: COST_LABEL[c.category] ?? c.category,
+      description: c.category === 'other' && c.other_label ? `${c.other_label}${c.description ? `. ${c.description}` : ''}` : c.description ?? '',
+      counterparty: payeeOf(c, bundle), amount: Number(c.amount_eur), vat: c.vat_eur ?? null, invoiceRef: c.invoice_ref ?? null,
+      paidOn: paidOn(c), dueOn: c.due_on ?? null, enterprise: c.enterprise ?? null, documentId: c.document_id, documentFile: docName(c.document_id), recordId: c.id
+    }))
+  ].sort((a, b) => a.date.localeCompare(b.date) || a.kind.localeCompare(b.kind));
 
   // Missing-data checklist for the accountant/advisor
   const missing: MissingItem[] = [];
   const f = bundle.farm;
+  const types = f.enterprises ?? [];
   if (f.opening_cash_eur === null) missing.push({ id: 'cash', text: 'Opening bank balance not set', fix: 'Add opening cash', to: '/settings' });
-  if (f.enterprise === 'dairy' || f.enterprise === 'mixed') {
+  if (types.includes('dairy') || f.enterprise === 'dairy' || f.enterprise === 'mixed') {
     const milkMonths = new Set(income.filter((i) => i.income_type === 'milk').map((i) => monthKey(i.occurred_on)));
     const closed = months.slice(0, -1);
     const gaps = closed.filter((m) => !milkMonths.has(m));
     if (gaps.length) missing.push({ id: 'milk', text: `No milk cheque recorded for ${gaps.length} month${gaps.length > 1 ? 's' : ''}`, fix: 'Add milk sale', to: '/record/milk' });
   }
   const unpriced = bundle.txns.filter((t) => t.txn_type === 'delivery' && inFy(t.effective_on) && t.total_price_eur === null);
-  if (unpriced.length) missing.push({ id: 'feedprice', text: `${unpriced.length} feed deliver${unpriced.length > 1 ? 'ies have' : 'y has'} no price`, fix: 'Review deliveries', to: '/forecast' });
-  const noEvidence = costs.filter((c) => !c.document_id && Number(c.amount_eur) >= 500);
+  if (unpriced.length) missing.push({ id: 'feedprice', text: `${unpriced.length} feed deliver${unpriced.length > 1 ? 'ies have' : 'y has'} no price`, fix: 'Match an invoice', to: '/record/invoice' });
+  const noInvoice = allCosts.filter((c) => c.category === 'feed' && c.feed_transaction_id && !c.invoice_ref && daysBetween(c.occurred_on, cutoff) > 40);
+  if (noInvoice.length) missing.push({ id: 'feedinvoice', text: `${noInvoice.length} feed deliver${noInvoice.length > 1 ? 'ies' : 'y'} not matched to an invoice`, fix: 'Match invoices', to: '/record/invoice' });
+  const noEvidence = allCosts.filter((c) => !c.document_id && Number(c.amount_eur) >= 500);
   if (noEvidence.length) missing.push({ id: 'evidence', text: `${noEvidence.length} cost${noEvidence.length > 1 ? 's' : ''} over €500 without an invoice attached`, fix: 'Attach invoices', to: '/records' });
   const unconfirmed = bundle.documents.filter((d) => d.state === 'unconfirmed');
   if (unconfirmed.length) missing.push({ id: 'docs', text: `${unconfirmed.length} document${unconfirmed.length > 1 ? 's' : ''} waiting for you to confirm`, fix: 'Confirm documents', to: '/records' });
+  const undatedOwed = owedBills(bundle, today).filter((o) => !o.dueOn && inFy(o.cost.occurred_on));
+  if (undatedOwed.length) missing.push({ id: 'owed', text: `${undatedOwed.length} bill${undatedOwed.length > 1 ? 's' : ''} still owed with no due date`, fix: 'Review bills', to: '/money/bills' });
   const costCats = new Set(costs.map((c) => c.category));
   (['fertiliser', 'contractor', 'vet_medicine'] as CostCategory[]).forEach((c) => {
     if (!costCats.has(c)) missing.push({ id: `cat-${c}`, text: `No ${COST_LABEL[c].toLowerCase()} costs this year`, fix: 'Add cost', to: `/record/cost?category=${c}` });
   });
 
   return {
-    fy, totalIncome, totalCosts, net: totalIncome - totalCosts, incomeByType, costsByCategory,
-    supplierTotals, flows, milkLitres, livestockHead, missing
+    fy, totalIncome, totalCosts, net: totalIncome - totalCosts, incomeByType, costsByCategory, nonOperatingByCategory, totalNonOperating,
+    totalVat, paidOut, owedAtEndTotal, owedAtEndCount: owedAtEnd.length, enterprises,
+    supplierTotals, flows, milkLitres, livestockHead, missing, ledger
   };
 }
+
+const csvRow = (r: (string | number | null)[]) => r.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',');
 
 export function yearEndCsv(pack: ReturnType<typeof yearEndPack>, farmName: string): string {
   const rows: (string | number)[][] = [
@@ -303,12 +393,30 @@ export function yearEndCsv(pack: ReturnType<typeof yearEndPack>, farmName: strin
     ['Farm', farmName], ['Financial year', `${pack.fy.start} to ${pack.fy.end}`], [],
     ['Income', 'Total €'], ...pack.incomeByType.map((r) => [r.label, r.total.toFixed(2)]),
     ['Total income', pack.totalIncome.toFixed(2)], [],
-    ['Costs', 'Total €'], ...pack.costsByCategory.map((r) => [r.label, r.total.toFixed(2)]),
-    ['Total costs', pack.totalCosts.toFixed(2)], [],
-    ['Net cash movement', pack.net.toFixed(2)], [],
-    ['Month', 'In €', 'Out €', 'Net €'], ...pack.flows.map((f) => [f.month, f.inflow.toFixed(2), f.outflow.toFixed(2), f.net.toFixed(2)]), [],
+    ['Running costs (by date incurred)', 'Total €'], ...pack.costsByCategory.map((r) => [r.label, r.total.toFixed(2)]),
+    ['Total running costs', pack.totalCosts.toFixed(2)], [],
+    ['Income less running costs', pack.net.toFixed(2)], [],
+    ...(pack.nonOperatingByCategory.length ? [['Loans and capital (not running costs)', 'Total €'], ...pack.nonOperatingByCategory.map((r) => [r.label, r.total.toFixed(2)]), []] : []),
+    ['Paid out in the year (cash)', pack.paidOut.toFixed(2)],
+    ['Still owed at the end of the year', pack.owedAtEndTotal.toFixed(2)],
+    ['VAT on recorded invoices', pack.totalVat.toFixed(2)], [],
+    ['Month', 'In €', 'Paid out €', 'Net €'], ...pack.flows.map((f) => [f.month, f.inflow.toFixed(2), f.outflow.toFixed(2), f.net.toFixed(2)]), [],
     ['Supplier', 'Total €'], ...pack.supplierTotals.map((s) => [s.name, s.total.toFixed(2)]), [],
+    ...(pack.enterprises.length ? [['Enterprise', 'Income €', 'Running costs €', 'Margin €'], ...pack.enterprises.map((e) => [e.key, e.income.toFixed(2), e.costs.toFixed(2), e.margin.toFixed(2)]), []] : []),
     ['Missing data'], ...pack.missing.map((m) => [m.text])
   ];
-  return rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+  return rows.map(csvRow).join('\n');
+}
+
+/** Every income and cost in the year, one line each, with its paperwork. Sums match the summary. */
+export function ledgerCsv(pack: ReturnType<typeof yearEndPack>): string {
+  const head = ['Date', 'In or out', 'Category', 'Description', 'Paid to / received from', 'Amount €', 'VAT €', 'Invoice no.', 'Paid on', 'Due on', 'Status', 'Enterprise', 'Attachment', 'Agri-It id'];
+  const lines = pack.ledger.map((r) => [
+    r.date, r.kind === 'income' ? 'In' : 'Out', r.category, r.description, r.counterparty, r.amount.toFixed(2), r.vat === null ? '' : r.vat.toFixed(2),
+    r.invoiceRef ?? '', r.paidOn ?? '', r.dueOn ?? '', r.kind === 'income' ? 'Received' : r.paidOn ? 'Paid' : 'Owed',
+    r.enterprise ?? '', r.documentFile ? `attachments/${r.documentFile}` : '', r.recordId
+  ]);
+  const totalIn = pack.ledger.filter((r) => r.kind === 'income').reduce((s, r) => s + r.amount, 0);
+  const totalOut = pack.ledger.filter((r) => r.kind === 'cost').reduce((s, r) => s + r.amount, 0);
+  return [head, ...lines, [], ['', 'Total in', '', '', '', totalIn.toFixed(2)], ['', 'Total out', '', '', '', totalOut.toFixed(2)]].map(csvRow).join('\n');
 }

@@ -3,9 +3,11 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../supabase';
-import type { FarmBundle } from '../types';
+import type { FarmBundle, MemberRole } from '../types';
+import { groupsAsOf } from '../heads';
+import { IN_BROWSER } from '../env';
 import { addDays, todayISO } from '../format';
-import { execute, flush, type Op } from '../offline/outbox';
+import { ConflictError, execute, flush, type Op } from '../offline/outbox';
 import { flushPhotoUploads, readWaiting } from '../docket/flow';
 import { useToast } from '../../components/Toast';
 
@@ -101,7 +103,8 @@ async function fetchBundle(farmId: string): Promise<FarmBundle> {
   const q = <T,>(p: PromiseLike<{ data: T | null; error: { message: string } | null }>) =>
     Promise.resolve(p).then((r) => { if (r.error) throw new Error(r.error.message); return (r.data ?? []) as T; });
 
-  const [farm, groups, crops, suppliers, branches, supplierSettings, products, txns, rules, silage, benchmarks, evidence, income, costs, budget, records, documents, jobs, routines, completions, feedLogs] =
+  const userId = (await supabase.auth.getSession()).data.session?.user.id ?? null;
+  const [farm, groups, crops, suppliers, branches, supplierSettings, products, txns, rules, silage, benchmarks, evidence, income, costs, budget, records, documents, jobs, routines, completions, feedLogs, headHistory, members] =
     await Promise.all([
       q(supabase.from('farms').select('*').eq('id', farmId).single()),
       q(supabase.from('animal_groups').select('*').eq('farm_id', farmId).order('sort_order').order('name')),
@@ -123,23 +126,31 @@ async function fetchBundle(farmId: string): Promise<FarmBundle> {
       q(supabase.from('jobs').select('*').eq('farm_id', farmId).order('due_on')),
       q(supabase.from('routines').select('*').eq('farm_id', farmId).order('created_at')),
       q(supabase.from('routine_completions').select('*').eq('farm_id', farmId).gte('due_date', since).order('due_date')),
-      q(supabase.from('feed_use_logs').select('*').eq('farm_id', farmId).gte('used_on', since).order('used_on'))
+      q(supabase.from('feed_use_logs').select('*').eq('farm_id', farmId).gte('used_on', since).order('used_on')),
+      q(supabase.from('head_count_history').select('*').eq('farm_id', farmId).order('effective_on')),
+      q(supabase.from('farm_members').select('user_id, role').eq('farm_id', farmId))
     ]);
-  return { farm, groups, crops, suppliers, branches, supplierSettings, products, txns, rules, silage, benchmarks, evidence, income, costs, budget, records, documents, jobs, routines, completions, feedLogs } as unknown as FarmBundle;
+  const role = (members as { user_id: string; role: MemberRole }[]).find((m) => m.user_id === userId)?.role ?? 'owner';
+  return { farm, groups, crops, suppliers, branches, supplierSettings, products, txns, rules, silage, benchmarks, evidence, income, costs, budget, records, documents, jobs, routines, completions, feedLogs, headHistory, role } as unknown as FarmBundle;
 }
 
-const LIST_KEYS = ['groups', 'crops', 'suppliers', 'branches', 'supplierSettings', 'products', 'txns', 'rules', 'silage', 'benchmarks', 'evidence', 'income', 'costs', 'budget', 'records', 'documents', 'jobs', 'routines', 'completions', 'feedLogs'] as const;
+const LIST_KEYS = ['groups', 'crops', 'suppliers', 'branches', 'supplierSettings', 'products', 'txns', 'rules', 'silage', 'benchmarks', 'evidence', 'income', 'costs', 'budget', 'records', 'documents', 'jobs', 'routines', 'completions', 'feedLogs', 'headHistory'] as const;
 
 /** Data cached by an older version of the app can lack newer lists. Treat a missing list as empty. */
 export function normalizeBundle(b: FarmBundle): FarmBundle {
   const missing = LIST_KEYS.filter((k) => !Array.isArray((b as unknown as Record<string, unknown>)[k]));
   const noTypes = !Array.isArray(b.farm?.enterprises);
-  if (!missing.length && !noTypes) return b;
-  const fixed = { ...b } as unknown as Record<string, unknown>;
-  for (const k of missing) fixed[k] = [];
-  // Farms saved before farm types were a list: work the list out from the old single type
-  if (noTypes && b.farm) fixed.farm = { ...b.farm, enterprises: farmTypes(b.farm) };
-  return fixed as unknown as FarmBundle;
+  let out = b;
+  if (missing.length || noTypes) {
+    const fixed = { ...b } as unknown as Record<string, unknown>;
+    for (const k of missing) fixed[k] = [];
+    // Farms saved before farm types were a list: work the list out from the old single type
+    if (noTypes && b.farm) fixed.farm = { ...b.farm, enterprises: farmTypes(b.farm) };
+    out = fixed as unknown as FarmBundle;
+  }
+  // A head count booked for a later day isn't today's count yet (and one booked earlier is)
+  const asOf = groupsAsOf(out.groups, out.headHistory, todayISO());
+  return asOf === out.groups || asOf.every((g, i) => g === out.groups[i]) ? out : { ...out, groups: asOf };
 }
 
 export function useBundle() {
@@ -175,6 +186,30 @@ export interface SaveOptions {
 /** false = not saved (an error was shown); otherwise whether it reached the server or is queued offline. */
 export type SaveResult = false | 'saved' | 'queued';
 
+/** Bundle list holding each table's rows, for finding the version an edit was made against. */
+const TABLE_LIST: Record<string, keyof FarmBundle> = {
+  costs: 'costs', income: 'income', jobs: 'jobs', animal_groups: 'groups', feed_products: 'products', feeding_rules: 'rules',
+  silage_stores: 'silage', farm_records: 'records', routines: 'routines', crops: 'crops', feed_transactions: 'txns',
+  documents: 'documents', budget_lines: 'budget'
+};
+
+/**
+ * Edits to one record by id carry the updated_at the farmer was looking at, so a change made
+ * elsewhere in the meantime is never silently overwritten (see outbox.ts).
+ */
+export function withVersions(ops: Op[], b: FarmBundle | undefined): Op[] {
+  // The phone-only and demo builds have one device and no server: nothing else can change a record
+  if (!b || IN_BROWSER) return ops;
+  return ops.map((op) => {
+    if (op.kind !== 'update' || op.ifUpdatedAt || Object.keys(op.match).join() !== 'id') return op;
+    const row = op.table === 'farms'
+      ? (b.farm as unknown as Record<string, unknown>)
+      : TABLE_LIST[op.table] ? (b[TABLE_LIST[op.table]] as unknown as Record<string, unknown>[]).find((r) => r.id === op.match.id) : undefined;
+    const at = row?.updated_at;
+    return typeof at === 'string' && at ? { ...op, ifUpdatedAt: at } : op;
+  });
+}
+
 export function useSave() {
   const qc = useQueryClient();
   const { farmId } = useFarmCtx();
@@ -186,7 +221,7 @@ export function useSave() {
     const previous = cached && normalizeBundle(cached);
     if (opts.patch && previous) qc.setQueryData<FarmBundle>(key, opts.patch(previous));
     try {
-      const { queued } = await execute(ops, opts.label);
+      const { queued } = await execute(withVersions(ops, previous), opts.label);
       if (!queued) await qc.invalidateQueries({ queryKey: key });
       if (opts.quiet) return queued ? 'queued' : 'saved';
       toast.show({
@@ -206,7 +241,9 @@ export function useSave() {
       return queued ? 'queued' : 'saved';
     } catch (e) {
       if (previous) qc.setQueryData(key, previous);
-      toast.show({ message: (e as Error).message || 'Could not save. Check the details and try again.', tone: 'error' });
+      const conflict = e instanceof ConflictError;
+      toast.show({ message: conflict ? `${(e as Error).message} Showing the latest now: make your change again if it's still needed.` : (e as Error).message || 'Could not save. Check the details and try again.', tone: 'error' });
+      if (conflict) await qc.invalidateQueries({ queryKey: key });
       return false;
     }
   }, [qc, farmId, toast]);

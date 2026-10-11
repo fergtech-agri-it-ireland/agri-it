@@ -1,5 +1,8 @@
 import { Link } from 'react-router-dom';
-import { ChevronRight, FileText, Target, BookOpen } from 'lucide-react';
+import { ChevronRight, FileText, Target, BookOpen, Receipt } from 'lucide-react';
+import { FARM_TYPE_LABEL } from '../lib/farmTypes';
+import { paidOn } from '../lib/forecast/bills';
+import type { FarmType } from '../lib/types';
 import { useFarmData } from '../lib/data/farm';
 import { useDerived } from '../lib/data/derived';
 import { monthlyFlows, monthsBetween } from '../lib/forecast/money';
@@ -16,18 +19,27 @@ export default function Money() {
   const max = Math.max(1, ...flows.flatMap((f) => [f.inflow, f.outflow]));
   const recent = [
     ...b.income.map((i) => ({ id: i.id, date: i.occurred_on, title: i.description ?? INCOME_LABEL[i.income_type], who: i.counterparty, amount: Number(i.amount_eur) })),
-    ...b.costs.map((c) => ({ id: c.id, date: c.occurred_on, title: c.description ?? (c.category === 'other' ? c.other_label ?? 'Other' : COST_LABEL[c.category]), who: c.supplier_name, amount: -Number(c.amount_eur) }))
+    ...b.costs.map((c) => ({ id: c.id, date: c.occurred_on, title: c.description ?? (c.category === 'other' ? c.other_label ?? 'Other' : COST_LABEL[c.category]), who: [c.supplier_name, paidOn(c) === null ? 'owed' : null].filter(Boolean).join(', '), amount: -Number(c.amount_eur) }))
   ].filter((r) => r.date <= d.today).sort((a, c) => c.date.localeCompare(a.date)).slice(0, 12);
 
   return (
     <Screen title="Money" sub={`Financial year ${ye.fy.label}`}
       right={<Link to="/diary" className="flex min-h-tap items-center gap-1.5 rounded-full bg-card px-4 font-bold text-accent shadow-lift"><BookOpen className="h-5 w-5" aria-hidden />Diary</Link>}>
+      <Link to="/money/bills" aria-label="Cash, owed and on order" className="block rounded-[1.125rem] bg-card p-4 shadow-lift">
+        <div className="grid grid-cols-3 gap-2">
+          <div className="min-w-0"><p className="text-sm text-muted">Cash now</p><p className={`numeral break-words text-xl ${d.cash && d.cash.balance < 0 ? 'text-danger' : ''}`}>{d.cash ? eur(d.cash.balance) : '?'}</p></div>
+          <div className="min-w-0"><p className="text-sm text-muted">To pay</p><p className={`numeral break-words text-xl ${d.money.overdueTotal > 0 ? 'text-danger' : ''}`}>{eur(d.money.owedTotal)}</p></div>
+          <div className="min-w-0"><p className="text-sm text-muted">On order</p><p className="numeral break-words text-xl">{eur(d.money.committedTotal)}</p></div>
+        </div>
+        <p className="mt-1.5 text-sm text-muted">{d.money.overdueCount ? `${d.money.overdueCount} overdue. ` : ''}Paid, owed and committed are kept apart, so nothing is counted twice.</p>
+      </Link>
       <Card>
         <div className="grid grid-cols-3 gap-2">
-          <div><p className="text-sm text-muted">In</p><p className="numeral text-3xl">{eur(ye.totalIncome)}</p></div>
-          <div><p className="text-sm text-muted">Out</p><p className="numeral text-3xl">{eur(ye.totalCosts)}</p></div>
-          <div><p className="text-sm text-muted">Net cash</p><p className={`numeral text-3xl ${ye.net < 0 ? 'text-danger' : ''}`}>{eur(ye.net)}</p></div>
+          <div className="min-w-0"><p className="text-sm text-muted">Income</p><p className="numeral break-words text-2xl">{eur(ye.totalIncome)}</p></div>
+          <div className="min-w-0"><p className="text-sm text-muted">Running costs</p><p className="numeral break-words text-2xl">{eur(ye.totalCosts)}</p></div>
+          <div className="min-w-0"><p className="text-sm text-muted">Difference</p><p className={`numeral break-words text-2xl ${ye.net < 0 ? 'text-danger' : ''}`}>{eur(ye.net)}</p></div>
         </div>
+        {ye.totalNonOperating > 0 && <p className="mt-1 text-sm text-muted">Plus {eur(ye.totalNonOperating)} on loans and capital this year, kept out of running costs.</p>}
         <div className="mt-4 flex items-end gap-2" style={{ height: 120 }} role="img" aria-label="Money in and out, last six months">
           {flows.map((f) => (
             <div key={f.month} className="flex flex-1 flex-col items-center gap-1">
@@ -39,10 +51,12 @@ export default function Money() {
             </div>
           ))}
         </div>
-        <p className="mt-2 flex gap-4 text-sm"><span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm bg-field" />In</span><span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm bg-hivis" />Out</span></p>
+        <p className="mt-2 flex gap-4 text-sm"><span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm bg-field" />In</span><span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-sm bg-hivis" />Paid out</span></p>
       </Card>
 
       <List>
+        <Row to="/money/bills" icon={<Receipt className="h-6 w-6 text-accent" />} title="Bills to pay"
+          sub={d.money.owed.length ? `${d.money.owed.length} owed, ${eur(d.money.owedTotal)}${d.money.overdueCount ? `. ${d.money.overdueCount} overdue` : ''}` : 'Nothing owed'} right={<ChevronRight className="h-5 w-5 text-muted" />} />
         <Row to="/money/year-end" icon={<FileText className="h-6 w-6 text-accent" />} title="Year-end pack for your accountant"
           sub={ye.missing.length ? `${ye.missing.length} gaps to fill first` : 'No gaps flagged'} right={<ChevronRight className="h-5 w-5 text-muted" />} />
         <Row to="/money/budget" icon={<Target className="h-6 w-6 text-accent" />} title="Budget" sub={b.budget.length ? 'Compare plan with actual' : 'Not set yet'} right={<ChevronRight className="h-5 w-5 text-muted" />} />
@@ -87,6 +101,21 @@ export default function Money() {
           </>
         );
       })()}
+
+      {ye.enterprises.length > 0 && (
+        <>
+          <SectionTitle>By enterprise this year</SectionTitle>
+          <Card className="space-y-2">
+            {ye.enterprises.map((e) => (
+              <div key={e.key} className="flex items-baseline justify-between gap-2">
+                <span className="font-bold">{e.key === 'whole_farm' ? 'Whole farm (shared)' : FARM_TYPE_LABEL[e.key as FarmType] ?? e.key}</span>
+                <span className="text-right text-[0.9375rem]">{eur(e.income)} in, {eur(e.costs)} out<b className={`block ${e.margin < 0 ? 'text-danger' : ''}`}>{eur(e.margin)}</b></span>
+              </div>
+            ))}
+            <p className="text-sm text-muted">Only what you tagged. Shared costs stay under whole farm rather than being split by a guess.</p>
+          </Card>
+        </>
+      )}
 
       {ye.supplierTotals.length > 0 && (
         <>

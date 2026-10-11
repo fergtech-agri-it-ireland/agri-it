@@ -42,13 +42,14 @@ export default function FarmHub() {
         <Row to="/farm/silage" icon={icon(Warehouse)} title="Silage and bales" sub={d.forage.availableT ? `${fmtNum(Math.round(d.forage.availableT))} t in store` : 'Not recorded'} right={chev} />
         {!grows(types) && cropsRow}
       </Group>
-      <Group title="Money">
+      {b.role !== 'worker' && <Group title="Money">
         <Row to="/money" icon={icon(Banknote)} title="Money" sub="In and out, cash, budget" right={chev} />
+        <Row to="/money/bills" icon={icon(Banknote)} title="Bills to pay" sub="Owed, due and on order" right={chev} />
         <Row to="/money/budget" icon={icon(PiggyBank)} title="Budget" sub="Plan the year by month" right={chev} />
         <Row to="/money/year-end" icon={icon(FileSpreadsheet)} title="Year-end pack" sub="For your accountant or advisor" right={chev} />
-        <Row to="/suppliers" icon={icon(Truck)} title="Suppliers" sub="Numbers, your rep, lead times" right={chev} />
-      </Group>
+      </Group>}
       <Group title="Records">
+        <Row to="/suppliers" icon={icon(Truck)} title="Suppliers" sub="Numbers, your rep, lead times" right={chev} />
         <Row to="/diary?tab=history" icon={icon(BookOpen)} title="Diary history" sub="Everything recorded, and milk by month" right={chev} />
         <Row to="/records" icon={icon(ClipboardList)} title="Records" sub={unconfirmed ? `${unconfirmed} waiting for you to confirm` : 'Dockets, fertiliser, medicines, movements'} right={chev} />
         <Row to="/routines" icon={icon(Repeat)} title="Routines" sub={`${b.routines.filter((r) => r.active).length} routines, plus daily feeding`} right={chev} />

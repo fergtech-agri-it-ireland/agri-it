@@ -3,8 +3,8 @@ import { Link, NavLink, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { BookOpen, CloudOff, LayoutGrid, LineChart, MoreHorizontal, Plus, RefreshCw } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useBundle, useFarmCtx } from '../lib/data/farm';
-import { useDerived, useSnapshotRecorder } from '../lib/data/derived';
-import { discard, flush, retryFailed, subscribeOutbox, type Queued } from '../lib/offline/outbox';
+import { reminderHeadlines, useDerived, useSnapshotRecorder } from '../lib/data/derived';
+import { discard, flush, forceMine, retryFailed, subscribeOutbox, type Queued } from '../lib/offline/outbox';
 import { Button, Sheet } from './ui';
 import type { FarmBundle } from '../lib/types';
 import { IN_BROWSER, IS_DEMO } from '../lib/env';
@@ -56,7 +56,7 @@ function SyncStatus() {
     <>
       <button onClick={() => setOpen(true)} className="no-print fixed left-1/2 top-2 z-30 flex -translate-x-1/2 items-center gap-2 rounded-full bg-inverse px-4 py-2 text-sm font-bold text-oninverse shadow-lg" style={{ marginTop: 'env(safe-area-inset-top)' }}>
         {online ? <RefreshCw className="h-4 w-4" aria-hidden /> : <CloudOff className="h-4 w-4" aria-hidden />}
-        {!online ? `Offline${queue.length ? `, ${queue.length} to sync` : ''}` : failed.length ? `${failed.length} couldn't save` : `${queue.length} waiting to sync`}
+        {!online ? `Offline${queue.length ? `, ${queue.length} to sync` : ''}` : queue.some((q) => q.conflict) ? 'Changed on another phone: choose' : failed.length ? `${failed.length} couldn't save` : `${queue.length} waiting to sync`}
       </button>
       <Sheet open={open} onClose={() => setOpen(false)} title="Sync">
         <p className="mb-3 text-muted">{online ? 'Connected.' : 'No signal. Everything you record is kept on this phone and sent when you are back online.'}</p>
@@ -65,7 +65,12 @@ function SyncStatus() {
             <li key={q.id} className="rounded-xl border-2 border-line p-3">
               <p className="font-bold">{q.label}</p>
               {q.lastError && <p className="text-sm text-danger">{q.lastError}</p>}
-              {q.lastError && <Button variant="ghost" className="mt-1 min-h-0 px-0 py-1 text-base" onClick={() => discard(q.id)}>Discard</Button>}
+              {q.conflict ? (
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <Button variant="secondary" onClick={() => { discard(q.id); qc.invalidateQueries({ queryKey: ['bundle'] }); }}>Keep theirs</Button>
+                  <Button variant="secondary" onClick={async () => { await forceMine(q.id); qc.invalidateQueries({ queryKey: ['bundle'] }); }}>Use mine</Button>
+                </div>
+              ) : q.lastError && <Button variant="ghost" className="mt-1 min-h-0 px-0 py-1 text-base" onClick={() => discard(q.id)}>Discard</Button>}
             </li>
           ))}
         </ul>
@@ -111,7 +116,7 @@ function BottomNav() {
 function Recorder({ bundle }: { bundle: FarmBundle }) {
   const d = useDerived(bundle);
   useSnapshotRecorder(bundle, d);
-  useReminderClock(bundle, d.priorities.filter((p) => p.tone === 'urgent').map((p) => p.title));
+  useReminderClock(bundle, reminderHeadlines(d.priorities));
   return null;
 }
 

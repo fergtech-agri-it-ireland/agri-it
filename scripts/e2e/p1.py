@@ -1,5 +1,6 @@
 """Reminders, supplier price history and budget alerts against the demo build (phone viewport).
 Usage: python3 scripts/e2e/p1.py http://localhost:4331/ out/"""
+import re
 import sys
 from playwright.sync_api import sync_playwright
 
@@ -92,6 +93,9 @@ with sync_playwright() as p:
     check('Alert and bars agree', body.count('behind') >= 2 and body.split('Milk is behind budget')[1].split('behind')[0].strip().startswith('€'))
     pg.screenshot(path=f'{OUT}/money-alerts.png', full_page=True)
     go(pg, '#/')
+    # Overdue and today always show; the rest folds after a few (review: Today as a short list)
+    more = pg.get_by_role('button', name=re.compile(r'^Show \d+ more'))
+    if more.count(): more.click()
     check('Today lists the budget alert', 'Milk is behind budget' in pg.locator('main').inner_text())
 
     # F. Ask Agri-It about price

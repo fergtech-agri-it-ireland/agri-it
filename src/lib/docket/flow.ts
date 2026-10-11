@@ -12,6 +12,7 @@ import { preparePhoto, shrinkForStorage } from './prepare';
 import { currentReader, ReaderUnavailable, type ReadProgress } from './reader';
 import { dropToUpload, keepToUpload, listToRead, listToUpload, updateToRead, type ToRead, type ToUpload } from './photoStore';
 import { SAMPLE_TEXT } from '../demo/samples/sampleText';
+import { uninvoicedDeliveries } from '../forecast/bills';
 
 export { ReaderUnavailable };
 
@@ -150,4 +151,23 @@ export async function keepEvidence(photo: File, farmId: string, recordType: 'fee
       return true;
     }
   };
+}
+
+/**
+ * Which form a read photo opens. A feed invoice for deliveries already recorded opens the
+ * invoice matcher (so the cost isn't counted twice); other feed paperwork opens Feed arrived;
+ * everything else opens the bill form.
+ */
+export function formFor(read: DocketRead | null, b: Pick<FarmBundle, 'txns' | 'costs'>): string {
+  if (!read) return '/record/cost';
+  if (read.route === 'delivery' && read.kind === 'invoice') {
+    const supplierId = read.supplier && read.supplier.confidence !== 'low' ? read.supplier.value.supplierId : null;
+    const date = read.date && read.date.confidence !== 'low' ? read.date.value : todayISO();
+    const open = uninvoicedDeliveries(b, supplierId, date);
+    // With a quantity on the invoice, only match a delivery of that size: an invoice for 2.5 t
+    // is not the invoice for an 8 t load from two months ago, it is a delivery not yet recorded
+    const kg = read.quantity && read.quantity.confidence !== 'low' ? read.quantity.value.kg : null;
+    if (open.some((t) => kg === null || Math.abs(Number(t.quantity_kg) - kg) <= kg * 0.05)) return '/record/invoice';
+  }
+  return read.route === 'delivery' ? '/record/delivery' : '/record/cost';
 }

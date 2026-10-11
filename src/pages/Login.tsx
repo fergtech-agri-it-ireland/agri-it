@@ -15,7 +15,12 @@ export default function Login() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  if (session) return <Navigate to="/" replace />;
+  if (session) {
+    // Came from an invitation link: go back to it now that they're signed in
+    let join: string | null = null;
+    try { join = sessionStorage.getItem('agri-it:join'); sessionStorage.removeItem('agri-it:join'); } catch { /* ignore */ }
+    return <Navigate to={join ? `/join/${join}` : '/'} replace />;
+  }
 
   async function submit(e: FormEvent, creds?: { email: string; password: string }) {
     e.preventDefault();

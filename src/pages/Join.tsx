@@ -3,6 +3,7 @@ import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { useFarmCtx } from '../lib/data/farm';
 import { supabase } from '../lib/supabase';
 import { Button, Card, Screen } from '../components/ui';
+import { key } from '../lib/env';
 
 /** Opening an invitation link: join the farm once signed in with the invited email. */
 export default function Join() {
@@ -21,7 +22,8 @@ export default function Join() {
   }, [session, token]); // eslint-disable-line react-hooks/exhaustive-deps
   if (sessionLoading) return null;
   if (!session) {
-    try { sessionStorage.setItem('agri-it:join', token ?? ''); } catch { /* ignore */ }
+    // Kept in localStorage: confirming a new account's email may open a new tab
+    try { localStorage.setItem(key('join'), token ?? ''); } catch { /* ignore */ }
     return <Navigate to="/login" replace />;
   }
   return (

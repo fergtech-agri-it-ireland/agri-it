@@ -4,11 +4,12 @@
  * separate and still applies in daylight. Both are per-device preferences.
  */
 import { useEffect, useState } from 'react';
+import { key } from './env';
 
 export type DawnPref = 'off' | 'on' | 'auto';
-const DAWN_KEY = 'agri-it:dawn';
-const SUN_KEY = 'agri-it:sunlight';
-const EVENT = 'agri-it:theme';
+const DAWN_KEY = key('dawn');
+const SUN_KEY = key('sunlight');
+const EVENT = key('theme');
 
 function read(key: string): string | null {
   try { return localStorage.getItem(key); } catch { return null; }

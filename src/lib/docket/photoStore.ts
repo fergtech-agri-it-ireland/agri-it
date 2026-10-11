@@ -11,6 +11,7 @@
  * (private mode, some embedded pages) the queues live in memory for this visit.
  */
 import type { OcrLine } from './extract';
+import { NS } from '../env';
 
 export interface ToRead {
   id: string;
@@ -36,7 +37,7 @@ export interface ToUpload {
   addedAt: string;
 }
 
-const DB = 'agri-it-photos';
+const DB = `${NS}-photos`;
 type StoreName = 'toRead' | 'toUpload';
 const memory: Record<StoreName, Map<string, unknown>> = { toRead: new Map(), toUpload: new Map() };
 let dbPromise: Promise<IDBDatabase | null> | null = null;

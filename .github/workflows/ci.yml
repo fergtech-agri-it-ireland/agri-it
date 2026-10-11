@@ -35,7 +35,8 @@ jobs:
 
   pages:
     # Publishes the phone-only app to https://fergtech-agri-it-ireland.github.io/agri-it/ after the
-    # app checks pass, like Gauntlet. Records stay on each phone; no server is involved.
+    # app checks pass, like Gauntlet (records stay on each phone), and the online app to
+    # https://fergtech-agri-it-ireland.github.io/agri-it/online/ (records in Supabase project agri-it).
     # Needs the repo public (free GitHub plan) and Settings > Pages > Source set to "GitHub Actions".
     needs: app
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && github.event.repository.private == false
@@ -62,6 +63,11 @@ jobs:
       - run: npm run build:pages
         env:
           PAGES_BASE: ${{ steps.pages.outputs.base_path }}/
+      # The online app (signed in to Supabase), served next to it at online/ as a separate app
+      - run: npm run build:online
+        env:
+          PAGES_BASE: ${{ steps.pages.outputs.base_path }}/
+      - run: cp -r dist-online dist-pages/online
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist-pages

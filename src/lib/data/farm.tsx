@@ -5,7 +5,7 @@ import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../supabase';
 import type { FarmBundle, MemberRole } from '../types';
 import { groupsAsOf } from '../heads';
-import { IN_BROWSER } from '../env';
+import { IN_BROWSER, key } from '../env';
 import { addDays, todayISO } from '../format';
 import { ConflictError, execute, flush, type Op } from '../offline/outbox';
 import { flushPhotoUploads, readWaiting } from '../docket/flow';
@@ -24,7 +24,7 @@ interface FarmCtx {
   refreshFarms: () => Promise<unknown>;
 }
 const Ctx = createContext<FarmCtx | null>(null);
-const FARM_KEY = 'agri-it:farm';
+const FARM_KEY = key('farm');
 
 export function FarmProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);

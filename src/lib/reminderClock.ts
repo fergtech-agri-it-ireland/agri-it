@@ -14,14 +14,14 @@
  */
 import { useEffect, useState } from 'react';
 import type { FarmBundle } from './types';
-import { IN_BROWSER } from './env';
+import { IN_BROWSER, key, NS } from './env';
 import { todayISO } from './format';
 import { buildDigest, parsePrefs, slotDue, type Digest, type ReminderPrefs, type SlotId } from './reminders';
 
-const PREFS_KEY = 'agri-it:reminders';
-const EVENT = 'agri-it:reminders';
+const PREFS_KEY = key('reminders');
+const EVENT = key('reminders');
 export const SYNC_TAG = 'agri-it-reminders';
-const DB = 'agri-it-reminders';
+const DB = `${NS}-reminders`;
 const STORE = 'kv';
 
 // ---------------------------------------------------------------------------
@@ -111,9 +111,11 @@ export async function registerBackgroundCheck() {
 }
 
 async function show(title: string, body: string) {
-  const opts: NotificationOptions = { body, tag: 'agri-it-reminder', icon: '/icons/icon-192.png', badge: '/icons/icon-192.png', data: { url: '/' } };
+  const home = `${location.origin}${import.meta.env.BASE_URL}`;
+  const icon = `${home}icons/icon-192.png`;
+  const opts: NotificationOptions = { body, tag: 'agri-it-reminder', icon, badge: icon, data: { url: home } };
   try {
-    const reg = await navigator.serviceWorker?.getRegistration();
+    const reg = await navigator.serviceWorker?.getRegistration(import.meta.env.BASE_URL);
     if (reg) return void (await reg.showNotification(title, opts));
     new Notification(title, opts);
   } catch { /* nothing more we can do */ }

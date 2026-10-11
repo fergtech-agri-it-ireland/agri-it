@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useFarmData, useFarmCtx } from '../lib/data/farm';
 import { supabase } from '../lib/supabase';
-import { IN_BROWSER, IN_FRAME } from '../lib/env';
+import { appLink, IN_BROWSER, IN_FRAME } from '../lib/env';
 import { ROLE_LABEL, type MemberRole } from '../lib/types';
 import { Button, Card, Chips, Empty, List, Row, Screen, SectionTitle, TextInput } from '../components/ui';
 import { useToast } from '../components/Toast';
@@ -63,7 +63,7 @@ export default function People() {
   async function invite() {
     const { data, error } = await supabase.rpc('create_farm_invite', { p_farm_id: farmId, p_email: email.trim(), p_role: role });
     if (error) { toast.show({ message: error.message, tone: 'error' }); return; }
-    const url = `${window.location.origin}${import.meta.env.BASE_URL}join/${data}`;
+    const url = appLink(`/join/${data}`);
     setLink(url);
     qc.invalidateQueries({ queryKey: ['invites', farmId] });
     try { await navigator.clipboard.writeText(url); toast.show({ message: 'Invitation link copied. Send it by text or email.', tone: 'success' }); } catch { /* shown below to copy by hand */ }

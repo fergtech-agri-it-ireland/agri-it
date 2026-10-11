@@ -7,10 +7,20 @@
  * time has passed today (within 3 hours) and not yet been shown, and shows it.
  * It never records anything: tapping the notification just opens Today.
  *
- * Also handles web push (when a server is added later): a push with {title, body, url}
- * is shown as is.
+ * Also handles web push from the online build's server (edge function `push-reminders`):
+ * a push with {title, body, url} is shown as is.
+ *
+ * The phone app (/agri-it/) and the online app (/agri-it/online/) share a web address, so
+ * each worker uses its own database name, worked out from its scope, and opens its own app.
  */
-const AGRI_DB = 'agri-it-reminders';
+const AGRI_SCOPE = self.registration.scope;
+const AGRI_NS = new URL(AGRI_SCOPE).pathname.endsWith('/online/') ? 'agri-it-online' : 'agri-it';
+const AGRI_DB = AGRI_NS + '-reminders';
+const AGRI_ICON = new URL('icons/icon-192.png', AGRI_SCOPE).href;
+/** A window of this app (the phone app's scope also covers online/, which is the other app). */
+function agriOwn(c) {
+  return c.url.startsWith(AGRI_SCOPE) && (AGRI_NS === 'agri-it-online' || !c.url.startsWith(AGRI_SCOPE + 'online/'));
+}
 const AGRI_STORE = 'kv';
 const AGRI_WINDOW_MIN = 180;
 
@@ -63,13 +73,13 @@ async function agriCheckReminders() {
     if (nowMin < at || nowMin >= at + AGRI_WINDOW_MIN) continue;
     await agriSet('shown', Object.assign({}, shown, { [slot]: day }));
     // Don't buzz if Agri-It is open on screen: the checklist is already in front of them
-    const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const clients = (await self.clients.matchAll({ type: 'window', includeUncontrolled: true })).filter(agriOwn);
     if (clients.some((c) => c.visibilityState === 'visible')) return;
     const today = (digest.days || []).find((d) => d.date === day);
     const msg = today && today.messages && today.messages[slot];
     if (msg) {
       await self.registration.showNotification(msg.title, {
-        body: msg.body, tag: 'agri-it-reminder', icon: '/icons/icon-192.png', badge: '/icons/icon-192.png', data: { url: '/' }
+        body: msg.body, tag: 'agri-it-reminder', icon: AGRI_ICON, badge: AGRI_ICON, data: { url: AGRI_SCOPE }
       });
     }
     return;
@@ -86,18 +96,19 @@ self.addEventListener('push', (event) => {
   const title = data.title || 'Agri-It';
   event.waitUntil(self.registration.showNotification(title, {
     body: data.body || 'Open Agri-It to see what is due.', tag: data.tag || 'agri-it-reminder',
-    icon: '/icons/icon-192.png', badge: '/icons/icon-192.png', data: { url: data.url || '/' }
+    icon: AGRI_ICON, badge: AGRI_ICON, data: { url: data.url ? new URL(data.url, AGRI_SCOPE).href : AGRI_SCOPE }
   }));
 });
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const url = (event.notification.data && event.notification.data.url) || '/';
+  const url = (event.notification.data && event.notification.data.url) || AGRI_SCOPE;
   event.waitUntil((async () => {
-    const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    // Only this app's own windows (the other app on this address has its own worker)
+    const clients = (await self.clients.matchAll({ type: 'window' })).filter(agriOwn);
     for (const c of clients) {
       if ('focus' in c) {
-        if ('navigate' in c && url !== '/') await c.navigate(url).catch(() => undefined);
+        if ('navigate' in c && url !== AGRI_SCOPE) await c.navigate(url).catch(() => undefined);
         return c.focus();
       }
     }

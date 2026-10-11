@@ -6,6 +6,7 @@ import { todayISO } from '../lib/format';
 import { buildDigest, EVENING_TIMES, MORNING_TIMES, nextReminder, remindersIcs, timeLabel, anyOn, type SlotId } from '../lib/reminders';
 import { downloadIcs, enableNotifications, notifyState, useReminderPrefs, type NotifyState } from '../lib/reminderClock';
 import { Button, Card, Chips, ToneIcon } from './ui';
+import { key } from '../lib/env';
 
 /** Looks like the phone's lock-screen notification, so the farmer sees exactly what they'll get. */
 function NotificationPreview({ title, body }: { title: string; body: string }) {
@@ -73,7 +74,7 @@ export function RemindersCard({ b, urgentToday }: { b: FarmBundle; urgentToday: 
   );
 }
 
-const NUDGE_KEY = 'agri-it:reminder-nudge';
+const NUDGE_KEY = key('reminder-nudge');
 
 /** One-time suggestion on Today, only when there's a checklist and no reminders set. */
 export function ReminderNudge() {

@@ -11,5 +11,6 @@ export const supabaseConfigured = IN_BROWSER || Boolean(url && anon);
 export const supabase: SupabaseClient = IN_BROWSER
   ? (createDemoClient() as unknown as SupabaseClient)
   : createClient(url ?? 'http://127.0.0.1:54321', anon ?? 'missing-anon-key', {
-      auth: { persistSession: true, autoRefreshToken: true }
+      // PKCE: the sign-up email link comes back with ?code=, which leaves the hash routes alone
+      auth: { persistSession: true, autoRefreshToken: true, flowType: 'pkce' }
     });

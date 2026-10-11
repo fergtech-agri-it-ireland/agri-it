@@ -1,5 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
-import { IS_DEMO, IS_LOCAL } from '../lib/env';
+import { IS_DEMO, IS_LOCAL, key } from '../lib/env';
 
 /**
  * Last line of defence: if a screen crashes, show a way out instead of a blank page.
@@ -9,13 +9,13 @@ import { IS_DEMO, IS_LOCAL } from '../lib/env';
 export function clearCachedData() {
   try {
     const s = window.localStorage;
-    s.removeItem('agri-it:cache');
+    s.removeItem(key('cache'));
     if (IS_DEMO) {
-      s.removeItem('agri-it:demo-db');
-      s.removeItem('agri-it:outbox');
+      s.removeItem(key('demo-db'));
+      s.removeItem(key('outbox'));
     }
   } catch { /* storage blocked: nothing cached to clear */ }
-  try { window.sessionStorage.removeItem('agri-it:snapshots'); } catch { /* ignore */ }
+  try { window.sessionStorage.removeItem(key('snapshots')); } catch { /* ignore */ }
 }
 
 export class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {

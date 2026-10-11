@@ -10,7 +10,7 @@ import { useTheme, type DawnPref } from '../lib/theme';
 import { reminderHeadlines, useDerived } from '../lib/data/derived';
 import { RemindersCard } from '../components/Reminders';
 import { PhoneStorageCard } from '../components/PhoneStorage';
-import { IS_LOCAL } from '../lib/env';
+import { IS_LOCAL, key } from '../lib/env';
 
 export default function Settings() {
   const b = useFarmData();
@@ -120,7 +120,7 @@ export default function Settings() {
       {IS_LOCAL ? <PhoneStorageCard farmName={f.name} /> : (
       <Card>
         <p className="text-sm text-muted">Signed in as {session?.user.email}. Your records are private to your farm. Nothing is shared unless you add someone to the farm.</p>
-        <Button variant="secondary" block className="mt-3" onClick={() => { localStorage.removeItem('agri-it:cache'); supabase.auth.signOut(); }}>Sign out</Button>
+        <Button variant="secondary" block className="mt-3" onClick={() => { localStorage.removeItem(key('cache')); supabase.auth.signOut(); }}>Sign out</Button>
       </Card>
       )}
     </Screen>

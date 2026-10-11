@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Navigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { IS_DEMO } from '../lib/env';
+import { appLink, IS_DEMO, key } from '../lib/env';
 import { useFarmCtx } from '../lib/data/farm';
 import { Button, Card } from '../components/ui';
 import { Logo } from '../components/Logo';
@@ -18,7 +18,7 @@ export default function Login() {
   if (session) {
     // Came from an invitation link: go back to it now that they're signed in
     let join: string | null = null;
-    try { join = sessionStorage.getItem('agri-it:join'); sessionStorage.removeItem('agri-it:join'); } catch { /* ignore */ }
+    try { join = localStorage.getItem(key('join')); localStorage.removeItem(key('join')); } catch { /* ignore */ }
     return <Navigate to={join ? `/join/${join}` : '/'} replace />;
   }
 
@@ -27,7 +27,7 @@ export default function Login() {
     setBusy(true); setError(null); setNotice(null);
     const c = creds ?? { email: email.trim(), password };
     const { data, error } = mode === 'up' && !creds
-      ? await supabase.auth.signUp({ ...c, options: { emailRedirectTo: window.location.origin } })
+      ? await supabase.auth.signUp({ ...c, options: { emailRedirectTo: appLink() } })
       : await supabase.auth.signInWithPassword(c);
     setBusy(false);
     if (error) setError(error.message);

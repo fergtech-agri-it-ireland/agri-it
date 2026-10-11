@@ -10,12 +10,20 @@ import { fileURLToPath, URL } from 'node:url';
 // `--mode phone`: the same one-file build, starting with no farm, keeping the farmer's records on the phone.
 // `--mode pages`: the phone-only app as an installable, offline web app for GitHub Pages
 //   (https://fergtech-agri-it-ireland.github.io/agri-it/). Records stay on each phone; no server.
+// `--mode online`: the hosted app signed in to Supabase, published next to it at /agri-it/online/
+//   as a separate installable app (own manifest id, own service worker scope, own storage names).
 export default defineConfig(({ mode }) => {
   const demo = mode === 'demo' || mode === 'phone'; // one self-contained HTML file
   const pages = mode === 'pages';
+  const online = mode === 'online';
   // Pages: CI passes the site's path (e.g. '/' for its own address, '/agri-it/' for a project page)
   const pagesBase = (process.env.PAGES_BASE || '/agri-it/').replace(/\/?$/, '/');
-  const base = demo ? './' : pages ? pagesBase : '/';
+  const base = demo ? './' : pages ? pagesBase : online ? `${pagesBase}online/` : '/';
+  // The phone app's worker covers its whole folder, which includes online/: it must leave that
+  // address alone so the online app (and its own worker) loads there.
+  const esc = (x: string) => x.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
+  const onlineDeny = pages ? [new RegExp(`^${esc(pagesBase)}online/`)] : [];
+  const ns = online ? 'agri-it-online' : 'agri-it';
   return {
     base,
     resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
@@ -26,9 +34,11 @@ export default defineConfig(({ mode }) => {
         registerType: 'autoUpdate',
         includeAssets: ['icons/favicon.svg', 'icons/apple-touch-icon.png'],
         manifest: {
-          name: 'Agri-It',
-          short_name: 'Agri-It',
-          description: 'Feed run-out, cash flow and farm records in one place',
+          name: online ? 'Agri-It Online' : 'Agri-It',
+          short_name: online ? 'Agri-It Online' : 'Agri-It',
+          description: online
+            ? 'Feed run-out, cash flow and farm records, kept in your account and shared with your farm'
+            : 'Feed run-out, cash flow and farm records in one place',
           theme_color: '#0B7A55',
           background_color: '#F1F4F2',
           display: 'standalone',
@@ -46,6 +56,7 @@ export default defineConfig(({ mode }) => {
         },
         workbox: {
           navigateFallback: `${base}index.html`,
+          navigateFallbackDenylist: onlineDeny,
           // Daily reminders (periodic sync), notification taps and future web push
           importScripts: ['reminder-sw.js'],
           globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
@@ -53,9 +64,10 @@ export default defineConfig(({ mode }) => {
           // loads (the Record screen warms it up with signal), then reads offline in the yard.
           globIgnores: ['ocr/**'],
           runtimeCaching: [{
-            urlPattern: ({ url }) => url.pathname.startsWith(`${base}ocr/`),
+            // A RegExp, not a function: a function is copied into the worker as text, where `base` doesn't exist
+            urlPattern: new RegExp(`${esc(base)}ocr/`),
             handler: 'CacheFirst',
-            options: { cacheName: 'agri-it-ocr', expiration: { maxEntries: 12 } }
+            options: { cacheName: `${ns}-ocr`, expiration: { maxEntries: 12 } }
           }]
         }
       }),
@@ -65,6 +77,7 @@ export default defineConfig(({ mode }) => {
       ? { outDir: mode === 'phone' ? 'dist-phone' : 'dist-demo', emptyOutDir: true }
       : {
           ...(pages ? { outDir: 'dist-pages', emptyOutDir: true } : {}),
+          ...(online ? { outDir: 'dist-online', emptyOutDir: true } : {}),
           rollupOptions: {
             output: { manualChunks: { react: ['react', 'react-dom', 'react-router-dom'], supabase: ['@supabase/supabase-js'], query: ['@tanstack/react-query', '@tanstack/react-query-persist-client', '@tanstack/query-sync-storage-persister'] } }
           }

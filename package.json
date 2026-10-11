@@ -24,7 +24,8 @@
     "preview:demo": "vite preview --mode demo --outDir dist-demo",
     "ocr:assets": "node scripts/copy-ocr-assets.mjs",
     "predev": "npm run ocr:assets",
-    "prebuild": "npm run ocr:assets"
+    "prebuild": "npm run ocr:assets",
+    "build:online": "npm run ocr:assets && tsc -b && vite build --mode online"
   },
   "dependencies": {
     "@fontsource/figtree": "^5.3.0",

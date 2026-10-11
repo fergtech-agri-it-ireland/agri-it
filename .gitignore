@@ -22,3 +22,4 @@ supabase/.env
 out/
 boundary.png
 public/ocr/
+dist-online

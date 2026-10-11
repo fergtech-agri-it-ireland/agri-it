@@ -15,6 +15,7 @@ import { eur, fmtDay, fmtKg, fmtMonth, fmtNum, monthKey, todayISO } from '../lib
 import { primaryRoute, telHref } from '../lib/suppliers';
 import type { FarmBundle } from '../lib/types';
 import type { FeedForecast } from '../lib/forecast/feed';
+import { NS } from '../lib/env';
 
 type Derived = ReturnType<typeof useDerived>;
 const dayFmt = new Intl.DateTimeFormat('en-IE', { weekday: 'short', day: 'numeric', month: 'short' });
@@ -156,7 +157,7 @@ function Mini({ title, value, sub, fraction, tone, to }: { title: string; value:
 // Getting started: steers each farmer to what matters for their farming
 // ---------------------------------------------------------------------------
 function GuideCard({ b }: { b: FarmBundle }) {
-  const key = `agri-it:guide-hidden:${b.farm.id}`;
+  const key = `${NS}:guide-hidden:${b.farm.id}`;
   const [hidden, setHidden] = useState(() => { try { return localStorage.getItem(key) === '1'; } catch { return false; } });
   const steps = farmGuide(b);
   const done = steps.filter((s) => s.done).length;
@@ -296,7 +297,7 @@ export default function Today() {
   const progress = checklistProgress(checklist, today);
   const [allNext, setAllNext] = useState(false);
   // Information can be hidden for a week; anything owed or overdue cannot
-  const hideKey = `agri-it:hidden:${b.farm.id}`;
+  const hideKey = `${NS}:hidden:${b.farm.id}`;
   const [hidden, setHidden] = useState<Record<string, string>>(() => { try { return JSON.parse(localStorage.getItem(hideKey) ?? '{}'); } catch { return {}; } });
   const hide = (id: string) => {
     const next = { ...Object.fromEntries(Object.entries(hidden).filter(([, until]) => until > today)), [id]: addDays(today, 7) };

@@ -9,7 +9,7 @@
  * or "use mine". A retry of an edit that already landed is recognised and not flagged.
  */
 import { supabase } from '../supabase';
-import { IN_BROWSER } from '../env';
+import { IN_BROWSER, key } from '../env';
 
 export type Op =
   | { kind: 'rpc'; fn: string; args: Record<string, unknown> }
@@ -47,7 +47,7 @@ const known = new Map<string, { seen: Set<string>; latest: string }>();
 const rowKey = (t: string, m: Record<string, unknown>) => `${t}:${JSON.stringify(m)}`;
 export function _resetKnown() { known.clear(); }
 
-const KEY = 'agri-it:outbox';
+const KEY = key('outbox');
 type Listener = (q: Queued[]) => void;
 const listeners = new Set<Listener>();
 

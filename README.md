@@ -6,6 +6,10 @@ Irish farm intelligence for day-to-day decisions: purchased feed run-out and reo
 
 Built from the *Agri-It MVP Overview* (September 2026). Mobile-first, installable, and works offline.
 
+**Two versions, installed as separate apps:**
+- **[Agri-It](https://fergtech-agri-it-ireland.github.io/agri-it/)** (phone app): no account; every record stays on the phone. Settings > Kept on this phone backs it up.
+- **[Agri-It Online](https://fergtech-agri-it-ireland.github.io/agri-it/online/)**: sign in; records are kept in your account (Supabase), shared with family, a farm worker (no money) or an adviser (read only), with a change history and reminders sent by the server even when the app is closed. **Move my phone data** copies the phone app's records in, keeping every date and whether bills are paid or owed; doing it twice adds nothing.
+
 | Today | Tick-off checklist | Routines | Dawn mode |
 | --- | --- | --- | --- |
 | ![Today](docs/screenshots/today.png) | ![Checklist](docs/screenshots/checklist.png) | ![Routines](docs/screenshots/routines.png) | ![Dawn mode](docs/screenshots/today-dawn.png) |
@@ -92,11 +96,14 @@ git push -u origin main
 
 `.env.local` is git-ignored. The included GitHub Actions workflow type-checks, tests and builds the app, and applies every migration plus the seed to a real Supabase database on each push.
 
-### Deploy (when ready)
+### Deploy
 
-1. Create a project at supabase.com, then `npx supabase link --project-ref <ref>` and `npx supabase db push`.
-2. **Don't run `seed.sql` in production.** It creates the demo login. Load the reference data (evidence sources, forage benchmarks and supplier directory) from the top half of the file only.
-3. Host the `dist/` build on Vercel, Netlify or Cloudflare Pages with `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` set. Add the site URL to Supabase Auth redirect URLs and turn email confirmations on.
+CI publishes both versions to GitHub Pages from `main` once the app and database checks pass: `npm run build:pages` (phone app, `/agri-it/`) and `npm run build:online` (online app, `/agri-it/online/`, own manifest id and service worker scope). The online build reads `.env.online`, which holds only the public project URL and the publishable key. Never put a service key in the repo.
+
+Hosted database (Supabase project `agri-it`):
+1. **Don't run `seed.sql` in production.** It creates the demo login. `python3 scripts/make_remote_setup.py` writes `supabase/remote/setup_agri_it.sql`, which applies the migrations, loads only the reference data (evidence sources, Teagasc allowances, supplier directory and branches) and runs the database checks in a rolled-back transaction. Paste it into the SQL editor once.
+2. Edge function `supabase/functions/push-reminders` (`verify_jwt = false`; it checks its own secret) with the secrets `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY`; then a vault secret `push_cron_secret` and `supabase/remote/push_schedule.sql` (every 15 minutes).
+3. Auth: Site URL and redirect URL `https://fergtech-agri-it-ireland.github.io/agri-it/online/`, email confirmations on, and your own SMTP before inviting many people.
 
 ---
 
@@ -179,7 +186,7 @@ Designed for someone standing in a yard with gloves, glare, a patchy signal and 
 
 - **Supplier numbers** were re-checked against each supplier's own page on 11 Oct 2026 (Drummonds branches loaded). Lakeland's site blocks automated checks, so its numbers show as not verified until checked by hand. Arrabawn Tipperary is deliberately left without a number until its merged directory is confirmed.
 - **Photo reading** reads dockets, receipts and invoices on the phone (Tesseract) and prefills the form; the farmer checks and saves. It is weaker on handwriting and very poor photos, and PDFs are not read yet. A server reader is planned once hosted (see `docs/HANDOVER.md`).
-- **Needs the hosted (Supabase) app:** inviting people, roles and the shared change history (built and tested in the database; the phone-only build has one person and keeps its own history), and server push for reminders on iPhone.
+- **Phone and online records are separate.** Moving phone data online makes a copy; later phone entries don't sync (run Move again: only new records move). Inviting people, roles, the shared change history and server reminders are online only; the phone app has one person and keeps its own history. On iPhone, server reminders need Agri-It Online added to the Home Screen.
 - **Data volume.** The app loads one farm's last ~2 years in a single cached query, which is simple and fast at family-farm scale. Move to paged queries if a farm has tens of thousands of rows.
 - **Voice input** uses the browser's speech recognition (Chrome, Edge, Safari). It is hidden where it isn't supported.
 

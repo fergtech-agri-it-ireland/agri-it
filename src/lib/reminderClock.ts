@@ -14,7 +14,8 @@
  */
 import { useEffect, useState } from 'react';
 import type { FarmBundle } from './types';
-import { IN_BROWSER, key, NS } from './env';
+import { IN_BROWSER, IS_ONLINE, key, NS } from './env';
+import { saveDigest as saveServerDigest } from './serverPush';
 import { todayISO } from './format';
 import { buildDigest, parsePrefs, slotDue, type Digest, type ReminderPrefs, type SlotId } from './reminders';
 
@@ -145,6 +146,8 @@ export function useReminderClock(b: FarmBundle | undefined, urgentToday: string[
     if (!b || IN_BROWSER) return;
     const digest = buildDigest(b, todayISO(), prefs, urgentToday);
     void kvSet('digest', digest);
+    // Online build: the server sends the same words when the app is closed (if this phone opted in)
+    if (IS_ONLINE) void saveServerDigest(digest).catch(() => undefined);
   }, [b, prefs, urgentKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {

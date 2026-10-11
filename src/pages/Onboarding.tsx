@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, Minus, Plus, X } from 'lucide-react';
+import { ChevronLeft, Minus, Plus, Smartphone, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useFarmCtx } from '../lib/data/farm';
 import { COMMON_CROPS, currentHarvest, grows, keepsAnimals, speciesOf, suggestedClasses } from '../lib/farmTypes';
@@ -10,6 +10,7 @@ import { Button, Chips, Field, NumberInput, SaveBar, TextInput } from '../compon
 import { todayISO } from '../lib/format';
 import { BreedField, ClassPicker, FarmTypePicker } from '../components/FarmPickers';
 import { Logo } from '../components/Logo';
+import { IS_ONLINE } from '../lib/env';
 
 type Step = 'farm' | 'types' | 'animals' | 'crops' | 'money';
 interface AnimalRow { key: string; cls: AnimalClass; count: number; breed: string }
@@ -134,6 +135,12 @@ export default function Onboarding() {
               </select>
             </Field>
             <TextInput label={jurisdiction === 'ROI' ? 'Eircode (optional)' : 'Postcode (optional)'} value={eircode} onChange={(v) => setEircode(v.toUpperCase())} />
+            {IS_ONLINE && (
+              <Link to="/move-phone-data" className="flex min-h-[56px] items-center gap-3 rounded-2xl bg-card p-4 font-bold shadow-sm">
+                <Smartphone className="h-7 w-7 shrink-0 text-accent" aria-hidden />
+                <span>Used the Agri-It phone app already?<span className="block text-sm font-normal text-muted">Move those records into your account instead of starting again</span></span>
+              </Link>
+            )}
           </>
         )}
 

@@ -1,12 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { BellRing, CalendarPlus, X } from 'lucide-react';
+import { BellOff, BellRing, CalendarPlus, CloudUpload, X } from 'lucide-react';
 import type { FarmBundle } from '../lib/types';
 import { todayISO } from '../lib/format';
 import { buildDigest, EVENING_TIMES, MORNING_TIMES, nextReminder, remindersIcs, timeLabel, anyOn, type SlotId } from '../lib/reminders';
 import { downloadIcs, enableNotifications, notifyState, useReminderPrefs, type NotifyState } from '../lib/reminderClock';
 import { Button, Card, Chips, ToneIcon } from './ui';
-import { key } from '../lib/env';
+import { IS_ONLINE, key } from '../lib/env';
+import { disableServerPush, enableServerPush, serverPushState, type ServerPushState } from '../lib/serverPush';
+import type { Digest } from '../lib/reminders';
 
 /** Looks like the phone's lock-screen notification, so the farmer sees exactly what they'll get. */
 function NotificationPreview({ title, body }: { title: string; body: string }) {
@@ -64,6 +66,7 @@ export function RemindersCard({ b, urgentToday }: { b: FarmBundle; urgentToday: 
               <BellRing className="h-6 w-6" aria-hidden />Allow notifications
             </Button>
           )}
+          {IS_ONLINE && <ServerPush farmId={b.farm.id} digest={digest} onState={setState} />}
           {state !== 'demo' && <Button variant="secondary" block onClick={() => downloadIcs(remindersIcs(prefs, location.origin + location.pathname, today, b.farm.id))}>
             <CalendarPlus className="h-6 w-6" aria-hidden />Add to phone calendar
           </Button>}
@@ -71,6 +74,49 @@ export function RemindersCard({ b, urgentToday }: { b: FarmBundle; urgentToday: 
       )}
       <p className="hint">Only changes this phone. A reminder never records anything: tapping it opens Today, where you tick things off.</p>
     </Card>
+  );
+}
+
+const SERVER_TEXT: Record<ServerPushState, string> = {
+  on: 'Server reminders are on for this phone. They arrive even when Agri-It is closed, with the same words as the preview.',
+  off: 'Get the reminder even when Agri-It is closed (needed on iPhone). Agri-It\'s server sends it at your time.',
+  unsupported: 'This browser cannot get reminders from the server. Use the calendar instead.',
+  denied: 'Notifications are blocked for Agri-It Online in your phone settings, so the server cannot send reminders.',
+  'needs-install': 'On iPhone, add Agri-It Online to your Home Screen first (Share, then Add to Home Screen), open it from there, and turn this on.'
+};
+
+/** Online build: opt this phone in to reminders sent by the server (edge function push-reminders). */
+function ServerPush({ farmId, digest, onState }: { farmId: string; digest: Digest; onState: (s: NotifyState) => void }) {
+  const [st, setSt] = useState<ServerPushState | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => { void serverPushState().then(setSt); }, []);
+  if (!st) return null;
+  const turnOn = async () => {
+    setBusy(true); setErr(null);
+    try { const s = await enableServerPush(farmId, digest); setSt(s); onState(notifyState()); } catch (e) { setErr((e as Error).message); }
+    setBusy(false);
+  };
+  const turnOff = async () => {
+    setBusy(true); setErr(null);
+    try { await disableServerPush(); setSt('off'); } catch (e) { setErr((e as Error).message); }
+    setBusy(false);
+  };
+  return (
+    <div className="space-y-2 rounded-2xl bg-pasture p-3">
+      <p className="flex gap-2 text-[0.95rem]"><ToneIcon tone={st === 'on' ? 'ok' : st === 'off' ? 'info' : 'warn'} className="mt-0.5 h-5 w-5 shrink-0" />{SERVER_TEXT[st]}</p>
+      {st === 'off' && (
+        <Button variant="hivis" block disabled={busy} onClick={turnOn}>
+          <CloudUpload className="h-6 w-6" aria-hidden />{busy ? 'Turning on…' : 'Send reminders when Agri-It is closed'}
+        </Button>
+      )}
+      {st === 'on' && (
+        <Button variant="secondary" block disabled={busy} onClick={turnOff}>
+          <BellOff className="h-6 w-6" aria-hidden />{busy ? 'Turning off…' : 'Stop server reminders on this phone'}
+        </Button>
+      )}
+      {err && <p className="font-bold text-danger" role="alert">{err}</p>}
+    </div>
   );
 }
 

@@ -46,3 +46,7 @@ enable_signup = true
 double_confirm_changes = true
 # Off locally so you can sign up and go straight in. Turn on for production.
 enable_confirmations = false
+
+# Server reminders: called by pg_cron with its own secret (x-cron-secret), not a user token
+[functions.push-reminders]
+verify_jwt = false

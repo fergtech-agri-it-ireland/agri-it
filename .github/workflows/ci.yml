@@ -32,6 +32,15 @@ jobs:
       - run: supabase db lint --level error
       # Review fixes: paid/owed, part deliveries, dated head counts, roles, invites, audit trail
       - run: psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -q -f scripts/e2e/db_review.sql
+      # Move my phone data to my account: a real phone backup through import_phone_backup, twice
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx vitest run src/lib/phoneImport.pg.test.ts
+        env:
+          AGRI_PG: postgresql://postgres:postgres@127.0.0.1:54322/postgres
 
   pages:
     # Publishes the phone-only app to https://fergtech-agri-it-ireland.github.io/agri-it/ after the

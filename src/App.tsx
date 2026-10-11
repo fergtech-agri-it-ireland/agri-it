@@ -41,6 +41,7 @@ import Bills from './pages/Bills';
 import People from './pages/People';
 import Changes from './pages/Changes';
 import Join from './pages/Join';
+import MovePhoneData from './pages/MovePhoneData';
 
 export default function App() {
   if (!supabaseConfigured) return <MissingConfig />;
@@ -49,6 +50,8 @@ export default function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/onboarding" element={<Onboarding />} />
       <Route path="/join/:token" element={<Join />} />
+      {/* Online build: copy the phone app's records into this account (works before a farm exists) */}
+      <Route path="/move-phone-data" element={<MovePhoneData />} />
       <Route element={<RequireFarm />}>
         <Route index element={<Today />} />
         <Route path="forecast" element={<Forecast />} />

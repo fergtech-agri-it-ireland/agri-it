@@ -100,6 +100,20 @@ self.addEventListener('push', (event) => {
   }));
 });
 
+// The phone app's worker covers /agri-it/ and so also /agri-it/online/. Before 11 Oct 2026 it
+// answered that address with the phone app. When this (newer) phone worker takes over, any
+// window still showing the phone app at online/ is reloaded, so it loads the online app.
+self.addEventListener('activate', (event) => {
+  if (AGRI_NS !== 'agri-it') return;
+  event.waitUntil((async () => {
+    await self.clients.claim();
+    const wins = await self.clients.matchAll({ type: 'window' });
+    for (const c of wins) {
+      if (c.url.startsWith(AGRI_SCOPE + 'online/') && 'navigate' in c) await c.navigate(c.url).catch(() => undefined);
+    }
+  })());
+});
+
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const url = (event.notification.data && event.notification.data.url) || AGRI_SCOPE;

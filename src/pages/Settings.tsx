@@ -5,12 +5,12 @@ import { supabase } from '../lib/supabase';
 import { COUNTIES_NI, COUNTIES_ROI, type Farm } from '../lib/types';
 import { todayISO } from '../lib/format';
 import { Button, Card, Chips, DateChips, Field, List, NumberInput, Row, Screen, SectionTitle, Stepper, TextInput } from '../components/ui';
-import { ChevronRight, History, Users } from 'lucide-react';
+import { ChevronRight, History, Users, Smartphone } from 'lucide-react';
 import { useTheme, type DawnPref } from '../lib/theme';
 import { reminderHeadlines, useDerived } from '../lib/data/derived';
 import { RemindersCard } from '../components/Reminders';
 import { PhoneStorageCard } from '../components/PhoneStorage';
-import { IS_LOCAL, key } from '../lib/env';
+import { IS_LOCAL, IS_ONLINE, key } from '../lib/env';
 
 export default function Settings() {
   const b = useFarmData();
@@ -109,6 +109,7 @@ export default function Settings() {
       <List>
         <Row to="/settings/people" icon={<Users className="h-6 w-6 text-accent" />} title="People on this farm" sub="Family, farm worker (no money), adviser (read only)" right={<ChevronRight className="h-5 w-5 text-muted" />} />
         <Row to="/settings/changes" icon={<History className="h-6 w-6 text-accent" />} title="Change history" sub="Who added, changed or removed what, and when" right={<ChevronRight className="h-5 w-5 text-muted" />} />
+        {IS_ONLINE && <Row to="/move-phone-data" icon={<Smartphone className="h-6 w-6 text-accent" />} title="Move my phone data to my account" sub="Copy records from the Agri-It phone app. Safe to do twice" right={<ChevronRight className="h-5 w-5 text-muted" />} />}
       </List>
 
       {farms.length > 1 && (

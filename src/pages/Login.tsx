@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Navigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { appLink, IS_DEMO, key } from '../lib/env';
+import { appLink, IS_DEMO, IS_ONLINE, key } from '../lib/env';
 import { useFarmCtx } from '../lib/data/farm';
 import { Button, Card } from '../components/ui';
 import { Logo } from '../components/Logo';
@@ -39,10 +39,13 @@ export default function Login() {
       <div className="flex items-center gap-3">
         <Logo className="h-14 w-14" />
         <div>
-          <h1 className="h-display text-4xl">Agri-It</h1>
+          <h1 className="h-display text-4xl">{IS_ONLINE ? 'Agri-It Online' : 'Agri-It'}</h1>
           <p className="text-muted">Feed, cash and records. Enter it once.</p>
         </div>
       </div>
+      {IS_ONLINE && (
+        <p className="text-[0.95rem]">Your records are kept in your account, so they are safe if you lose your phone, and you can share the farm with family, a farm worker or your adviser. The phone app keeps working as before; you can move its records in after you sign in.</p>
+      )}
       <Card>
         <form onSubmit={submit} className="space-y-4">
           <div>

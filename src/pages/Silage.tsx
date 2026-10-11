@@ -1,6 +1,7 @@
 import { ChevronRight } from 'lucide-react';
 import { useFarmData } from '../lib/data/farm';
 import { estimateStore } from '../lib/forecast/forage';
+import { bandLabel, CUT_LABEL, DM_TESTS } from '../lib/forecast/silageDm';
 import { fmtDate, fmtNum } from '../lib/format';
 import { Empty, LinkButton, List, Row, Screen } from '../components/ui';
 
@@ -15,7 +16,7 @@ export default function Silage() {
             const e = estimateStore(s);
             return (
               <Row key={s.id} to={`/farm/silage/${s.id}/edit`} title={s.name}
-                sub={<>{e.tonnes !== null ? `${fmtNum(Math.round(e.tonnes))} t fresh. ` : ''}{e.missing ?? e.explanation}{e.basis === 'planning_estimate' && ' '}<br />Measured {fmtDate(s.measured_on)}{s.dm_percent ? `, ${s.dm_percent}% DM` : ''}{s.dmd_percent ? `, ${s.dmd_percent}% DMD` : ''}</>}
+                sub={<>{e.tonnes !== null ? `${fmtNum(Math.round(e.tonnes))} t fresh. ` : ''}{e.missing ?? e.explanation}{e.basis === 'planning_estimate' && ' '}<br />Measured {fmtDate(s.measured_on)}{s.dm_percent ? `, ${s.dm_percent}% DM` : s.dm_test ? `, about ${bandLabel(DM_TESTS.find((t) => t.id === s.dm_test)?.low ?? null, DM_TESTS.find((t) => t.id === s.dm_test)?.high ?? null)} DM (yard test)` : ''}{s.cut ? `, ${CUT_LABEL[s.cut].toLowerCase()}` : ''}{s.dmd_percent ? `, ${s.dmd_percent}% DMD` : ''}</>}
                 right={<ChevronRight className="h-5 w-5 text-muted" />} />
             );
           })}

@@ -18,6 +18,8 @@ export interface StoreEstimate {
   basis: 'measured' | 'planning_estimate';
   explanation: string;
   missing: string | null;
+  /** The pit's density is Teagasc's published figure, not measured on this farm */
+  publishedDensity?: boolean;
 }
 
 export interface GroupDemand {
@@ -64,7 +66,8 @@ export function estimateStore(s: SilageStore): StoreEstimate {
         return { id: s.id, name: s.name, tonnes: null, basis: 'measured', explanation: `${l} × ${w} × ${h} m = ${(l * w * h).toFixed(0)} m³`, missing: `Add silage density for ${s.name} (from your analysis or advisor)` };
       }
       const t = (l * w * h * d) / 1000 - fed;
-      return { id: s.id, name: s.name, tonnes: Math.max(0, t), basis: 'measured', explanation: `${l} × ${w} × ${h} m × ${d} kg/m³${fed ? ` − ${fed} t fed` : ''}`, missing: null };
+      const pub = s.density_basis === 'teagasc_25dm' ? ' (Teagasc figure for silage of about 25% dry matter)' : '';
+      return { id: s.id, name: s.name, tonnes: Math.max(0, t), basis: 'measured', explanation: `${l} × ${w} × ${h} m × ${d} kg/m³${pub}${fed ? ` − ${fed} t fed` : ''}`, missing: null, publishedDensity: !!pub };
     }
     case 'bale_count': {
       const [c, wkg] = [n(s.bale_count), n(s.bale_weight_kg)];
@@ -164,6 +167,7 @@ export function forecastForage(input: {
   if (stores.length === 0) lower(2, 'No silage or bales recorded.');
   if (stores.some((s) => s.basis === 'planning_estimate' && s.tonnes !== null)) lower(2, 'Some stock is an acreage × yield estimate, not measured.');
   if (stores.some((s) => s.tonnes === null)) lower(2, 'Some stores are missing measurements.');
+  if (stores.some((s) => s.publishedDensity && s.tonnes !== null)) lower(1, 'A pit uses Teagasc\'s density for silage of about 25% dry matter, not your own figure.');
   if (groups.some((g) => g.source === 'missing')) lower(2, 'Some groups have no usage figure.');
   if (groups.some((g) => g.source === 'benchmark')) lower(1, 'Uses published planning allowances. Your own farm usage is more accurate.');
   if (monthsToCover === null) lower(2, 'Housing and turnout dates are not set.');

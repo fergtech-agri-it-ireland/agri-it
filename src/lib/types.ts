@@ -245,6 +245,12 @@ export interface SilageStore {
   bale_weight_kg: number | null;
   measured_tonnes: number | null;
   dm_percent: number | null;
+  /** Which cut (1 first, 2 second, 3 third or later); optional */
+  cut?: 1 | 2 | 3 | null;
+  /** Teagasc yard test result when there is no lab figure (lib/forecast/silageDm.ts) */
+  dm_test?: string | null;
+  /** 'teagasc_25dm' when the pit density is Teagasc's published figure, not the farm's own */
+  density_basis?: 'own' | 'teagasc_25dm' | null;
   dmd_percent: number | null;
   crude_protein_percent: number | null;
   ph: number | null;

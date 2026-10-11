@@ -188,6 +188,7 @@ Designed for someone standing in a yard with gloves, glare, a patchy signal and 
 - **Photo reading** reads dockets, receipts and invoices on the phone (Tesseract) and prefills the form; the farmer checks and saves. It is weaker on handwriting and very poor photos, and PDFs are not read yet. A server reader is planned once hosted (see `docs/HANDOVER.md`).
 - **Phone and online records are separate.** Moving phone data online makes a copy; later phone entries don't sync (run Move again: only new records move). Inviting people, roles, the shared change history and server reminders are online only; the phone app has one person and keeps its own history. On iPhone, server reminders need Agri-It Online added to the Home Screen.
 - **Data volume.** The app loads one farm's last ~2 years in a single cached query, which is simple and fast at family-farm scale. Move to paged queries if a farm has tens of thousands of rows.
+- **Silage dry matter** help uses only published figures: Teagasc's squeeze and ball tests and typical pit figure (ROI), and yearly averages by cut for Northern Ireland. No published Irish figures by county or by month of cutting were found, so none are shown; a lab test always comes first.
 - **Voice input** uses the browser's speech recognition (Chrome, Edge, Safari). It is hidden where it isn't supported.
 
 ## Sources

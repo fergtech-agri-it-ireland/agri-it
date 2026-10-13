@@ -15,6 +15,8 @@ Continue building Agri-It, my Irish farm management MVP.
 4. Supabase: the connector cancels any change that contains a delete or drop (the confirmation never reaches me). Apply delete-free changes through the connector in pieces under about 6 KB; put anything with a delete or drop into a SQL file for me to paste into the SQL editor. Never put a service key in the repo; the online build uses only the public URL and publishable key.
 5. Rules: no em dashes anywhere; large icons and easy-to-press fields for busy farmers; nothing is recorded for the farmer until they tick or save it; never invent supplier reps, prices or lead times; do not touch my gauntlet or gauntlet-test Supabase projects or the gauntlet repo.
 
+First check "Start here" in the handover: if I say steps 1 to 3 are done, finish Agri-It Online (sharing check on the live project, advisors, push schedule, `online.py` with a test user) before anything else.
+
 Next I want to: [describe the task]
 
 ---

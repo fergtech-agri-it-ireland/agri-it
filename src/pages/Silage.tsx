@@ -13,10 +13,10 @@ export default function Silage() {
       {b.silage.length === 0 ? <Empty title="Nothing recorded" body="Add your pit or bales to see if you're covered for the winter." action={<LinkButton to="/farm/silage/new" variant="hivis">Add silage</LinkButton>} /> : (
         <List>
           {b.silage.map((s) => {
-            const e = estimateStore(s);
+            const e = estimateStore(s, b.farm.jurisdiction);
             return (
               <Row key={s.id} to={`/farm/silage/${s.id}/edit`} title={s.name}
-                sub={<>{e.tonnes !== null ? `${fmtNum(Math.round(e.tonnes))} t fresh. ` : ''}{e.missing ?? e.explanation}{e.basis === 'planning_estimate' && ' '}<br />Measured {fmtDate(s.measured_on)}{s.dm_percent ? `, ${s.dm_percent}% DM` : s.dm_test ? `, about ${bandLabel(DM_TESTS.find((t) => t.id === s.dm_test)?.low ?? null, DM_TESTS.find((t) => t.id === s.dm_test)?.high ?? null)} DM (yard test)` : ''}{s.cut ? `, ${CUT_LABEL[s.cut].toLowerCase()}` : ''}{s.dmd_percent ? `, ${s.dmd_percent}% DMD` : ''}</>}
+                sub={<>{e.tonnes !== null ? `${e.bestGuess ? 'Best guess ' : ''}${fmtNum(Math.round(e.tonnes))} t fresh. ` : ''}{e.missing ?? e.explanation}{e.basis === 'planning_estimate' && ' '}<br />Measured {fmtDate(s.measured_on)}{s.dm_percent ? `, ${s.dm_percent}% DM` : s.dm_test ? `, about ${bandLabel(DM_TESTS.find((t) => t.id === s.dm_test)?.low ?? null, DM_TESTS.find((t) => t.id === s.dm_test)?.high ?? null)} DM (yard test)` : ''}{s.cut ? `, ${CUT_LABEL[s.cut].toLowerCase()}` : ''}{s.dmd_percent ? `, ${s.dmd_percent}% DMD` : ''}</>}
                 right={<ChevronRight className="h-5 w-5 text-muted" />} />
             );
           })}

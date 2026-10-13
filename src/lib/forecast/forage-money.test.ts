@@ -28,10 +28,11 @@ describe('forage stores', () => {
     const e = estimateStore(store({ length_m: 40, width_m: 12, avg_height_m: 2.2, density_kg_m3: 700 }));
     expect(e.tonnes).toBeCloseTo(739.2, 1);
   });
-  it('pit without density asks for it rather than assuming one', () => {
+  it('pit with no dry matter or density gets a best guess, plainly labelled (13 Oct 2026)', () => {
     const e = estimateStore(store({ length_m: 40, width_m: 12, avg_height_m: 2.2 }));
-    expect(e.tonnes).toBeNull();
-    expect(e.missing).toMatch(/density/);
+    expect(e.bestGuess).toBe(true);
+    expect(e.tonnes).toBeCloseTo(1056 * 0.68);
+    expect(e.explanation).toContain('best guess');
   });
   it('acreage is flagged as a planning estimate', () => {
     const e = estimateStore(store({ method: 'acreage', acreage: 30, yield_t_per_acre: 10 }));

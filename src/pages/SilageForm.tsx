@@ -5,7 +5,7 @@ import { Check, ExternalLink } from 'lucide-react';
 import { estimateStore, forecastForage } from '../lib/forecast/forage';
 import { silageWithFedOut } from '../lib/data/derived';
 import {
-  autoDensity, bandLabel, canOfferTeagascDensity, CUT_LABEL, offerTeagascDensity, DM_SOURCES, DM_TESTS, dmSummary, TEAGASC_DENSITY_25DM, TEST_HOW, typicalDm,
+  autoDensity, bandLabel, canOfferTeagascDensity, CUT_LABEL, DM_SOURCES, DM_TESTS, dmSummary, TEST_HOW, typicalDm,
   type DmTest, type SilageCut
 } from '../lib/forecast/silageDm';
 import type { SilageMethod, SilageStore } from '../lib/types';
@@ -57,10 +57,9 @@ export default function SilageForm() {
     cut, dm_test: v.dm_percent === '' ? dmTest : null, density_basis: method === 'pit_dimensions' && v.density_kg_m3 !== '' ? densityBasis ?? 'own' : null
   } as SilageStore;
   const dm = dmSummary(row);
-  const offerDensity = offerTeagascDensity(row);
   const densityDoubt = row.density_basis === 'teagasc_25dm' && !canOfferTeagascDensity(row);
-  const est = estimateStore(row);
-  const auto = autoDensity(row);
+  const est = estimateStore(row, jurisdiction);
+  const auto = autoDensity(row, jurisdiction);
   /** What the whole winter looks like with this store as entered (nothing is saved). */
   const others = silageWithFedOut(b).filter((x) => x.id !== row.id);
   const winter = forecastForage({ farm: b.farm, stores: [...others, row], groups: b.groups, benchmarks: b.benchmarks, evidence: b.evidence, today: todayISO() });
@@ -99,29 +98,36 @@ export default function SilageForm() {
           hint={row.density_basis === 'teagasc_25dm' ? <>Teagasc's figure for pit silage of about 25% dry matter (<Source code="S16" />). Your winter plan says so.</> : auto ? 'Leave it blank and Agri-It works it out from your dry matter (below). Type your own if your advisor or lab gave you one.' : 'From your silage analysis or advisor, or leave blank and add the dry matter below.'} />}
         {auto && (
           <div className="rounded-xl bg-pasture p-3" data-testid="auto-density">
-            <p className="font-bold">Worked out for you: {auto.basis === 'lab' ? `${auto.kgM3} kg/m³` : `${auto.kgM3} to ${auto.highKgM3} kg/m³`}</p>
-            <p className="text-[0.95rem]">From {auto.from}, using the published conversion table ({auto.sources.map((c, i) => <span key={c}>{i > 0 && ', '}<Source code={c} /></span>)}).{auto.basis === 'yard_test' ? ' Your winter plan counts the lighter figure, so it never counts silage you may not have.' : ''}</p>
-          </div>
-        )}
-        {offerDensity && (
-          <div className="space-y-2 rounded-xl bg-pasture p-3">
-            <p className="text-[0.95rem]">No density figure? Teagasc's guide puts pit silage of about 25% dry matter at one tonne per 1.39 m³, about {TEAGASC_DENSITY_25DM} kg/m³ (<Source code="S16" />). Only use it if yours is about that dry. Your winter plan will show it as a published figure, not your own.</p>
-            <Button variant="secondary" block onClick={() => { setV({ ...v, density_kg_m3: String(TEAGASC_DENSITY_25DM) }); setDensityBasis('teagasc_25dm'); }}>Use {TEAGASC_DENSITY_25DM} kg/m³</Button>
+            {auto.basis === 'typical' ? (
+              <>
+                <p className="font-bold">Best guess: {auto.kgM3} kg/m³</p>
+                <p className="text-[0.95rem]">No silage test? No problem. This is {auto.from}, using the published conversion table ({auto.sources.map((c, i) => <span key={c}>{i > 0 && ', '}<Source code={c} /></span>)}). Wet silage weighs more, dry silage less, so yours could be {auto.lowKgM3} to {auto.highKgM3} kg/m³.</p>
+                <p className="mt-1 text-[0.95rem] font-semibold">Make it better in one minute: do the squeeze test below.</p>
+              </>
+            ) : (
+              <>
+                <p className="font-bold">Worked out for you: {auto.basis === 'lab' ? `${auto.kgM3} kg/m³` : `${auto.kgM3} to ${auto.highKgM3} kg/m³`}</p>
+                <p className="text-[0.95rem]">From {auto.from}, using the published conversion table ({auto.sources.map((c, i) => <span key={c}>{i > 0 && ', '}<Source code={c} /></span>)}).{auto.basis === 'yard_test' ? ' Your winter plan counts the lighter figure, so it never counts silage you may not have.' : ''}</p>
+              </>
+            )}
           </div>
         )}
         {densityDoubt && (
           <div className="space-y-2 rounded-xl bg-warn-bg p-3" role="alert">
             <p className="font-bold text-warn">Your dry matter is not about 25%, so Teagasc's density may be well out.</p>
-            {autoDensity({ ...row, density_kg_m3: null }) && <Button variant="secondary" block onClick={() => { setV({ ...v, density_kg_m3: '' }); setDensityBasis(null); }}>Work it out from my dry matter instead</Button>}
+            {autoDensity({ ...row, density_kg_m3: null }, jurisdiction) && <Button variant="secondary" block onClick={() => { setV({ ...v, density_kg_m3: '' }); setDensityBasis(null); }}>Work it out from my dry matter instead</Button>}
           </div>
         )}
-        {method === 'bale_count' && <div className="grid grid-cols-2 gap-2"><NumberInput label="Bales" value={v.bale_count} onChange={set('bale_count')} integer /><NumberInput label="Avg bale weight" value={v.bale_weight_kg} onChange={set('bale_weight_kg')} unit="kg" /></div>}
+        {method === 'bale_count' && <div className="grid grid-cols-2 gap-2"><NumberInput label="Bales" value={v.bale_count} onChange={set('bale_count')} integer /><NumberInput label="Avg bale weight (optional)" value={v.bale_weight_kg} onChange={set('bale_weight_kg')} unit="kg" /></div>}
         {method === 'measured_tonnes' && <NumberInput label="Fresh tonnes" value={v.measured_tonnes} onChange={set('measured_tonnes')} unit="t" />}
         {method === 'acreage' && <div className="grid grid-cols-2 gap-2"><NumberInput label="Acres" value={v.acreage} onChange={set('acreage')} unit="ac" /><NumberInput label="Expected yield" value={v.yield_t_per_acre} onChange={set('yield_t_per_acre')} unit="t/ac" /></div>}
         <NumberInput label="Already fed out" value={v.fed_out_tonnes} onChange={set('fed_out_tonnes')} unit="t" />
         <DateChips label="Measured on" value={measuredOn} onChange={setMeasuredOn} />
         <div className="rounded-xl bg-pasture p-3">
-          <p className="font-bold" data-testid="store-tonnes">{est.tonnes !== null ? (est.tonnesHigh ? `About ${fmtNum(Math.round(est.tonnes))} to ${fmtNum(Math.round(est.tonnesHigh))} t fresh` : `About ${fmtNum(Math.round(est.tonnes))} t fresh`) : est.missing}</p>
+          <p className="font-bold" data-testid="store-tonnes">{est.tonnes === null ? est.missing
+            : est.bestGuess ? `Best guess: about ${fmtNum(Math.round(est.tonnes))} t fresh${est.tonnesLow !== undefined || est.tonnesHigh ? ` (${fmtNum(Math.round(est.tonnesLow ?? est.tonnes))} to ${fmtNum(Math.round(est.tonnesHigh ?? est.tonnes))} t)` : ''}`
+            : est.tonnesHigh ? `About ${fmtNum(Math.round(est.tonnes))} to ${fmtNum(Math.round(est.tonnesHigh))} t fresh` : `About ${fmtNum(Math.round(est.tonnes))} t fresh`}</p>
+          {est.bestGuess && method === 'bale_count' && <p className="text-[0.95rem]">Not weighed, so Agri-It uses a typical bale of 600 kg (700 kg if well packed, <Source code="S22" />). Weigh one at the mart or on a loader scale and put it in for a better figure.</p>}
           {est.dmTonnes !== undefined && <p className="text-[0.95rem]">That's about {fmtNum(Math.round(est.dmTonnes))} t of dry matter.</p>}
         </div>
         {est.tonnes !== null && <WinterLine before={winterBefore} after={winter} />}
@@ -159,7 +165,7 @@ export default function SilageForm() {
         <div className="space-y-2 rounded-xl border border-line p-3">
           <p className="font-bold">What's typical{jurisdiction === 'NI' ? ' in Northern Ireland' : ''}</p>
           {typicalDm(jurisdiction, cut).map((l, i) => <p key={i} className="text-[0.95rem]">{l.text} <Source code={l.sourceCode} /></p>)}
-          <p className="hint">Shown for guidance only. Nothing here is filled in for you.</p>
+          <p className="hint">With no test at all, Agri-It uses the typical figure as a best guess and says so. Nothing is saved until you tap Save.</p>
         </div>
       </Card>
       <Card className="space-y-4">

@@ -1165,6 +1165,18 @@ revoke all on function public.import_phone_backup(uuid, jsonb, jsonb) from publi
 grant execute on function public.import_phone_backup(uuid, jsonb, jsonb) to authenticated;
 commit;
 
+-- 2. 20261013000200_silage_best_guess.sql
+begin;
+-- Silage best guess (13 Oct 2026, rule silage-dm@1.2, src/lib/forecast/silageDm.ts)
+-- Most farmers never test silage. A measured pit with no dry matter now gets tonnes from typical
+-- silage (Teagasc S16 for ROI, 2025 cut averages S18 for NI), and unweighed bales a typical
+-- 600 kg bale (S22). Both are labelled a best guess and the winter plan shows Low confidence.
+-- Nothing is stored: the guess is worked out each time, so a squeeze test or weighed bale replaces it.
+insert into public.evidence_sources (code, title, publisher, url, published_on, accessed_on) values
+('S22', 'Have you enough silage on your suckler farm? (Aurivo advice: bale weights)', 'Agriland', 'https://www.agriland.ie/farming-news/have-you-enough-silage-on-your-suckler-farm/', '2018-01-05', '2026-10-13')
+on conflict (code) do nothing;
+commit;
+
 -- 3. Reference data from seed.sql (top half only: no demo login, no demo farm)
 begin;
 -- Agri-It local seed. Runs on `supabase db reset` (and first `supabase start`).
@@ -1256,7 +1268,8 @@ insert into supabase_migrations.schema_migrations (version, name) values
   ('20261011000300', 'supplier_directory'),
   ('20261011000400', 'online'),
   ('20261011000500', 'silage_dm'),
-  ('20261013000100', 'automation');
+  ('20261013000100', 'automation'),
+  ('20261013000200', 'silage_best_guess');
 commit;
 
 -- 5. db_review.sql checks, run against the demo farm inside one transaction and rolled back.

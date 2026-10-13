@@ -16,7 +16,7 @@
  */
 import type { Jurisdiction } from '../types';
 
-export const SILAGE_DM_RULE_VERSION = 'silage-dm@1.1';
+export const SILAGE_DM_RULE_VERSION = 'silage-dm@1.2';
 
 /** published: 'YYYY-MM' or 'YYYY-MM-DD'; empty when the source carries no date */
 export interface DmSource { code: string; title: string; publisher: string; url: string; published: string }
@@ -26,6 +26,7 @@ export const DM_SOURCES: Record<string, DmSource> = {
   S18: { code: 'S18', title: 'First cut silage better quality than in 2024 (feed trade data)', publisher: 'Irish Farmers Journal', url: 'https://www.farmersjournal.ie/more/northern-ireland/first-cut-silage-better-quality-than-in-2024-890435', published: '2025-10-22' },
   S19: { code: 'S19', title: 'Northern Ireland: First-cut silage has average DM of just 24% (United Feeds analysis)', publisher: 'Agriland', url: 'https://www.agriland.ie/farming-news/northern-ireland-first-cut-silage-has-average-dm-of-just-24/', published: '2022-10-26' },
   S20: { code: 'S20', title: 'Winter feed planning (silage conversion factors, Table 1)', publisher: 'DAERA', url: 'https://www.daera-ni.gov.uk/news/winter-feed-planning', published: '2017-09-14' },
+  S22: { code: 'S22', title: 'Have you enough silage on your suckler farm? (Aurivo advice: bale weights)', publisher: 'Agriland', url: 'https://www.agriland.ie/farming-news/have-you-enough-silage-on-your-suckler-farm/', published: '2018-01-05' },
   S21: { code: 'S21', title: 'Taking stock of winter forage supplies', publisher: 'Irish Farmers Journal', url: 'https://www.farmersjournal.ie/beef/grass-and-feeding/taking-stock-of-winter-forage-supplies-930599', published: '2026-09-02' }
 };
 
@@ -148,12 +149,15 @@ export function densityFromDm(dm: number): number | null {
 }
 
 export interface AutoDensity {
-  /** The figure the winter plan uses (the drier, lighter end of a yard-test band, so it never overcounts) */
+  /** The figure the winter plan uses (for a yard-test band, the drier, lighter end, so it never overcounts) */
   kgM3: number;
   /** The wetter end of a yard-test band; same as kgM3 for a lab figure */
   highKgM3: number;
   dmUsed: number;
-  basis: 'lab' | 'yard_test';
+  /** For a best guess: the dry, light end of the range (kgM3 is the typical figure itself) */
+  lowKgM3?: number;
+  /** typical = Agri-It's best guess from typical silage, with nothing known about this pit */
+  basis: 'lab' | 'yard_test' | 'typical';
   /** "30% dry matter" or "a yard test of 20 to 25% dry matter" */
   from: string;
   sources: string[];
@@ -164,7 +168,7 @@ export interface AutoDensity {
  * A lab figure gives one density. A yard-test band gives a range: open-ended bands are closed at
  * the edge of the published table (under 20% = 18 to 20%, over 40% = 40 to 45%).
  */
-export function autoDensity(s: { method: string; density_kg_m3: number | null; dm_percent: number | null; dm_test?: string | null }): AutoDensity | null {
+export function autoDensity(s: { method: string; density_kg_m3: number | null; dm_percent: number | null; dm_test?: string | null; cut?: number | null }, jurisdiction?: Jurisdiction): AutoDensity | null {
   if (s.method !== 'pit_dimensions') return null;
   if (s.density_kg_m3 !== null && s.density_kg_m3 !== undefined && String(s.density_kg_m3) !== '') return null;
   const src = (lo: number, hi: number) => {
@@ -179,7 +183,7 @@ export function autoDensity(s: { method: string; density_kg_m3: number | null; d
     return { kgM3: kg, highKgM3: kg, dmUsed: dm, basis: 'lab', from: `${dm}% dry matter`, sources: src(dm, dm) };
   }
   const t = DM_TESTS.find((x) => x.id === s.dm_test);
-  if (!t) return null;
+  if (!t) return jurisdiction ? typicalDensity(jurisdiction, (s.cut as SilageCut | null | undefined) ?? null) : null;
   const lo = t.low ?? DM_MIN;
   const hi = t.high ?? DM_MAX;
   const light = densityFromDm(hi);
@@ -187,3 +191,31 @@ export function autoDensity(s: { method: string; density_kg_m3: number | null; d
   if (light === null || heavy === null) return null;
   return { kgM3: light, highKgM3: heavy, dmUsed: hi, basis: 'yard_test', from: `a ${t.test} test of ${bandLabel(t.low, t.high)} dry matter`, sources: src(lo, hi) };
 }
+
+// ---------------------------------------------------------------------------
+// Best guess when nothing is known (rule silage-dm@1.2)
+// ---------------------------------------------------------------------------
+/**
+ * Most farmers never send silage for testing. So a measured pit with no dry matter still gets
+ * tonnes, from typical silage on their side of the border, and is plainly a best guess:
+ * - ROI: Teagasc's typical pit silage, about 25% DM (S16). The range shown runs from 20% (wet,
+ *   heavier) to 30% (well wilted, lighter).
+ * - NI: the 2025 average for the cut from feed trade samples (S18), first cut if the cut isn't
+ *   given; the range is 5 points either side, because the yearly average moves a lot (S19).
+ * The winter plan uses the typical figure and drops to Low confidence; a one-minute squeeze test
+ * replaces it.
+ */
+export function typicalDensity(jurisdiction: Jurisdiction, cut: SilageCut | null): AutoDensity {
+  const ni: Record<SilageCut, number> = { 1: 32.8, 2: 30.8, 3: 34.8 };
+  const dm = jurisdiction === 'NI' ? ni[cut ?? 1] : 25;
+  const [wet, dry] = jurisdiction === 'NI' ? [dm - 5, dm + 5] : [20, 30];
+  return {
+    kgM3: densityFromDm(dm)!, highKgM3: densityFromDm(wet)!, lowKgM3: densityFromDm(dry)!, dmUsed: dm, basis: 'typical',
+    from: jurisdiction === 'NI' ? `typical ${CUT_LABEL[cut ?? 1].toLowerCase()} silage in Northern Ireland (${dm}% dry matter in 2025)` : 'typical pit silage (about 25% dry matter)',
+    sources: jurisdiction === 'NI' ? ['S18', 'S20'] : ['S16', 'S20']
+  };
+}
+
+/** Typical round bale weight when the farmer hasn't weighed one: 600 kg, up to 700 kg well packed (S22). */
+export const TYPICAL_BALE_KG = 600;
+export const TYPICAL_BALE_KG_PACKED = 700;

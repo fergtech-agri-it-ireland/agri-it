@@ -102,7 +102,8 @@ describe('silage dry matter help', () => {
     expect(autoDensity(pit({ dm_percent: 30, density_kg_m3: 700 }))).toBeNull();
     expect(estimateStore(pit({ dm_percent: 30, density_kg_m3: 700, density_basis: 'own' })).tonnes).toBeCloseTo(420);
     expect(autoDensity(pit({ method: 'bale_count', dm_percent: 30 }))).toBeNull();
-    expect(estimateStore(pit()).missing).toContain('Add the dry matter');
+    expect(autoDensity(pit())).toBeNull(); // with no jurisdiction there is no best guess either
+
   });
 
   it('Teagasc\'s 25% density is only offered when nothing is known about the dry matter', () => {
@@ -110,5 +111,31 @@ describe('silage dry matter help', () => {
     expect(offerTeagascDensity(pit({ dm_percent: 25 }))).toBe(false);
     expect(offerTeagascDensity(pit({ dm_test: 'squeeze_20_25' }))).toBe(false);
     expect(offerTeagascDensity(pit({ density_kg_m3: 700 }))).toBe(false);
+  });
+
+  it('nothing known: a best guess from typical silage on the farm\'s side of the border, at Low confidence', () => {
+    const roi = estimateStore(pit());
+    expect(roi).toMatchObject({ bestGuess: true });
+    expect(roi.tonnes).toBeCloseTo(408); // 600 m³ × 680 (Teagasc typical 25%)
+    expect(roi.tonnesLow).toBeCloseTo(360); // 30% DM
+    expect(roi.tonnesHigh).toBeCloseTo(462); // 20% DM
+    const ni = estimateStore(pit({ cut: 2 }), 'NI');
+    expect(ni.autoDensity).toMatchObject({ basis: 'typical', dmUsed: 30.8 });
+    expect(ni.autoDensity!.sources).toContain('S18');
+    const farm = { jurisdiction: 'ROI', housing_start: '2026-11-01', turnout_date: '2027-03-01', forage_reserve_percent: 15 } as Farm;
+    const groups = [{ id: 'g', name: 'Cows', animal_class: 'dairy_cow', head_count: 50, housed: true, archived: false, forage_t_per_head_month: 1.5 }] as never;
+    const f = forecastForage({ farm, groups, benchmarks: [], evidence: [], today: '2026-10-11', stores: [pit()] });
+    expect(f.status).not.toBe('incomplete');
+    expect(f.confidence).toBe('low');
+    expect(f.reasons.join(' ')).toContain('squeeze test');
+    // a squeeze test replaces the guess
+    expect(estimateStore(pit({ dm_test: 'squeeze_25_30' })).bestGuess).toBe(false);
+  });
+
+  it('bales with no weight use a typical 600 kg bale (700 kg well packed)', () => {
+    const e = estimateStore(pit({ method: 'bale_count', bale_count: 200, length_m: null, width_m: null, avg_height_m: null }));
+    expect(e).toMatchObject({ tonnes: 120, tonnesHigh: 140, bestGuess: true });
+    expect(DM_SOURCES.S22.publisher).toBe('Agriland');
+    expect(estimateStore(pit({ method: 'bale_count', bale_count: 200, bale_weight_kg: 750 })).bestGuess).toBeUndefined();
   });
 });

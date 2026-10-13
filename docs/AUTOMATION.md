@@ -22,6 +22,18 @@ records or a published Irish source, and says why.
 - Note: the table (680 kg/m³ at 25%) is lower than Teagasc's 719. The lower, more careful figure is
   used so the winter plan errs short, not long.
 
+### 1b. Best guess when nothing is known (rule `silage-dm@1.2`, 13 Oct evening)
+Most Irish farmers never send silage for testing, so a blank is no use.
+- **Pit, no lab figure and no yard test:** tonnes from typical silage. ROI: Teagasc's typical pit
+  silage, about 25% DM (680 kg/m³ from the table); range shown 20% to 30% DM. NI: the 2025 average
+  for the cut (S18), 5 points either side.
+- **Bales not weighed:** a typical 600 kg bale, 700 kg if well packed (Agriland, Aurivo advice, S22).
+- Labelled "Best guess" everywhere, the winter plan works and drops to **Low** confidence with the
+  reason, and Ready to approve suggests the one-minute squeeze test (or weighing one bale) to firm it up.
+- Teagasc's 719 kg/m³ button is gone: the best guess replaces it.
+- **Acres cut** still needs the farmer's expected yield: no published typical yield per acre was
+  found that would hold up (yields vary up to 50% between fields).
+
 ### 2. Ready for you to approve (`src/lib/suggestions.ts`, rule `suggestions@1.0`)
 A card near the top of the dashboard. Approve does it; Not now hides it for a week; No hides it
 for good (`suggestion_decisions`). Calf tagging and registration can't be turned down.

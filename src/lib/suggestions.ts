@@ -264,18 +264,20 @@ export function recurringCostSuggestions(b: FarmBundle, today: ISODate): Suggest
 export function silageSuggestions(b: FarmBundle, today: ISODate): Suggestion[] {
   const out: Suggestion[] = [];
   for (const s of b.silage) {
-    if (s.method !== 'pit_dimensions') continue;
-    const e = estimateStore(s);
-    if (e.tonnes !== null) continue;
-    if (s.length_m === null || s.width_m === null || s.avg_height_m === null) continue;
+    if (s.method !== 'pit_dimensions' && s.method !== 'bale_count') continue;
+    const e = estimateStore(s, b.farm.jurisdiction);
+    if (!e.bestGuess) continue;
     const key = `silage-dm:${s.id}`;
     if (hidden(b.decisions ?? [], key, today)) continue;
+    const pit = s.method === 'pit_dimensions';
     out.push({
-      key, when: 'soon', tone: 'info', canDecline: true,
-      title: `How dry is ${s.name}?`,
-      detail: 'A one-minute squeeze test in the yard, or the DM off your silage test, and Agri-It works out the tonnes and your winter cover.',
-      why: 'Your pit is measured but has no dry matter or density',
-      to: { label: 'Add dry matter', href: `/farm/silage/${s.id}/edit` }
+      key, when: 'later', tone: 'info', canDecline: true,
+      title: pit ? `${s.name}: make the best guess better` : `${s.name}: weigh one bale?`,
+      detail: pit
+        ? 'Your winter plan uses typical silage for this pit. A one-minute squeeze test in the yard tightens the tonnes. No lab needed.'
+        : 'Your winter plan uses a typical 600 kg bale. One weighed bale (mart or loader scale) tightens the tonnes.',
+      why: 'The silage figure is a best guess from typical figures',
+      to: { label: pit ? 'Do the squeeze test' : 'Add the weight', href: `/farm/silage/${s.id}/edit` }
     });
   }
   return out;

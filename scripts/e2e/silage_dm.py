@@ -28,11 +28,15 @@ with sync_playwright() as p:
     t = main_text(pg)
     check('Dry matter section with which cut', 'Dry matter' in t and 'Which cut is it?' in t and 'First cut' in t, t[:400])
     check('ROI farm sees Teagasc typical figure, not Northern Ireland averages', 'about 25% dry matter' in t and '32.8' not in t, t)
-    check('Typical figures say they fill nothing in', 'Nothing here is filled in for you' in t)
+    check('Typical figures say they are only a best guess', 'uses the typical figure as a best guess' in t)
     link = pg.locator('a[href*="teagasc.ie"]').first
     check('Typical figure links to its Teagasc source, opened outside the app', link.count() and link.get_attribute('target') == '_blank')
     check('Yard test offered when there is no lab figure', 'No test yet? Check it in the yard' in t and 'Squeeze test' in t)
-    check('Teagasc density offered for a pit with no figure yet', 'Use 719 kg/m³' in t, t)
+    pg.get_by_label('Length').fill('30'); pg.get_by_label('Width').fill('10'); pg.get_by_label('Avg height').fill('2'); pg.wait_for_timeout(200)
+    t = main_text(pg)
+    check('No test at all: a best guess, not a blank', 'Best guess: 680 kg/m³' in t and 'Best guess: about 408 t fresh (360 to 462 t)' in t, t[:1600])
+    check('Best guess says how to make it better', 'do the squeeze test below' in t)
+    check('Winter plan works with the best guess', 'Your winter with this:' in t, t[:1800])
 
     # Squeeze test: pick what you saw
     tile = pg.get_by_role('button', name=re.compile('Juice comes out, but only with effort'))
@@ -74,20 +78,17 @@ with sync_playwright() as p:
     check('List shows the pit with its dry matter and cut', 'DM test pit' in t and '25.4% DM' in t and 'second cut' in t, t)
     check('List explains where the density came from', 'worked out from 25.4% dry matter' in t, t)
 
-    # Teagasc's 25% figure: only for a pit with no dry matter yet
+    # Bales that were never weighed: a typical bale
     go(pg, '#/farm/silage/new')
+    pg.get_by_role('button', name=re.compile('^Counted bales')).click()
     pg.get_by_label('Name').fill('Old pit')
+    pg.get_by_label('Bales').fill('200'); pg.wait_for_timeout(200)
+    t = main_text(pg)
+    check('Unweighed bales: best guess from a typical 600 kg bale', 'Best guess: about 120 t fresh (120 to 140 t)' in t and 'typical bale of 600 kg' in t, t[:1400])
+    pg.get_by_role('button', name=re.compile('^Measured pit')).click()
     pg.get_by_label('Length').fill('30'); pg.get_by_label('Width').fill('10'); pg.get_by_label('Avg height').fill('2')
-    pg.get_by_role('button', name='Use 719 kg/m³').click(); pg.wait_for_timeout(200)
-    t = main_text(pg)
-    check('Using it fills 719 and says whose figure it is', pg.get_by_label('Density').input_value() == '719' and "Teagasc's figure for pit silage of about 25% dry matter" in t, t[:900])
-    check('Tonnes worked out from it', 'About 431 t fresh' in t, t[:900])
     pg.get_by_label('Dry matter from a silage test').fill('32'); pg.wait_for_timeout(200)
-    t = main_text(pg)
-    check('Dry silage on the 25% figure is flagged', "Teagasc's density may be well out" in t, t[:1200])
-    pg.get_by_role('button', name='Work it out from my dry matter instead').click(); pg.wait_for_timeout(200)
-    t = main_text(pg)
-    check('One tap swaps to the worked-out density', pg.get_by_label('Density').input_value() == '' and 'Worked out for you: 576 kg/m³' in t and 'About 346 t fresh' in t, t[:1400])
+    check('Dry 32% silage works out lighter', 'Worked out for you: 576 kg/m³' in main_text(pg) and 'About 346 t fresh' in main_text(pg), main_text(pg)[:1400])
     # Typing a density makes it the farm's own figure
     pg.get_by_label('Density').fill('700'); pg.wait_for_timeout(200)
     t = main_text(pg)

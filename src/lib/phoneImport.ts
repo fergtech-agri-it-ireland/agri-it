@@ -33,7 +33,8 @@ export const IMPORT_ORDER = [
   'animal_groups', 'head_count_history', 'crops', 'documents',
   'feed_products', 'feed_transactions', 'feeding_rules', 'feed_use_logs',
   'silage_stores', 'routines', 'income', 'costs', 'routine_completions',
-  'budget_lines', 'farm_records', 'jobs'
+  'budget_lines', 'farm_records', 'jobs',
+  'calving_seasons', 'calf_births', 'suggestion_decisions'
 ] as const;
 export type ImportTable = (typeof IMPORT_ORDER)[number];
 
@@ -50,7 +51,8 @@ export const TABLE_LABEL: Record<ImportTable, string> = {
   animal_groups: 'animal groups', head_count_history: 'head count changes', crops: 'crops', documents: 'photos and documents',
   feed_products: 'feeds', feed_transactions: 'feed deliveries, orders and counts', feeding_rules: 'feeding plans', feed_use_logs: 'ticked-off feeding',
   silage_stores: 'silage and bales', routines: 'routines', income: 'income', costs: 'bills and costs', routine_completions: 'ticked-off routines',
-  budget_lines: 'budget lines', farm_records: 'records', jobs: 'jobs'
+  budget_lines: 'budget lines', farm_records: 'records', jobs: 'jobs',
+  calving_seasons: 'calving seasons', calf_births: 'calves born', suggestion_decisions: 'answers to suggestions'
 };
 
 export interface ImportPlan {

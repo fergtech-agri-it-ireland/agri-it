@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useFarmData, useFarmCtx, useSave } from '../lib/data/farm';
 import { Check, ExternalLink } from 'lucide-react';
-import { estimateStore } from '../lib/forecast/forage';
+import { estimateStore, forecastForage } from '../lib/forecast/forage';
+import { silageWithFedOut } from '../lib/data/derived';
 import {
-  bandLabel, canOfferTeagascDensity, CUT_LABEL, DM_SOURCES, DM_TESTS, dmSummary, TEAGASC_DENSITY_25DM, TEST_HOW, typicalDm,
+  autoDensity, bandLabel, canOfferTeagascDensity, CUT_LABEL, offerTeagascDensity, DM_SOURCES, DM_TESTS, dmSummary, TEAGASC_DENSITY_25DM, TEST_HOW, typicalDm,
   type DmTest, type SilageCut
 } from '../lib/forecast/silageDm';
 import type { SilageMethod, SilageStore } from '../lib/types';
@@ -56,9 +57,14 @@ export default function SilageForm() {
     cut, dm_test: v.dm_percent === '' ? dmTest : null, density_basis: method === 'pit_dimensions' && v.density_kg_m3 !== '' ? densityBasis ?? 'own' : null
   } as SilageStore;
   const dm = dmSummary(row);
-  const offerDensity = method === 'pit_dimensions' && v.density_kg_m3 === '' && canOfferTeagascDensity(row);
+  const offerDensity = offerTeagascDensity(row);
   const densityDoubt = row.density_basis === 'teagasc_25dm' && !canOfferTeagascDensity(row);
   const est = estimateStore(row);
+  const auto = autoDensity(row);
+  /** What the whole winter looks like with this store as entered (nothing is saved). */
+  const others = silageWithFedOut(b).filter((x) => x.id !== row.id);
+  const winter = forecastForage({ farm: b.farm, stores: [...others, row], groups: b.groups, benchmarks: b.benchmarks, evidence: b.evidence, today: todayISO() });
+  const winterBefore = forecastForage({ farm: b.farm, stores: others, groups: b.groups, benchmarks: b.benchmarks, evidence: b.evidence, today: todayISO() });
 
   async function submit() {
     const ok = await save([ex ? { kind: 'update', table: 'silage_stores', match: { id: row.id }, patch: row as unknown as Record<string, unknown> } : { kind: 'insert', table: 'silage_stores', row: row as unknown as Record<string, unknown> }], {
@@ -90,20 +96,35 @@ export default function SilageForm() {
           </div>
         )}
         {method === 'pit_dimensions' && <NumberInput label="Density" value={v.density_kg_m3} onChange={set('density_kg_m3')} unit="kg/m³"
-          hint={row.density_basis === 'teagasc_25dm' ? <>Teagasc's figure for pit silage of about 25% dry matter (<Source code="S16" />). Your winter plan says so.</> : 'From your silage analysis or advisor. Agri-It doesn\'t assume one.'} />}
+          hint={row.density_basis === 'teagasc_25dm' ? <>Teagasc's figure for pit silage of about 25% dry matter (<Source code="S16" />). Your winter plan says so.</> : auto ? 'Leave it blank and Agri-It works it out from your dry matter (below). Type your own if your advisor or lab gave you one.' : 'From your silage analysis or advisor, or leave blank and add the dry matter below.'} />}
+        {auto && (
+          <div className="rounded-xl bg-pasture p-3" data-testid="auto-density">
+            <p className="font-bold">Worked out for you: {auto.basis === 'lab' ? `${auto.kgM3} kg/m³` : `${auto.kgM3} to ${auto.highKgM3} kg/m³`}</p>
+            <p className="text-[0.95rem]">From {auto.from}, using the published conversion table ({auto.sources.map((c, i) => <span key={c}>{i > 0 && ', '}<Source code={c} /></span>)}).{auto.basis === 'yard_test' ? ' Your winter plan counts the lighter figure, so it never counts silage you may not have.' : ''}</p>
+          </div>
+        )}
         {offerDensity && (
           <div className="space-y-2 rounded-xl bg-pasture p-3">
             <p className="text-[0.95rem]">No density figure? Teagasc's guide puts pit silage of about 25% dry matter at one tonne per 1.39 m³, about {TEAGASC_DENSITY_25DM} kg/m³ (<Source code="S16" />). Only use it if yours is about that dry. Your winter plan will show it as a published figure, not your own.</p>
             <Button variant="secondary" block onClick={() => { setV({ ...v, density_kg_m3: String(TEAGASC_DENSITY_25DM) }); setDensityBasis('teagasc_25dm'); }}>Use {TEAGASC_DENSITY_25DM} kg/m³</Button>
           </div>
         )}
-        {densityDoubt && <p className="rounded-xl bg-warn-bg p-3 font-bold text-warn" role="alert">Your dry matter is not about 25%, so Teagasc's density may be well out. Ask your advisor or the lab for your pit's density.</p>}
+        {densityDoubt && (
+          <div className="space-y-2 rounded-xl bg-warn-bg p-3" role="alert">
+            <p className="font-bold text-warn">Your dry matter is not about 25%, so Teagasc's density may be well out.</p>
+            {autoDensity({ ...row, density_kg_m3: null }) && <Button variant="secondary" block onClick={() => { setV({ ...v, density_kg_m3: '' }); setDensityBasis(null); }}>Work it out from my dry matter instead</Button>}
+          </div>
+        )}
         {method === 'bale_count' && <div className="grid grid-cols-2 gap-2"><NumberInput label="Bales" value={v.bale_count} onChange={set('bale_count')} integer /><NumberInput label="Avg bale weight" value={v.bale_weight_kg} onChange={set('bale_weight_kg')} unit="kg" /></div>}
         {method === 'measured_tonnes' && <NumberInput label="Fresh tonnes" value={v.measured_tonnes} onChange={set('measured_tonnes')} unit="t" />}
         {method === 'acreage' && <div className="grid grid-cols-2 gap-2"><NumberInput label="Acres" value={v.acreage} onChange={set('acreage')} unit="ac" /><NumberInput label="Expected yield" value={v.yield_t_per_acre} onChange={set('yield_t_per_acre')} unit="t/ac" /></div>}
         <NumberInput label="Already fed out" value={v.fed_out_tonnes} onChange={set('fed_out_tonnes')} unit="t" />
         <DateChips label="Measured on" value={measuredOn} onChange={setMeasuredOn} />
-        <p className="rounded-xl bg-pasture p-3 font-bold">{est.tonnes !== null ? `About ${fmtNum(Math.round(est.tonnes))} t fresh` : est.missing}</p>
+        <div className="rounded-xl bg-pasture p-3">
+          <p className="font-bold" data-testid="store-tonnes">{est.tonnes !== null ? (est.tonnesHigh ? `About ${fmtNum(Math.round(est.tonnes))} to ${fmtNum(Math.round(est.tonnesHigh))} t fresh` : `About ${fmtNum(Math.round(est.tonnes))} t fresh`) : est.missing}</p>
+          {est.dmTonnes !== undefined && <p className="text-[0.95rem]">That's about {fmtNum(Math.round(est.dmTonnes))} t of dry matter.</p>}
+        </div>
+        {est.tonnes !== null && <WinterLine before={winterBefore} after={winter} />}
       </Card>
       <Card className="space-y-4">
         <h2 className="text-lg font-bold">Dry matter</h2>
@@ -153,5 +174,27 @@ export default function SilageForm() {
       {ex && <Button variant="danger" block onClick={remove}>Remove</Button>}
       <SaveBar><Button block onClick={submit}>Save</Button></SaveBar>
     </Screen>
+  );
+}
+
+/** What this store does to the whole winter plan, worked out as the farmer types. */
+function WinterLine({ before, after }: { before: ReturnType<typeof forecastForage>; after: ReturnType<typeof forecastForage> }) {
+  if (after.demandTPerMonth <= 0 || after.needWithReserveT === null) {
+    return <p className="hint" data-testid="winter-line">Add your animal groups and housing and turnout dates to see how far this goes over the winter.</p>;
+  }
+  const months = after.monthsOfCover !== null ? after.monthsOfCover : 0;
+  const need = Math.round(after.needWithReserveT);
+  const have = Math.round(after.availableT);
+  const gain = after.monthsOfCover !== null && before.monthsOfCover !== null ? after.monthsOfCover - before.monthsOfCover : after.monthsOfCover;
+  const tone = after.status === 'surplus' ? 'bg-pasture' : after.status === 'tight' ? 'bg-warn-bg' : 'bg-warn-bg';
+  return (
+    <div className={`rounded-xl p-3 ${tone}`} data-testid="winter-line">
+      <p className="font-bold">Your winter with this: {fmtNum(have)} t of {fmtNum(need)} t needed</p>
+      <p className="text-[0.95rem]">
+        {gain !== null && gain > 0 ? `This adds about ${gain.toFixed(1)} months of feeding. ` : ''}
+        All your silage covers about {months.toFixed(1)} months at {fmtNum(Math.round(after.demandTPerMonth))} t a month
+        {after.status === 'surplus' ? ', with your reserve.' : after.status === 'tight' ? ': enough for the winter, but not your reserve.' : ': short for the winter.'}
+      </p>
+    </div>
   );
 }

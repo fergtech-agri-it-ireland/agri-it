@@ -7,6 +7,7 @@ import { budgetAlerts, budgetVsActual, cashForecast90, cashPosition, yearEndPack
 import { pricePoints } from '../forecast/prices';
 import { moneyStates, possibleDuplicateDeliveries } from '../forecast/bills';
 import { buildChecklist } from '../routines';
+import { suggestions as buildSuggestions } from '../suggestions';
 import { addDays, daysBetween, fmtDay, fmtKg, todayISO, eur } from '../format';
 import { supabase } from '../supabase';
 
@@ -166,8 +167,12 @@ export function derive(b: FarmBundle, today: ISODate) {
     // A farm worker doesn't see the farm's money (RLS hides it too): no bill, cash or budget items
     const moneyIds = /^(bills-|cash$|opening-cash$|budget-|feed-uninvoiced$)/;
     if (b.role === 'worker') for (let i = p.length - 1; i >= 0; i--) if (moneyIds.test(p[i].id)) p.splice(i, 1);
+    // Things Agri-It has drafted for approval replace the plain reminder for the same thing
+    const suggestions = buildSuggestions(b, feed, today);
+    const drafted = new Set(suggestions.map((x) => x.key.startsWith('order:') ? `feed-${x.key.split(':')[1]}` : x.key.startsWith('heads:') ? 'heads' : ''));
+    for (let i = p.length - 1; i >= 0; i--) if (drafted.has(p[i].id)) p.splice(i, 1);
     p.sort((a, c) => whenRank[a.when] - whenRank[c.when] || toneRank[a.tone] - toneRank[c.tone]);
-    return { today, feed, forage, cash, cash90, budget, budgetAlerts: alerts, prices: pricePoints(b), yearEnd, money, priorities: p, computedAt: new Date() };
+    return { today, feed, forage, cash, cash90, budget, budgetAlerts: alerts, prices: pricePoints(b), yearEnd, money, priorities: p, suggestions, computedAt: new Date() };
   }
 }
 
@@ -215,8 +220,9 @@ export function useSnapshotRecorder(b: FarmBundle | undefined, d: ReturnType<typ
  * What a reminder should lead with: urgent items, then anything overdue or due today that
  * matters (feed to order, an order that didn't arrive, a bill due or overdue), worst first.
  */
-export function reminderHeadlines(p: Priority[]): string[] {
-  return p.filter((x) => x.tone === 'urgent' || ((x.when === 'overdue' || x.when === 'today') && x.tone === 'warn') || x.id === 'bills-due')
+export function reminderHeadlines(p: Priority[], s: { title: string; when: string; tone: string }[] = []): string[] {
+  const ready = s.filter((x) => x.when === 'overdue' || x.when === 'today').map((x) => x.title);
+  return [...p.filter((x) => x.tone === 'urgent' || ((x.when === 'overdue' || x.when === 'today') && x.tone === 'warn') || x.id === 'bills-due')
     .sort((a, c) => (a.tone === 'urgent' ? 0 : 1) - (c.tone === 'urgent' ? 0 : 1))
-    .map((x) => x.title);
+    .map((x) => x.title), ...ready];
 }

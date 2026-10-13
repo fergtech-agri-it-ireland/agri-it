@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bandLabel, canOfferTeagascDensity, DM_SOURCES, DM_TESTS, dmSummary, TEAGASC_DENSITY_25DM, typicalDm } from './silageDm';
+import { autoDensity, bandLabel, canOfferTeagascDensity, densityFromDm, DM_SOURCES, DM_TESTS, dmSummary, offerTeagascDensity, TEAGASC_DENSITY_25DM, typicalDm } from './silageDm';
 import { estimateStore, forecastForage } from './forage';
 import type { Farm, SilageStore } from '../types';
 
@@ -58,5 +58,57 @@ describe('silage dry matter help', () => {
     const f = forecastForage({ ...base, stores: [pit({ density_kg_m3: 719, density_basis: 'teagasc_25dm' })] });
     expect(f.confidence).toBe('medium');
     expect(f.reasons.join(' ')).toContain("Teagasc's density");
+  });
+
+  it('density comes from the dry matter with the published table, straight-line between rows', () => {
+    expect(densityFromDm(20)).toBe(770);
+    expect(densityFromDm(25)).toBe(680);
+    expect(densityFromDm(30)).toBe(600);
+    expect(densityFromDm(27.5)).toBe(640);
+    expect(densityFromDm(18)).toBe(810);
+    expect(densityFromDm(45)).toBe(420);
+    expect(densityFromDm(17)).toBeNull();
+    expect(densityFromDm(50)).toBeNull();
+    expect(DM_SOURCES.S20.publisher).toBe('DAERA');
+  });
+
+  it('a pit with a lab dry matter and no density gets tonnes worked out, at Medium confidence', () => {
+    const e = estimateStore(pit({ dm_percent: 30 }));
+    expect(e.tonnes).toBeCloseTo(360); // 600 m³ × 600 kg/m³
+    expect(e.dmTonnes).toBeCloseTo(108);
+    expect(e.autoDensity?.basis).toBe('lab');
+    expect(e.explanation).toContain('worked out from 30% dry matter');
+    expect(e.missing).toBeNull();
+    const farm = { housing_start: '2026-11-01', turnout_date: '2027-03-01', forage_reserve_percent: 15 } as Farm;
+    const groups = [{ id: 'g', name: 'Cows', animal_class: 'dairy_cow', head_count: 50, housed: true, archived: false, forage_t_per_head_month: 1.5 }] as never;
+    const f = forecastForage({ farm, groups, benchmarks: [], evidence: [], today: '2026-10-11', stores: [pit({ dm_percent: 30 })] });
+    expect(f.availableT).toBeCloseTo(360);
+    expect(f.confidence).toBe('medium');
+    expect(f.reasons.join(' ')).toContain('worked out from its dry matter');
+  });
+
+  it('a yard-test band gives a range and the plan counts the careful, drier end', () => {
+    const a = autoDensity(pit({ dm_test: 'squeeze_20_25' }))!;
+    expect(a).toMatchObject({ kgM3: 680, highKgM3: 770, basis: 'yard_test' });
+    const e = estimateStore(pit({ dm_test: 'squeeze_20_25' }));
+    expect(e.tonnes).toBeCloseTo(408);
+    expect(e.tonnesHigh).toBeCloseTo(462);
+    // open-ended bands close at the edge of the table
+    expect(autoDensity(pit({ dm_test: 'squeeze_lt20' }))).toMatchObject({ kgM3: 770, highKgM3: 810 });
+    expect(autoDensity(pit({ dm_test: 'ball_gt40' }))).toMatchObject({ kgM3: 420, highKgM3: 480 });
+  });
+
+  it('the farmer\'s own density always wins, and bales never get a worked-out density', () => {
+    expect(autoDensity(pit({ dm_percent: 30, density_kg_m3: 700 }))).toBeNull();
+    expect(estimateStore(pit({ dm_percent: 30, density_kg_m3: 700, density_basis: 'own' })).tonnes).toBeCloseTo(420);
+    expect(autoDensity(pit({ method: 'bale_count', dm_percent: 30 }))).toBeNull();
+    expect(estimateStore(pit()).missing).toContain('Add the dry matter');
+  });
+
+  it('Teagasc\'s 25% density is only offered when nothing is known about the dry matter', () => {
+    expect(offerTeagascDensity(pit())).toBe(true);
+    expect(offerTeagascDensity(pit({ dm_percent: 25 }))).toBe(false);
+    expect(offerTeagascDensity(pit({ dm_test: 'squeeze_20_25' }))).toBe(false);
+    expect(offerTeagascDensity(pit({ density_kg_m3: 700 }))).toBe(false);
   });
 });

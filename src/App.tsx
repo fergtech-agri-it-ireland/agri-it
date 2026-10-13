@@ -42,6 +42,10 @@ import People from './pages/People';
 import Changes from './pages/Changes';
 import Join from './pages/Join';
 import MovePhoneData from './pages/MovePhoneData';
+import Calving from './pages/Calving';
+import SeasonForm from './pages/SeasonForm';
+import DryOff from './pages/DryOff';
+import CalfForm from './pages/CalfForm';
 
 export default function App() {
   if (!supabaseConfigured) return <MissingConfig />;
@@ -73,6 +77,11 @@ export default function App() {
         <Route path="record/cost" element={<CostForm />} />
         <Route path="record/income" element={<IncomeForm />} />
         <Route path="record/invoice" element={<InvoiceForm />} />
+        <Route path="record/calf" element={<CalfForm />} />
+        <Route path="calving" element={<Calving />} />
+        <Route path="calving/season/new" element={<SeasonForm />} />
+        <Route path="calving/season/:id" element={<SeasonForm />} />
+        <Route path="calving/dry-off" element={<DryOff />} />
         <Route path="money/bills" element={<Bills />} />
         <Route path="settings/people" element={<People />} />
         <Route path="settings/changes" element={<Changes />} />

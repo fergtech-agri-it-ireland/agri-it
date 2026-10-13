@@ -116,14 +116,14 @@ function BottomNav() {
 function Recorder({ bundle }: { bundle: FarmBundle }) {
   const d = useDerived(bundle);
   useSnapshotRecorder(bundle, d);
-  useReminderClock(bundle, reminderHeadlines(d.priorities));
+  useReminderClock(bundle, reminderHeadlines(d.priorities, d.suggestions));
   return null;
 }
 
 export function AppShell() {
   const { data } = useBundle();
   const loc = useLocation();
-  const hideNav = loc.pathname.startsWith('/record') || /^\/routines\/.+/.test(loc.pathname) || /\/(new|count|edit)$/.test(loc.pathname) || loc.pathname.includes('/rule/') || loc.pathname === '/farm/types' || loc.pathname === '/money/budget';
+  const hideNav = loc.pathname.startsWith('/record') || /^\/routines\/.+/.test(loc.pathname) || /\/(new|count|edit)$/.test(loc.pathname) || loc.pathname.includes('/rule/') || loc.pathname === '/farm/types' || loc.pathname === '/money/budget' || loc.pathname.startsWith('/calving/');
   return (
     <>
       <SyncStatus />

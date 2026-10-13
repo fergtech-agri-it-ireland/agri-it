@@ -153,6 +153,7 @@ export function addOptions(types: FarmType[]): AddOption[] {
     { id: 'order', label: 'Feed order', sub: 'Ordered, not here yet', to: '/record/order', relevant: animals },
     { id: 'milk', label: 'Milk cheque', sub: 'Monthly milk payment', to: '/record/milk', relevant: has('dairy') },
     { id: 'sale', label: has('sheep') && !has('suckler', 'beef', 'calf_rearing', 'dairy') ? 'Sold lambs or sheep' : 'Sold animals', sub: 'Mart, factory or private sale', to: '/record/sale', relevant: animals },
+    { id: 'calf', label: 'Calf born', sub: 'Tag and register dates kept for you', to: '/record/calf', relevant: has('dairy', 'suckler') },
     { id: 'grain', label: 'Grain or straw sale', sub: 'Crop income', to: '/record/income?type=crop', relevant: has('tillage') },
     { id: 'inputs', label: 'Seed, spray or fertiliser', sub: 'Crop inputs', to: '/record/cost?category=seed_sprays', relevant: has('tillage') },
     { id: 'cost', label: 'Bill', sub: 'Paid or still to pay: vet, contractor, ESB, anything', to: '/record/cost', relevant: true },

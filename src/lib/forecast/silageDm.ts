@@ -16,7 +16,7 @@
  */
 import type { Jurisdiction } from '../types';
 
-export const SILAGE_DM_RULE_VERSION = 'silage-dm@1.0';
+export const SILAGE_DM_RULE_VERSION = 'silage-dm@1.1';
 
 /** published: 'YYYY-MM' or 'YYYY-MM-DD'; empty when the source carries no date */
 export interface DmSource { code: string; title: string; publisher: string; url: string; published: string }
@@ -24,7 +24,9 @@ export const DM_SOURCES: Record<string, DmSource> = {
   S16: { code: 'S16', title: 'A guide to storing silage and managing effluent collection (Today\'s Farm, May-June 2024)', publisher: 'Teagasc', url: 'https://teagasc.ie/wp-content/uploads/media/website/publications/2024/A-guide-to-storing-silage-and-managing-effluent-collection.pdf', published: '2024-05' },
   S17: { code: 'S17', title: 'Visual Assessment of Silage (factsheet)', publisher: 'Teagasc', url: 'https://teagasc.ie/wp-content/uploads/2025/05/Visual-Assessment-of-Silage-Factsheet.pdf', published: '' },
   S18: { code: 'S18', title: 'First cut silage better quality than in 2024 (feed trade data)', publisher: 'Irish Farmers Journal', url: 'https://www.farmersjournal.ie/more/northern-ireland/first-cut-silage-better-quality-than-in-2024-890435', published: '2025-10-22' },
-  S19: { code: 'S19', title: 'Northern Ireland: First-cut silage has average DM of just 24% (United Feeds analysis)', publisher: 'Agriland', url: 'https://www.agriland.ie/farming-news/northern-ireland-first-cut-silage-has-average-dm-of-just-24/', published: '2022-10-26' }
+  S19: { code: 'S19', title: 'Northern Ireland: First-cut silage has average DM of just 24% (United Feeds analysis)', publisher: 'Agriland', url: 'https://www.agriland.ie/farming-news/northern-ireland-first-cut-silage-has-average-dm-of-just-24/', published: '2022-10-26' },
+  S20: { code: 'S20', title: 'Winter feed planning (silage conversion factors, Table 1)', publisher: 'DAERA', url: 'https://www.daera-ni.gov.uk/news/winter-feed-planning', published: '2017-09-14' },
+  S21: { code: 'S21', title: 'Taking stock of winter forage supplies', publisher: 'Irish Farmers Journal', url: 'https://www.farmersjournal.ie/beef/grass-and-feeding/taking-stock-of-winter-forage-supplies-930599', published: '2026-09-02' }
 };
 
 /** Which cut the silage is from. Bales can be any cut. */
@@ -104,4 +106,84 @@ export function canOfferTeagascDensity(s: { method: string; dm_percent: number |
   return (t.low === null || t.low <= 25) && (t.high === null || t.high >= 25);
 }
 
+/**
+ * Teagasc's 25% density is offered only when nothing at all is known about the dry matter. Once
+ * there is a lab figure or a yard test, the density is worked out from it (autoDensity).
+ */
+export function offerTeagascDensity(s: { method: string; density_kg_m3: number | null; dm_percent: number | null; dm_test?: string | null }): boolean {
+  if (s.method !== 'pit_dimensions') return false;
+  if (s.density_kg_m3 !== null && s.density_kg_m3 !== undefined && String(s.density_kg_m3) !== '') return false;
+  const hasLab = s.dm_percent !== null && s.dm_percent !== undefined && String(s.dm_percent) !== '';
+  return !hasLab && !DM_TESTS.some((x) => x.id === s.dm_test);
+}
+
 export const sourceLink = (code: string) => DM_SOURCES[code];
+
+// ---------------------------------------------------------------------------
+// Density worked out from dry matter (rule silage-dm@1.1)
+// ---------------------------------------------------------------------------
+/**
+ * Fresh tonnes per m³ of pit silage at each dry matter. DAERA's conversion table (S20, 20 to 45%);
+ * the Irish Farmers Journal (S21, Sept 2026) gives the same 0.77 and 0.68 and adds 0.81 for very
+ * wet 18% silage. Between rows the figure is read off a straight line. Outside 18 to 45% Agri-It
+ * has no published figure and asks instead.
+ * Teagasc's 25% figure (1 t per 1.39 m³, S16) is higher (719 against 680): the table is the more
+ * careful of the two, so a winter plan built on it will not count silage you don't have.
+ */
+export const DM_DENSITY_TABLE: Array<[dm: number, tPerM3: number, source: 'S20' | 'S21']> = [
+  [18, 0.81, 'S21'], [20, 0.77, 'S20'], [25, 0.68, 'S20'], [30, 0.6, 'S20'], [35, 0.54, 'S20'], [40, 0.48, 'S20'], [45, 0.42, 'S20']
+];
+const DM_MIN = 18;
+const DM_MAX = 45;
+
+/** kg of fresh silage per m³ for a dry matter %, or null outside the published range. */
+export function densityFromDm(dm: number): number | null {
+  if (!Number.isFinite(dm) || dm < DM_MIN || dm > DM_MAX) return null;
+  for (let i = 0; i < DM_DENSITY_TABLE.length - 1; i++) {
+    const [d0, t0] = DM_DENSITY_TABLE[i];
+    const [d1, t1] = DM_DENSITY_TABLE[i + 1];
+    if (dm >= d0 && dm <= d1) return Math.round((t0 + ((dm - d0) / (d1 - d0)) * (t1 - t0)) * 1000);
+  }
+  return null;
+}
+
+export interface AutoDensity {
+  /** The figure the winter plan uses (the drier, lighter end of a yard-test band, so it never overcounts) */
+  kgM3: number;
+  /** The wetter end of a yard-test band; same as kgM3 for a lab figure */
+  highKgM3: number;
+  dmUsed: number;
+  basis: 'lab' | 'yard_test';
+  /** "30% dry matter" or "a yard test of 20 to 25% dry matter" */
+  from: string;
+  sources: string[];
+}
+
+/**
+ * Pit density worked out from the store's own dry matter, when the farmer has not given one.
+ * A lab figure gives one density. A yard-test band gives a range: open-ended bands are closed at
+ * the edge of the published table (under 20% = 18 to 20%, over 40% = 40 to 45%).
+ */
+export function autoDensity(s: { method: string; density_kg_m3: number | null; dm_percent: number | null; dm_test?: string | null }): AutoDensity | null {
+  if (s.method !== 'pit_dimensions') return null;
+  if (s.density_kg_m3 !== null && s.density_kg_m3 !== undefined && String(s.density_kg_m3) !== '') return null;
+  const src = (lo: number, hi: number) => {
+    const codes = new Set<string>(['S20']);
+    if (Math.min(lo, hi) < 20) codes.add('S21');
+    return [...codes];
+  };
+  if (s.dm_percent !== null && s.dm_percent !== undefined && String(s.dm_percent) !== '') {
+    const dm = Number(s.dm_percent);
+    const kg = densityFromDm(dm);
+    if (kg === null) return null;
+    return { kgM3: kg, highKgM3: kg, dmUsed: dm, basis: 'lab', from: `${dm}% dry matter`, sources: src(dm, dm) };
+  }
+  const t = DM_TESTS.find((x) => x.id === s.dm_test);
+  if (!t) return null;
+  const lo = t.low ?? DM_MIN;
+  const hi = t.high ?? DM_MAX;
+  const light = densityFromDm(hi);
+  const heavy = densityFromDm(lo);
+  if (light === null || heavy === null) return null;
+  return { kgM3: light, highKgM3: heavy, dmUsed: hi, basis: 'yard_test', from: `a ${t.test} test of ${bandLabel(t.low, t.high)} dry matter`, sources: src(lo, hi) };
+}

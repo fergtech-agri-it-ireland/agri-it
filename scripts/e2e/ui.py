@@ -109,7 +109,7 @@ with sync_playwright() as p:
     r = pg.locator('body').inner_text()
     check('Add: recent delivery row', 'Dairy nut 16%, 8 t' in r and 'Tirlán FarmLife, €390/t' in r, '')
     check('Add: recent milk row', 'Milk cheque, Tirlán' in r)
-    check('Add: recent bill row is the ESB bill', 'ESB bill' in r)
+    check('Add: a recent bill row', pg.locator('a[href*="record/cost?repeat="]').count() == 1)
     check('Add: docket photo and a quick tile', 'Pick a docket photo' in r and 'Feed delivery' in r)
     pg.get_by_role('tab', name='Everything').click()
     r = pg.locator('main').inner_text().upper()
@@ -166,10 +166,15 @@ with sync_playwright() as p:
 
     # I. Bill repeat prefill
     go(pg, '#/record')
-    pg.get_by_role('link', name=re.compile('Add again: ESB bill')).click()
+    # The latest bill depends on the day of the month (demo dates are relative), so read it off the row
+    row = pg.locator('a[href*="record/cost?repeat="]').first
+    sub = row.inner_text()
+    m = re.search(r'Last €([\d,]+) on [^,]+, [^,]+(?:, (.+))?', sub.replace('\n', ' '))
+    amt, payee = m.group(1).replace(',', ''), (m.group(2) or '').strip()
+    row.click()
     pg.wait_for_timeout(500)
     vals = pg.locator('input').evaluate_all('els => els.map(e => e.value)')
-    check('Bill repeat prefills amount and payee', any(v in ('677', '677.00') for v in vals) and 'Electricity supplier' in vals, str(vals))
+    check('Bill repeat prefills amount and payee', any(v in (amt, f'{amt}.00') for v in vals) and (not payee or payee in vals), f'{sub} {vals}')
 
     # J. Photo first, then say what it is
     png(f'{OUT}/docket.png')

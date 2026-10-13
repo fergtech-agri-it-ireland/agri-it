@@ -7,8 +7,9 @@
 import type { AnimalClass, AnimalGroup, Confidence, EvidenceSource, Farm, ForageBenchmark, ISODate, SilageStore } from '../types';
 import { ANIMAL_CLASS_LABEL } from '../types';
 import { daysBetween, hashString, maxISO } from '../format';
+import { autoDensity, type AutoDensity } from './silageDm';
 
-export const FORAGE_RULE_VERSION = 'forage-budget@1.0';
+export const FORAGE_RULE_VERSION = 'forage-budget@1.1';
 const DAYS_PER_MONTH = 30.4;
 
 export interface StoreEstimate {
@@ -20,6 +21,12 @@ export interface StoreEstimate {
   missing: string | null;
   /** The pit's density is Teagasc's published figure, not measured on this farm */
   publishedDensity?: boolean;
+  /** The density was worked out from the store's dry matter with a published table */
+  autoDensity?: AutoDensity;
+  /** For a yard-test band: tonnes at the wetter end of the band (tonnes is the careful, drier end) */
+  tonnesHigh?: number;
+  /** Tonnes of dry matter in the store, when the dry matter is known */
+  dmTonnes?: number;
 }
 
 export interface GroupDemand {
@@ -63,11 +70,24 @@ export function estimateStore(s: SilageStore): StoreEstimate {
         return { id: s.id, name: s.name, tonnes: null, basis: 'measured', explanation: 'Pit size incomplete', missing: `Enter length, width and height for ${s.name}` };
       }
       if (d === null) {
-        return { id: s.id, name: s.name, tonnes: null, basis: 'measured', explanation: `${l} × ${w} × ${h} m = ${(l * w * h).toFixed(0)} m³`, missing: `Add silage density for ${s.name} (from your analysis or advisor)` };
+        const auto = autoDensity(s);
+        if (!auto) {
+          return { id: s.id, name: s.name, tonnes: null, basis: 'measured', explanation: `${l} × ${w} × ${h} m = ${(l * w * h).toFixed(0)} m³`, missing: `Add the dry matter (a silage test or a squeeze test) or the density for ${s.name}` };
+        }
+        const t = Math.max(0, (l * w * h * auto.kgM3) / 1000 - fed);
+        const tHigh = Math.max(0, (l * w * h * auto.highKgM3) / 1000 - fed);
+        const dmPct = auto.basis === 'lab' ? auto.dmUsed : null;
+        return {
+          id: s.id, name: s.name, tonnes: t, basis: 'measured', missing: null, autoDensity: auto,
+          tonnesHigh: tHigh > t + 0.5 ? tHigh : undefined,
+          dmTonnes: dmPct !== null ? (t * dmPct) / 100 : undefined,
+          explanation: `${l} × ${w} × ${h} m × ${auto.kgM3} kg/m³, worked out from ${auto.from}${fed ? ` − ${fed} t fed` : ''}`
+        };
       }
       const t = (l * w * h * d) / 1000 - fed;
+      const dmKnown = s.dm_percent !== null && s.dm_percent !== undefined && String(s.dm_percent) !== '';
       const pub = s.density_basis === 'teagasc_25dm' ? ' (Teagasc figure for silage of about 25% dry matter)' : '';
-      return { id: s.id, name: s.name, tonnes: Math.max(0, t), basis: 'measured', explanation: `${l} × ${w} × ${h} m × ${d} kg/m³${pub}${fed ? ` − ${fed} t fed` : ''}`, missing: null, publishedDensity: !!pub };
+      return { id: s.id, name: s.name, tonnes: Math.max(0, t), basis: 'measured', explanation: `${l} × ${w} × ${h} m × ${d} kg/m³${pub}${fed ? ` − ${fed} t fed` : ''}`, missing: null, publishedDensity: !!pub, dmTonnes: dmKnown ? (Math.max(0, t) * Number(s.dm_percent)) / 100 : undefined };
     }
     case 'bale_count': {
       const [c, wkg] = [n(s.bale_count), n(s.bale_weight_kg)];
@@ -168,6 +188,8 @@ export function forecastForage(input: {
   if (stores.some((s) => s.basis === 'planning_estimate' && s.tonnes !== null)) lower(2, 'Some stock is an acreage × yield estimate, not measured.');
   if (stores.some((s) => s.tonnes === null)) lower(2, 'Some stores are missing measurements.');
   if (stores.some((s) => s.publishedDensity && s.tonnes !== null)) lower(1, 'A pit uses Teagasc\'s density for silage of about 25% dry matter, not your own figure.');
+  if (stores.some((s) => s.autoDensity && s.tonnes !== null)) lower(1, 'A pit\'s density is worked out from its dry matter with a published table, not weighed.');
+  if (stores.some((s) => s.autoDensity?.basis === 'yard_test' && s.tonnes !== null)) reasons.push('A yard test gives a range: the plan counts the drier, lighter end so it never counts silage you may not have.');
   if (groups.some((g) => g.source === 'missing')) lower(2, 'Some groups have no usage figure.');
   if (groups.some((g) => g.source === 'benchmark')) lower(1, 'Uses published planning allowances. Your own farm usage is more accurate.');
   if (monthsToCover === null) lower(2, 'Housing and turnout dates are not set.');

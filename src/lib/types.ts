@@ -402,6 +402,58 @@ export interface Crop {
   created_at?: string;
 }
 
+/**
+ * A calving season the farmer plans around (spring calving, autumn calving). Agri-It works the
+ * drying-off, pre-calving and calving jobs out from its dates; nothing happens until approved.
+ */
+export interface CalvingSeason {
+  id: string;
+  farm_id: string;
+  label: string;
+  /** dairy: cows are dried off first; suckler: no drying off */
+  herd: 'dairy' | 'suckler';
+  /** When the first calf is due */
+  calving_start: ISODate;
+  /** When the last calf is due (optional) */
+  calving_end: ISODate | null;
+  cows_due: number | null;
+  /** Cows in poor condition, dried off earlier (dairy) */
+  thin_count: number | null;
+  /** Weeks dry for cows on target and for thin cows (Teagasc: 8 and 10) */
+  dry_weeks: number;
+  dry_weeks_thin: number;
+  milking_group_id: string | null;
+  dry_group_id: string | null;
+  calf_group_id: string | null;
+  archived: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+/** Calves born on a day: tagging and registration deadlines are worked out from born_on. */
+export interface CalfBirth {
+  id: string;
+  farm_id: string;
+  season_id: string | null;
+  born_on: ISODate;
+  calves: number;
+  calf_group_id: string | null;
+  tagged_on: ISODate | null;
+  registered_on: ISODate | null;
+  notes: string | null;
+  created_at?: string;
+}
+
+/** The farmer's answer to something Agri-It suggested: done, not now (until a date), or no. */
+export interface SuggestionDecision {
+  id: string;
+  farm_id: string;
+  key: string;
+  decision: 'done' | 'snoozed' | 'dismissed';
+  until: ISODate | null;
+  decided_at: string;
+}
+
 export interface FarmBundle {
   farm: Farm;
   groups: AnimalGroup[];
@@ -426,6 +478,10 @@ export interface FarmBundle {
   feedLogs: FeedUseLog[];
   /** Every dated head count change: the feed ledger uses the count in force each day. */
   headHistory: HeadCountChange[];
+  /** Calving seasons, calves born, and answers to Agri-It's suggestions (13 Oct 2026) */
+  seasons: CalvingSeason[];
+  births: CalfBirth[];
+  decisions: SuggestionDecision[];
   /** This user's role on the farm (owner when not known, e.g. the phone-only build). */
   role?: MemberRole;
 }

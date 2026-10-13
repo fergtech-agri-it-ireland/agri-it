@@ -101,6 +101,10 @@ do $$ begin
   insert into public.jobs (farm_id, title) values ('30000000-0000-0000-0000-000000000001', 'Adviser job');
   raise exception 'FAILED: an adviser could write';
 exception when insufficient_privilege then raise notice 'ok: an adviser cannot write'; end $$;
+do $$ begin
+  insert into public.calf_births (farm_id, born_on) values ('30000000-0000-0000-0000-000000000001', current_date);
+  raise exception 'FAILED: an adviser could record a calf';
+exception when insufficient_privilege then raise notice 'ok: an adviser cannot record calves'; end $$;
 commit;
 
 begin;
@@ -120,6 +124,21 @@ do $$ begin
   insert into public.costs (farm_id, category, occurred_on, amount_eur) values ('30000000-0000-0000-0000-000000000001', 'other', current_date, 5);
   raise exception 'FAILED: a worker could add a cost';
 exception when insufficient_privilege then raise notice 'ok: a worker cannot add costs'; end $$;
+-- Calving is farm work: a worker plans the season, records calves and answers suggestions
+insert into public.calving_seasons (id, farm_id, label, herd, calving_start, calving_end, cows_due)
+values ('5e000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000001', 'Spring calving', 'dairy', current_date + 100, current_date + 170, 110);
+insert into public.calf_births (id, farm_id, season_id, born_on, calves) values ('cb000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000001', '5e000000-0000-0000-0000-000000000001', current_date, 2);
+update public.calf_births set tagged_on = current_date where id = 'cb000000-0000-0000-0000-000000000001';
+insert into public.suggestion_decisions (farm_id, key, decision, until) values ('30000000-0000-0000-0000-000000000001', 'season:5e000000-0000-0000-0000-000000000001:bcs', 'snoozed', current_date + 7);
+select pg_temp.check((select count(*) = 1 from public.calf_births where tagged_on = current_date), 'a worker records calves and marks them tagged');
+do $$ begin
+  insert into public.calf_births (farm_id, born_on, tagged_on) values ('30000000-0000-0000-0000-000000000001', current_date, current_date - 1);
+  raise exception 'FAILED: a calf tagged before it was born';
+exception when check_violation then raise notice 'ok: no tagging before birth'; end $$;
+do $$ begin
+  insert into public.suggestion_decisions (farm_id, key, decision) values ('30000000-0000-0000-0000-000000000001', 'x', 'snoozed');
+  raise exception 'FAILED: not now with no date';
+exception when check_violation then raise notice 'ok: not now needs a date'; end $$;
 commit;
 
 begin;
@@ -135,6 +154,13 @@ commit;
 select pg_temp.check((select count(*) = 0 from public.costs where feed_transaction_id = 'e0000000-0000-0000-0000-000000000009'), 'no cost was added by the worker''s delivery');
 select pg_temp.check((select count(*) = 4 from public.farm_members where farm_id = '30000000-0000-0000-0000-000000000001'), 'four people on the farm');
 select pg_temp.check((select email from public.farm_members where user_id = '20000000-0000-0000-0000-0000000000b1') = 'worker@agri-it.local', 'members keep the email they joined with');
+select pg_temp.check((select count(*) >= 2 from public.audit_log where table_name in ('calving_seasons', 'calf_births')), 'calving entries are in the change history');
+-- Another farm's owner sees none of it
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = '20000000-0000-0000-0000-0000000000b9';
+select pg_temp.check((select count(*) = 0 from public.calving_seasons) and (select count(*) = 0 from public.calf_births) and (select count(*) = 0 from public.suggestion_decisions), 'someone outside the farm sees no calving records');
+commit;
 
 -- Deleting a farm takes its trail with it (no orphan audit rows, no FK errors)
 delete from public.farms where id = '30000000-0000-0000-0000-000000000001';

@@ -104,7 +104,7 @@ async function fetchBundle(farmId: string): Promise<FarmBundle> {
     Promise.resolve(p).then((r) => { if (r.error) throw new Error(r.error.message); return (r.data ?? []) as T; });
 
   const userId = (await supabase.auth.getSession()).data.session?.user.id ?? null;
-  const [farm, groups, crops, suppliers, branches, supplierSettings, products, txns, rules, silage, benchmarks, evidence, income, costs, budget, records, documents, jobs, routines, completions, feedLogs, headHistory, members] =
+  const [farm, groups, crops, suppliers, branches, supplierSettings, products, txns, rules, silage, benchmarks, evidence, income, costs, budget, records, documents, jobs, routines, completions, feedLogs, headHistory, members, seasons, births, decisions] =
     await Promise.all([
       q(supabase.from('farms').select('*').eq('id', farmId).single()),
       q(supabase.from('animal_groups').select('*').eq('farm_id', farmId).order('sort_order').order('name')),
@@ -128,13 +128,16 @@ async function fetchBundle(farmId: string): Promise<FarmBundle> {
       q(supabase.from('routine_completions').select('*').eq('farm_id', farmId).gte('due_date', since).order('due_date')),
       q(supabase.from('feed_use_logs').select('*').eq('farm_id', farmId).gte('used_on', since).order('used_on')),
       q(supabase.from('head_count_history').select('*').eq('farm_id', farmId).order('effective_on')),
-      q(supabase.from('farm_members').select('user_id, role').eq('farm_id', farmId))
+      q(supabase.from('farm_members').select('user_id, role').eq('farm_id', farmId)),
+      q(supabase.from('calving_seasons').select('*').eq('farm_id', farmId).order('calving_start')),
+      q(supabase.from('calf_births').select('*').eq('farm_id', farmId).gte('born_on', since).order('born_on')),
+      q(supabase.from('suggestion_decisions').select('*').eq('farm_id', farmId))
     ]);
   const role = (members as { user_id: string; role: MemberRole }[]).find((m) => m.user_id === userId)?.role ?? 'owner';
-  return { farm, groups, crops, suppliers, branches, supplierSettings, products, txns, rules, silage, benchmarks, evidence, income, costs, budget, records, documents, jobs, routines, completions, feedLogs, headHistory, role } as unknown as FarmBundle;
+  return { farm, groups, crops, suppliers, branches, supplierSettings, products, txns, rules, silage, benchmarks, evidence, income, costs, budget, records, documents, jobs, routines, completions, feedLogs, headHistory, seasons, births, decisions, role } as unknown as FarmBundle;
 }
 
-const LIST_KEYS = ['groups', 'crops', 'suppliers', 'branches', 'supplierSettings', 'products', 'txns', 'rules', 'silage', 'benchmarks', 'evidence', 'income', 'costs', 'budget', 'records', 'documents', 'jobs', 'routines', 'completions', 'feedLogs', 'headHistory'] as const;
+const LIST_KEYS = ['groups', 'crops', 'suppliers', 'branches', 'supplierSettings', 'products', 'txns', 'rules', 'silage', 'benchmarks', 'evidence', 'income', 'costs', 'budget', 'records', 'documents', 'jobs', 'routines', 'completions', 'feedLogs', 'headHistory', 'seasons', 'births', 'decisions'] as const;
 
 /** Data cached by an older version of the app can lack newer lists. Treat a missing list as empty. */
 export function normalizeBundle(b: FarmBundle): FarmBundle {
@@ -190,7 +193,7 @@ export type SaveResult = false | 'saved' | 'queued';
 const TABLE_LIST: Record<string, keyof FarmBundle> = {
   costs: 'costs', income: 'income', jobs: 'jobs', animal_groups: 'groups', feed_products: 'products', feeding_rules: 'rules',
   silage_stores: 'silage', farm_records: 'records', routines: 'routines', crops: 'crops', feed_transactions: 'txns',
-  documents: 'documents', budget_lines: 'budget'
+  documents: 'documents', budget_lines: 'budget', calving_seasons: 'seasons'
 };
 
 /**

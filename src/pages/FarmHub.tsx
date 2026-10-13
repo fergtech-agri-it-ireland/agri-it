@@ -1,6 +1,6 @@
 import type { ComponentType, ReactNode } from 'react';
 import {
-  Banknote, BookOpen, ChevronRight, ClipboardList, FileSpreadsheet, ListChecks, MessageCircleQuestion, PiggyBank, Repeat, Settings, Sprout, Tractor, Truck, Users, Warehouse, Wheat
+  Baby, Banknote, BookOpen, ChevronRight, ClipboardList, FileSpreadsheet, ListChecks, MessageCircleQuestion, PiggyBank, Repeat, Settings, Sprout, Tractor, Truck, Users, Warehouse, Wheat
 } from 'lucide-react';
 import { useFarmData } from '../lib/data/farm';
 import { useDerived } from '../lib/data/derived';
@@ -36,6 +36,9 @@ export default function FarmHub() {
     <Screen title="More" sub={`${b.farm.name}, ${b.farm.county}`}>
       <Group title="Your farm">
         <Row to="/farm/types" icon={icon(Tractor)} title="What you farm" sub={types.length ? types.map((t) => FARM_TYPE_LABEL[t]).join(', ') : 'Not picked yet'} right={chev} />
+        {(types.includes('dairy') || types.includes('suckler') || (b.seasons ?? []).length > 0) && (
+          <Row to="/calving" icon={icon(Baby)} title="Calving and drying off" sub={(b.seasons ?? []).some((s) => !s.archived) ? 'Your season plan and calves to tag' : 'Plan the season from the first calf date'} right={chev} />
+        )}
         <Row to="/farm/groups" icon={icon(Users)} title="Animals and breeds" sub={heads ? `${b.groups.filter((g) => !g.archived).length} groups, ${fmtNum(heads)} head` : 'Add your groups'} right={chev} />
         {grows(types) && cropsRow}
         <Row to="/progress?tab=feed" icon={icon(Wheat)} title="Bought-in feed" sub={`${b.products.filter((p) => !p.archived).length} feeds tracked`} right={chev} />

@@ -16,6 +16,8 @@ import { primaryRoute, telHref } from '../lib/suppliers';
 import type { FarmBundle } from '../lib/types';
 import type { FeedForecast } from '../lib/forecast/feed';
 import { NS } from '../lib/env';
+import { ReadyToApprove } from '../components/ReadyToApprove';
+import { CalvingCard } from '../components/CalvingCard';
 
 type Derived = ReturnType<typeof useDerived>;
 const dayFmt = new Intl.DateTimeFormat('en-IE', { weekday: 'short', day: 'numeric', month: 'short' });
@@ -342,6 +344,8 @@ export default function Today() {
         <GuideCard b={b} />
         {(animals || live.length > 0) && <FeedCard b={b} d={d} />}
 
+        <ReadyToApprove items={d.suggestions} />
+
         <div className={`grid gap-3 ${showSilage && money ? 'grid-cols-2' : 'grid-cols-1'}`}>
           {showSilage && (
             <Mini title="Silage" value={silage.value === '?' ? 'Add details' : silage.value} sub={silage.value === '?' ? 'Is there enough for winter?' : `of winter. ${silage.status}`}
@@ -397,6 +401,7 @@ export default function Today() {
           </section>
         )}
 
+        {(types.includes('dairy') || types.includes('suckler') || (b.seasons ?? []).length > 0) && <CalvingCard b={b} today={today} />}
         {types.includes('dairy') && <MilkCard b={b} />}
         {grows(types) && <CropsCard b={b} today={today} />}
         <StockCard b={b} />

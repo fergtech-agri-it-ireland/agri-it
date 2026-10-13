@@ -33,7 +33,7 @@ export default function Settings() {
   const [orderDays, setOrderDays] = useState(f.order_warning_days ?? 7);
   const theme = useTheme();
   const d = useDerived(b);
-  const urgent = useMemo(() => reminderHeadlines(d.priorities), [d.priorities]);
+  const urgent = useMemo(() => reminderHeadlines(d.priorities, d.suggestions), [d.priorities, d.suggestions]);
   const [params] = useSearchParams();
   useEffect(() => {
     if (params.get('section') === 'reminders') document.getElementById('reminders')?.scrollIntoView({ block: 'start' });

@@ -15,6 +15,7 @@ const G_COWS = '40000000-0000-0000-0000-000000000001';
 const G_HEIF = '40000000-0000-0000-0000-000000000002';
 const G_WEAN = '40000000-0000-0000-0000-000000000003';
 const G_CALF = '40000000-0000-0000-0000-000000000004';
+const G_DRY = '40000000-0000-0000-0000-000000000005';
 const P_NUT = '50000000-0000-0000-0000-000000000001';
 const P_CALF = '50000000-0000-0000-0000-000000000002';
 const TIRLAN = '10000000-0000-0000-0000-000000000001';
@@ -127,7 +128,8 @@ export function buildSeed(): DB {
   const recent = new Date(Date.now() - 2 * 86_400_000).toISOString();
   db.animal_groups = [
     [G_COWS, 'Dairy cows', 'dairy_cow', 120, 1, 'Holstein Friesian'], [G_HEIF, 'In-calf heifers', 'in_calf_heifer', 40, 2, 'Holstein Friesian'],
-    [G_WEAN, 'Weanlings', 'weanling', 30, 3, 'Aberdeen Angus'], [G_CALF, 'Calves', 'calf', 18, 4, 'Mixed']
+    [G_WEAN, 'Weanlings', 'weanling', 30, 3, 'Aberdeen Angus'], [G_CALF, 'Calves', 'calf', 18, 4, 'Mixed'],
+    [G_DRY, 'Dry cows', 'dairy_cow', 0, 5, 'Holstein Friesian']
   ].map(([gid, name, cls, heads, order, breed]) => ({ ...DEFAULTS.animal_groups(), id: gid, farm_id: F, name, animal_class: cls, breed, head_count: heads, sort_order: order, head_count_updated_at: recent, created_at: stamp() }));
   put('head_count_history', db.animal_groups.map((g) => ({ farm_id: F, animal_group_id: g.id, head_count: g.head_count, effective_on: D(-20), reason: 'opening' })));
 
@@ -237,6 +239,11 @@ export function buildSeed(): DB {
     }
   }
   put('routine_completions', [...ticked, { farm_id: F, routine_id: ROUT_WATER, due_date: D(-2), status: 'done', done_on: D(-2) }]);
-  for (const t of ['documents', 'forecast_snapshots']) db[t] = db[t] ?? [];
+  // Spring calving: the drying-off and calving plan works back from these dates (13 Oct 2026)
+  put('calving_seasons', [{
+    id: '5e000000-0000-0000-0000-000000000001', farm_id: F, label: 'Spring calving', herd: 'dairy', calving_start: D(75), calving_end: D(150),
+    cows_due: 160, thin_count: 12, dry_weeks: 8, dry_weeks_thin: 10, milking_group_id: G_COWS, dry_group_id: G_DRY, calf_group_id: G_CALF, archived: false, created_at: stamp(), updated_at: stamp()
+  }]);
+  for (const t of ['documents', 'forecast_snapshots', 'calf_births', 'suggestion_decisions']) db[t] = db[t] ?? [];
   return db;
 }

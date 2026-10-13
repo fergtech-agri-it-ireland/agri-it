@@ -4,7 +4,7 @@ import { useFarmData, useFarmCtx, useSave } from '../lib/data/farm';
 import { ANIMAL_CLASS_LABEL, type AnimalClass, type AnimalGroup, type FarmBundle, type HeadCountChange } from '../lib/types';
 import { fmtDay, fmtRelative, todayISO, uuid } from '../lib/format';
 import { headChangeRow, headsOn, upcomingHeadChanges } from '../lib/heads';
-import { Button, Card, DateChips, Empty, NumberInput, Screen, Sheet, Stepper, TextInput } from '../components/ui';
+import { Button, Card, Chips, DateChips, Empty, Field, NumberInput, Screen, Sheet, Stepper, TextInput } from '../components/ui';
 import { GroupPicker } from '../components/pickers';
 import { BreedField, ClassPicker } from '../components/FarmPickers';
 import { speciesOf } from '../lib/farmTypes';
@@ -62,6 +62,7 @@ function GroupCard({ g, history }: { g: AnimalGroup; history: HeadCountChange[] 
           ))}
         </ul>
       )}
+      {g.housed && speciesOf(g.animal_class) !== 'pigs' && speciesOf(g.animal_class) !== 'poultry' && speciesOf(g.animal_class) !== 'horses' && <WhereNow g={g} />}
       <button type="button" className="min-h-[2.75rem] text-sm font-bold text-accent" onClick={() => setMore(!more)}>{more ? 'Hide details' : 'Breed, winter and housing'}</button>
       {more && (
         <div className="space-y-3">
@@ -169,5 +170,35 @@ function MoveSheet({ b, open, onClose }: { b: FarmBundle; open: boolean; onClose
         <p className="text-sm text-muted">Feeding before the move keeps the old numbers. Group counts here are for feed and money planning, not the official herd register.</p>
       </div>
     </Sheet>
+  );
+}
+
+/**
+ * In the shed or out at grass today, and when an outside group comes in. The winter silage plan
+ * counts each group from the day it comes in.
+ */
+function WhereNow({ g }: { g: AnimalGroup }) {
+  const b = useFarmData();
+  const save = useSave();
+  const today = todayISO();
+  const hs = b.farm.housing_start;
+  const out = !!g.at_grass;
+  const set = (patch: Partial<AnimalGroup>, label: string) =>
+    save([{ kind: 'update', table: 'animal_groups', match: { id: g.id }, patch: patch as Record<string, unknown> }], {
+      label, patch: (x) => ({ ...x, groups: x.groups.map((y) => (y.id === g.id ? { ...y, ...patch } : y)) })
+    });
+  return (
+    <div className="space-y-2 rounded-xl bg-pasture p-3">
+      <Chips label="Where are they today?" columns={2} value={out ? 'out' : 'in'} onChange={(v) => {
+        if (v === 'in' && out) set({ at_grass: false, housed_from: today }, `${g.name} in. Silage plan updated`);
+        if (v === 'out' && !out) set({ at_grass: true, housed_from: null }, `${g.name} out at grass. Silage plan updated`);
+      }} options={[{ value: 'in', label: 'In now' }, { value: 'out', label: 'Out at grass' }]} />
+      {out && (
+        <Field label="Coming in about" htmlFor={`in-${g.id}`} hint={g.housed_from ? `Counted from ${fmtDay(g.housed_from)}.` : hs && hs > today ? `Blank = with the rest, ${fmtDay(hs)}.` : 'Blank = counted from today, so the silage plan errs short.'}>
+          <input id={`in-${g.id}`} type="date" className="input" min={today} value={g.housed_from ?? ''}
+            onChange={(e) => set({ housed_from: e.target.value || null }, e.target.value ? `${g.name} in from ${fmtDay(e.target.value)}` : 'Date cleared')} />
+        </Field>
+      )}
+    </div>
   );
 }

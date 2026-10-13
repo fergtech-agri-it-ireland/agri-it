@@ -34,14 +34,16 @@ describe('ready to approve', () => {
     expect(suggestions({ ...b, role: 'worker' }, new Map(), TODAY).some((x) => x.key.startsWith('recurring'))).toBe(false);
   });
 
-  it('asks to bring groups in once the farm\'s own housing date has passed', () => {
-    const b = bundle({ groups: [group({ housed: false }), group({ id: 'p', name: 'Pigs', animal_class: 'pig', housed: false })] });
+  it('asks if groups out at grass are in, once their day to come in has come', () => {
+    const b = bundle({ groups: [group({ at_grass: true }), group({ id: 'w', name: 'Weanlings', animal_class: 'weanling', head_count: 30, at_grass: true, housed_from: '2026-12-01' }), group({ id: 'p', name: 'Pigs', animal_class: 'pig', at_grass: true })] });
     const [s] = housingSuggestions(b, TODAY);
-    expect(s.detail).toBe('Cows (100)'); // pigs aren't in the silage plan
+    expect(s.detail).toBe('Cows (100)'); // weanlings not due till December; pigs aren't in the silage plan
     const after = s.approve!.patch(b);
-    expect(after.groups[0].housed).toBe(true);
+    expect(after.groups[0]).toMatchObject({ at_grass: false, housed_from: TODAY });
     expect(housingSuggestions(after, TODAY)).toEqual([]);
-    expect(housingSuggestions(bundle({ groups: [group({ housed: false })] }), '2026-11-01')).toEqual([]);
+    expect(housingSuggestions(b, '2026-11-01')).toEqual([]); // before the farm's housing date
+    expect(housingSuggestions(b, '2026-12-01')[0].detail).toBe('Cows (100), Weanlings (30)');
+    expect(housingSuggestions(bundle(), '2027-03-10')[0].title).toBe("Set next winter's dates");
   });
 
   it('confirms stale head counts in one tap', () => {
@@ -101,7 +103,7 @@ describe('ready to approve', () => {
   });
 
   it('not now hides a suggestion for a week; no hides it for good', () => {
-    const b = bundle({ groups: [group({ housed: false })] });
+    const b = bundle({ groups: [group({ at_grass: true })] });
     const key = housingSuggestions(b, TODAY)[0].key;
     const snoozed = { ...b, decisions: [{ id: 'd', farm_id: 'f', key, decision: 'snoozed' as const, until: '2026-12-02', decided_at: '' }] };
     expect(housingSuggestions(snoozed, TODAY)).toEqual([]);

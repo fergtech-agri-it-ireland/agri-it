@@ -9,7 +9,7 @@ import { ANIMAL_CLASS_LABEL } from '../types';
 import { daysBetween, hashString, maxISO } from '../format';
 import { autoDensity, TYPICAL_BALE_KG, TYPICAL_BALE_KG_PACKED, type AutoDensity } from './silageDm';
 
-export const FORAGE_RULE_VERSION = 'forage-budget@1.1';
+export const FORAGE_RULE_VERSION = 'forage-budget@1.2';
 const DAYS_PER_MONTH = 30.4;
 
 export interface StoreEstimate {
@@ -41,6 +41,12 @@ export interface GroupDemand {
   source: 'farm_history' | 'benchmark' | 'missing';
   sourceLabel: string;
   tPerMonth: number;
+  /** The day this group starts eating silage: its own date, else the farm's housing date */
+  inFrom: ISODate | null;
+  /** In the shed now */
+  inNow: boolean;
+  /** Months of silage it needs from today (or from when it comes in) to turnout */
+  months: number | null;
 }
 
 export interface ForageForecast {
@@ -157,9 +163,20 @@ export function forecastForage(input: {
     return e ? `${e.publisher} (${code})` : code;
   };
 
+  const winterEndAt = farm.turnout_date;
+  const timing = (g: AnimalGroup) => {
+    // Out at grass with no date to come in: counted from today, so the plan errs short, not long
+    const inFrom = g.at_grass ? (g.housed_from ?? today) : (g.housed_from ?? farm.housing_start ?? null);
+    const from = inFrom ? maxISO(inFrom, today) : null;
+    const months = from && winterEndAt ? Math.max(0, daysBetween(from, winterEndAt)) / DAYS_PER_MONTH : null;
+    return { inFrom, inNow: !g.at_grass && !!inFrom && inFrom <= today, months };
+  };
   const groups: GroupDemand[] = input.groups
     .filter((g) => !g.archived && g.housed && g.head_count > 0 && EATS_SILAGE(g.animal_class))
-    .map((g) => {
+    .map((g) => ({ g, d: rawDemand(g) }))
+    .map(({ g, d }) => ({ ...d, ...timing(g) }));
+  function rawDemand(g: AnimalGroup) {
+    {
       if (g.forage_t_per_head_month !== null && g.forage_t_per_head_month !== undefined) {
         const t = Number(g.forage_t_per_head_month);
         return { id: g.id, name: g.name, heads: g.head_count, tPerHeadMonth: t, source: 'farm_history' as const, sourceLabel: 'Your farm usage', tPerMonth: t * g.head_count };
@@ -173,18 +190,24 @@ export function forecastForage(input: {
       }
       missing.push(`Monthly silage use per head for ${g.name} (no published allowance for ${ANIMAL_CLASS_LABEL[g.animal_class].toLowerCase()})`);
       return { id: g.id, name: g.name, heads: g.head_count, tPerHeadMonth: null, source: 'missing' as const, sourceLabel: 'Needs your figure', tPerMonth: 0 };
-    });
+    }
+  }
   const demandTPerMonth = groups.reduce((s, g) => s + g.tPerMonth, 0);
 
   const winterStart = farm.housing_start ? maxISO(farm.housing_start, today) : null;
   const winterEnd = farm.turnout_date;
   let monthsToCover: number | null = null;
-  if (!farm.housing_start || !farm.turnout_date) missing.push('Housing and turnout dates');
+  const noStart = groups.some((g) => g.inFrom === null);
+  if (!farm.turnout_date || (noStart && !farm.housing_start)) missing.push('Housing and turnout dates');
   else if (winterStart && winterEnd && winterEnd > winterStart) monthsToCover = daysBetween(winterStart, winterEnd) / DAYS_PER_MONTH;
-  else monthsToCover = 0;
+  else monthsToCover = winterEnd ? 0 : null;
+  if (!farm.housing_start && farm.turnout_date && !noStart && winterEnd) monthsToCover = Math.max(0, daysBetween(today, winterEnd)) / DAYS_PER_MONTH;
 
   const reservePercent = input.reserveOverride ?? farm.forage_reserve_percent;
-  const needT = monthsToCover !== null ? demandTPerMonth * monthsToCover : null;
+  // Each group from the day it comes in (or today) to turnout: a group out at grass needs less
+  const needT = groups.length && groups.every((g) => g.months !== null) ? groups.reduce((t, g) => t + g.tPerMonth * (g.months ?? 0), 0) : (groups.length ? null : 0);
+  const outNoDate = input.groups.filter((g) => !g.archived && g.housed && g.at_grass && !g.housed_from && g.head_count > 0 && EATS_SILAGE(g.animal_class));
+  if (outNoDate.length) reasons.push(`${outNoDate.map((g) => g.name).join(', ')} out at grass with no date to come in: counted from today, so the plan errs short.`);
   const needWithReserveT = needT !== null ? needT * (1 + reservePercent / 100) : null;
   const balanceT = needWithReserveT !== null ? availableT - needWithReserveT : null;
   const monthsOfCover = demandTPerMonth > 0 ? availableT / demandTPerMonth : null;
@@ -208,13 +231,13 @@ export function forecastForage(input: {
   if (stores.some((s) => s.autoDensity?.basis === 'yard_test' && s.tonnes !== null)) reasons.push('A yard test gives a range: the plan counts the drier, lighter end so it never counts silage you may not have.');
   if (groups.some((g) => g.source === 'missing')) lower(2, 'Some groups have no usage figure.');
   if (groups.some((g) => g.source === 'benchmark')) lower(1, 'Uses published planning allowances. Your own farm usage is more accurate.');
-  if (monthsToCover === null) lower(2, 'Housing and turnout dates are not set.');
+  if (needT === null) lower(2, 'Housing and turnout dates are not set.');
   const confidence: Confidence = input.scenario ? 'scenario' : (['high', 'medium', 'low'] as const)[level];
 
   const inputs = {
     rule_version: FORAGE_RULE_VERSION, today, reservePercent,
     stores: stores.map((s) => [s.id, s.tonnes, s.basis]),
-    groups: groups.map((g) => [g.id, g.heads, g.tPerHeadMonth, g.source]),
+    groups: groups.map((g) => [g.id, g.heads, g.tPerHeadMonth, g.source, g.inFrom]),
     winter: [winterStart, winterEnd]
   };
   return {

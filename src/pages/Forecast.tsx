@@ -101,7 +101,7 @@ function ForageTab() {
         <p className="font-bold">In store</p>
         {f.stores.map((s) => <p key={s.id}>{s.name}: {s.tonnes !== null ? `${fmtNum(Math.round(s.tonnes))} t` : 'missing'} {s.explanation && `(${s.explanation})`}</p>)}
         <p className="pt-2 font-bold">Demand per month</p>
-        {f.groups.map((g) => <p key={g.id}>{g.name}: {g.heads} × {g.tPerHeadMonth ?? '?'} t = {fmtNum(Math.round(g.tPerMonth))} t. Source: {g.sourceLabel}</p>)}
+        {f.groups.map((g) => <p key={g.id}>{g.name}: {g.heads} × {g.tPerHeadMonth ?? '?'} t = {fmtNum(Math.round(g.tPerMonth))} t a month{g.months !== null ? ` for ${g.months.toFixed(1)} months (${g.inNow ? 'in now' : g.inFrom ? `in from ${fmtDay(g.inFrom)}` : 'no date to come in'})` : ''}. Source: {g.sourceLabel}</p>)}
         <p className="pt-2">Winter: {fmtDay(f.winterStart)} to {fmtDay(f.winterEnd)} ({f.monthsToCover !== null ? fmtNum(f.monthsToCover) : '?'} months) × {fmtNum(Math.round(f.demandTPerMonth))} t/month, plus {f.reservePercent}% reserve.</p>
         {f.reasons.map((r) => <p key={r} className="text-muted">{r}</p>)}
         {src && <p className="pt-2 text-sm">Published allowances: <a className="underline" href={src.url} target="_blank" rel="noreferrer">{src.publisher}, {src.title}</a>. Recheck your budget at housing: stock numbers, intakes and weather change.</p>}

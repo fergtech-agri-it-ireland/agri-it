@@ -59,7 +59,12 @@ export interface AnimalGroup {
   head_count: number;
   head_count_updated_at: string;
   forage_t_per_head_month: number | null;
+  /** On the winter silage plan (pigs, poultry and horses never are) */
   housed: boolean;
+  /** Out at grass right now (13 Oct 2026). Missing on older groups = in with the herd. */
+  at_grass?: boolean;
+  /** When this group comes in (or came in), if not with the farm's housing date */
+  housed_from?: ISODate | null;
   archived: boolean;
   sort_order: number;
 }

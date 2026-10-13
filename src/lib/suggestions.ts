@@ -159,27 +159,41 @@ const EATS_SILAGE = (c: string) => c !== 'pig' && c !== 'poultry' && c !== 'hors
 export function housingSuggestions(b: FarmBundle, today: ISODate): Suggestion[] {
   const out: Suggestion[] = [];
   const { housing_start: hs, turnout_date: to } = b.farm;
-  const live = b.groups.filter((g) => !g.archived && g.head_count > 0 && EATS_SILAGE(g.animal_class));
-  const inWinter = hs && hs <= today && (!to || today < to);
-  const outSeason = to && to <= today && (!hs || hs < to);
-  const move = inWinter ? live.filter((g) => !g.housed) : outSeason ? live.filter((g) => g.housed) : [];
-  if (!move.length) return out;
-  const key = `housing:${inWinter ? hs : to}:${inWinter ? 'in' : 'out'}`;
-  if (hidden(b.decisions ?? [], key, today)) return out;
-  const housed = !!inWinter;
-  const ids = move.map((g) => g.id);
-  out.push({
-    key, when: 'today', tone: 'info', canDecline: true,
-    title: housed ? `Housing started ${fmtDay(hs!)}: are these in?` : `Turnout was ${fmtDay(to!)}: are these out?`,
-    detail: move.map((g) => `${g.name} (${g.head_count})`).join(', '),
-    why: housed ? 'Housed groups count in your winter silage plan' : 'Groups out at grass come off your silage plan',
-    approve: {
-      label: housed ? 'Yes, mark them housed' : 'Yes, mark them out',
-      ops: ids.map((id) => ({ kind: 'update' as const, table: 'animal_groups', match: { id }, patch: { housed } })),
-      patch: (x) => ({ ...x, groups: x.groups.map((g) => (ids.includes(g.id) ? { ...g, housed } : g)) }),
-      saved: housed ? 'Marked housed. Your silage plan is updated' : 'Marked out at grass. Your silage plan is updated'
+  const live = b.groups.filter((g) => !g.archived && g.housed && g.head_count > 0 && EATS_SILAGE(g.animal_class));
+  // Groups out at grass whose day to come in has come (their own date, or the farm's housing date)
+  const due = live.filter((g) => g.at_grass && (g.housed_from ?? hs ?? '9999') <= today);
+  if (due.length) {
+    const key = `housing:${due.map((g) => `${g.id}@${g.housed_from ?? hs}`).join(',')}`;
+    if (!hidden(b.decisions ?? [], key, today)) {
+      const ids = due.map((g) => g.id);
+      out.push({
+        key, when: 'today', tone: 'info', canDecline: true,
+        title: due.length === 1 ? `Is ${due[0].name} in now?` : 'Are these in for the winter now?',
+        detail: due.map((g) => `${g.name} (${g.head_count})`).join(', '),
+        why: `${due.length === 1 ? 'Its' : 'Their'} day to come in was ${fmtDay(due.map((g) => g.housed_from ?? hs!).sort()[0])}. Your silage plan counts them from the day they're in`,
+        approve: {
+          label: due.length === 1 ? 'Yes, in today' : 'Yes, all in today',
+          ops: ids.map((id) => ({ kind: 'update' as const, table: 'animal_groups', match: { id }, patch: { at_grass: false, housed_from: today } })),
+          patch: (x) => ({ ...x, groups: x.groups.map((g) => (ids.includes(g.id) ? { ...g, at_grass: false, housed_from: today } : g)) }),
+          saved: 'Marked in. Your silage plan is updated'
+        },
+        to: { label: 'Not yet: set a date', href: '/farm/groups' }
+      });
     }
-  });
+  }
+  // Winter over: next winter's dates
+  if (to && to < today && (!hs || hs < to)) {
+    const key = `winter-dates:${to}`;
+    if (!hidden(b.decisions ?? [], key, today)) {
+      out.push({
+        key, when: 'later', tone: 'info', canDecline: true,
+        title: 'Set next winter\'s dates',
+        detail: `Turnout was ${fmtDay(to)}. Put in when housing starts next and when you expect to let out, so the silage plan looks ahead.`,
+        why: 'Your winter dates are in the past',
+        to: { label: 'Set dates', href: '/settings' }
+      });
+    }
+  }
   return out;
 }
 

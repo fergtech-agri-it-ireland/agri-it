@@ -34,6 +34,17 @@ Most Irish farmers never send silage for testing, so a blank is no use.
 - **Acres cut** still needs the farmer's expected yield: no published typical yield per acre was
   found that would hold up (yields vary up to 50% between fields).
 
+### 1c. Key dates at sign-up, and who is in or out (rule `forage-budget@1.2`)
+- Sign-up has a **Key dates** step (after the animals, skippable): when animals come in for the
+  winter, expected turnout, each group **In now** or **Out at grass** (with an optional date to come
+  in), and the first calf due for dairy and suckler farms (which sets up the calving plan).
+- The winter plan now counts **each group from the day it comes in** to turnout, not every group
+  from the farm's housing date. Out at grass with no date: counted from today, so the plan errs short.
+- Each group on Animals has the same In now / Out at grass control. When a group's day to come in
+  arrives, Ready to approve asks "Is it in now?". After turnout it asks for next winter's dates.
+- `animal_groups.at_grass`, `housed_from` (migration `20261013000300_at_grass.sql`); older groups
+  read as in with the herd, exactly as before.
+
 ### 2. Ready for you to approve (`src/lib/suggestions.ts`, rule `suggestions@1.0`)
 A card near the top of the dashboard. Approve does it; Not now hides it for a week; No hides it
 for good (`suggestion_decisions`). Calf tagging and registration can't be turned down.

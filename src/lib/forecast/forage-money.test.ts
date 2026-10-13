@@ -95,3 +95,28 @@ describe('money', () => {
     expect(p.missing.find((m) => m.id === 'milk')?.text).toMatch(/3 months/);
   });
 });
+
+describe('each group counts from the day it comes in (13 Oct 2026)', () => {
+  const base = { farm, stores: [store({ method: 'measured_tonnes', measured_tonnes: 1000 })], benchmarks: bench, evidence: [], today: '2026-10-13' };
+  const months = (a: string, b: string) => (Date.parse(b) - Date.parse(a)) / 86_400_000 / 30.4;
+  it('with the herd: from the farm housing date', () => {
+    const f = forecastForage({ ...base, groups: [grp({})] });
+    expect(f.needT).toBeCloseTo(160 * months('2026-11-01', '2027-03-01'));
+    expect(f.groups[0]).toMatchObject({ inFrom: '2026-11-01', inNow: false });
+  });
+  it('a group already in counts from today; one coming in late counts from its own date', () => {
+    const f = forecastForage({ ...base, groups: [grp({ housed_from: '2026-10-01' }), grp({ id: 'w', name: 'Weanlings', animal_class: 'weanling', head_count: 30, at_grass: true, housed_from: '2026-12-15' })] });
+    expect(f.groups[0]).toMatchObject({ inNow: true });
+    expect(f.needT).toBeCloseTo(160 * months('2026-10-13', '2027-03-01') + 21 * months('2026-12-15', '2027-03-01'));
+  });
+  it('out at grass with no date: counted from today, and the plan says so', () => {
+    const f = forecastForage({ ...base, groups: [grp({ at_grass: true })] });
+    expect(f.needT).toBeCloseTo(160 * months('2026-10-13', '2027-03-01'));
+    expect(f.reasons.join(' ')).toContain('out at grass with no date');
+  });
+  it('no farm housing date is fine when every group has its own', () => {
+    const f = forecastForage({ ...base, farm: { ...farm, housing_start: null }, groups: [grp({ housed_from: '2026-11-20' })] });
+    expect(f.needT).toBeCloseTo(160 * months('2026-11-20', '2027-03-01'));
+    expect(f.missing).not.toContain('Housing and turnout dates');
+  });
+});

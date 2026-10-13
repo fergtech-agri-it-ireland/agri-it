@@ -7,12 +7,12 @@ import { useFarmCtx } from '../lib/data/farm';
 import { COMMON_CROPS, currentHarvest, grows, keepsAnimals, speciesOf, suggestedClasses } from '../lib/farmTypes';
 import { ANIMAL_CLASS_LABEL, COUNTIES_NI, COUNTIES_ROI, type AnimalClass, type FarmType, type Jurisdiction } from '../lib/types';
 import { Button, Chips, Field, NumberInput, SaveBar, TextInput } from '../components/ui';
-import { todayISO } from '../lib/format';
+import { fmtDay, todayISO, uuid } from '../lib/format';
 import { BreedField, ClassPicker, FarmTypePicker } from '../components/FarmPickers';
 import { Logo } from '../components/Logo';
 import { IS_ONLINE } from '../lib/env';
 
-type Step = 'farm' | 'types' | 'animals' | 'crops' | 'money';
+type Step = 'farm' | 'types' | 'animals' | 'winter' | 'crops' | 'money';
 interface AnimalRow { key: string; cls: AnimalClass; count: number; breed: string }
 
 /**
@@ -38,6 +38,12 @@ export default function Onboarding() {
   const [cash, setCash] = useState('');
   const [fyMonth, setFyMonth] = useState(1);
   const [lead, setLead] = useState('');
+  // Key dates (all optional): housing, turnout, who is in or out now, first calf due
+  const [housing, setHousing] = useState('');
+  const [turnout, setTurnout] = useState('');
+  const [where, setWhere] = useState<Record<string, 'in' | 'out'>>({});
+  const [inOn, setInOn] = useState<Record<string, string>>({});
+  const [firstCalf, setFirstCalf] = useState('');
 
   // Leave only once the new farm is in the farm list the app shell reads. Leaving straight
   // after the refetch raced the list update, and the shell sent new farmers back to step 1.
@@ -49,10 +55,11 @@ export default function Onboarding() {
   const steps = useMemo<Step[]>(() => {
     const s: Step[] = ['farm', 'types'];
     if (keepsAnimals(types) || types.length === 0) s.push('animals');
+    if (animals.some((a) => a.count > 0 && eatsSilage(a.cls))) s.push('winter');
     if (grows(types)) s.push('crops');
     s.push('money');
     return s;
-  }, [types]);
+  }, [types, animals]);
   const at = steps.indexOf(step);
   const last = at === steps.length - 1;
 
@@ -65,9 +72,18 @@ export default function Onboarding() {
     const offered = suggestedClasses(types).filter((c) => !keep.some((a) => a.cls === c)).map((c) => ({ key: c, cls: c, count: 0, breed: '' }));
     setAnimals([...keep, ...offered]);
   }
+  const winterGroups = animals.filter((a) => a.count > 0 && eatsSilage(a.cls));
+  const today = todayISO();
+  function toWinter() {
+    // A first guess the farmer changes: in from November to March, out at grass the rest of the year
+    const m = Number(today.slice(5, 7));
+    const guess: 'in' | 'out' = m >= 11 || m <= 3 ? 'in' : 'out';
+    setWhere(Object.fromEntries(winterGroups.map((a) => [a.key, where[a.key] ?? guess])));
+  }
   function next() {
     const n = steps[at + 1];
     if (n === 'animals') toAnimals();
+    if (n === 'winter') toWinter();
     setStep(n);
     window.scrollTo(0, 0);
   }
@@ -83,13 +99,33 @@ export default function Onboarding() {
     const farmPatch: Record<string, unknown> = { financial_year_start_month: fyMonth };
     if (cash !== '') { farmPatch.opening_cash_eur = Number(cash); farmPatch.opening_cash_date = todayISO(); }
     if (lead !== '') farmPatch.default_lead_time_days = Math.max(0, Math.min(60, Math.round(Number(lead))));
+    if (housing) farmPatch.housing_start = housing;
+    if (turnout) farmPatch.turnout_date = turnout;
     await supabase.from('farms').update(farmPatch).eq('id', farmId as string);
-    const groups = animals.filter((a) => a.count > 0).map((a, i) => ({
-      farm_id: farmId, name: ANIMAL_CLASS_LABEL[a.cls], animal_class: a.cls, breed: a.breed.trim() || null, head_count: a.count, sort_order: i,
-      // Pigs, poultry and horses are not part of the silage budget
-      housed: !['pigs', 'poultry', 'horses'].includes(speciesOf(a.cls))
-    }));
-    if (groups.length) await supabase.from('animal_groups').insert(groups);
+    const groups = animals.filter((a) => a.count > 0).map((a, i) => {
+      const w = where[a.key];
+      return {
+        id: uuid(), farm_id: farmId, name: ANIMAL_CLASS_LABEL[a.cls], animal_class: a.cls, breed: a.breed.trim() || null, head_count: a.count, sort_order: i,
+        // Pigs, poultry and horses are not part of the silage budget
+        housed: eatsSilage(a.cls),
+        // In now: from the housing date if it has passed, else today. Out at grass: the day they come in, if known
+        at_grass: eatsSilage(a.cls) && w === 'out',
+        housed_from: !eatsSilage(a.cls) || !w ? null : w === 'in' ? (housing && housing <= today ? housing : today) : (inOn[a.key] || null),
+        _cls: a.cls
+      };
+    });
+    if (groups.length) await supabase.from('animal_groups').insert(groups.map(({ _cls, ...g }) => g));
+    if (firstCalf) {
+      const herd = types.includes('dairy') ? 'dairy' : 'suckler';
+      const cows = groups.find((g) => g._cls === (herd === 'dairy' ? 'dairy_cow' : 'suckler_cow'));
+      const calves = groups.find((g) => g._cls === 'calf');
+      const m = Number(firstCalf.slice(5, 7));
+      await supabase.from('calving_seasons').insert({
+        id: uuid(), farm_id: farmId, label: `${m <= 5 ? 'Spring' : m <= 8 ? 'Summer' : 'Autumn'} calving ${firstCalf.slice(0, 4)}`, herd, calving_start: firstCalf,
+        calving_end: null, cows_due: cows?.head_count ?? null, thin_count: null, dry_weeks: 8, dry_weeks_thin: 10,
+        milking_group_id: herd === 'dairy' ? cows?.id ?? null : null, dry_group_id: null, calf_group_id: calves?.id ?? null, archived: false
+      });
+    }
     const harvest = currentHarvest();
     const cropRows = Object.entries(crops).filter(([, ac]) => ac > 0).map(([c, ac]) => ({ farm_id: farmId, name: c, acres: ac, harvest_year: harvest }));
     if (grows(types) && cropRows.length) await supabase.from('crops').insert(cropRows);
@@ -103,6 +139,7 @@ export default function Onboarding() {
     farm: ['Your farm', 'Used to find your nearest supplier branch. We never need GPS.'],
     types: ['What do you farm?', 'Pick everything you do. Dairy and sheep and tillage is fine. Not sure? Skip it for now.'],
     animals: ['Your animals', 'Rough numbers are fine. Add any kind of animal and its breed. You can change all of this later.'],
+    winter: ['Key dates', 'These make the winter silage plan accurate. Your best guess is fine, and every one can be skipped.'],
     crops: ['Your crops', `Acres for harvest ${currentHarvest()}. Skip any you don't grow.`],
     money: ['Money and feed', 'Two numbers that make the forecasts work from day one. Both can be left blank and added later.']
   };
@@ -174,6 +211,42 @@ export default function Onboarding() {
           </>
         )}
 
+        {step === 'winter' && (
+          <div className="space-y-5">
+            <Field label="When do animals come in for the winter?" htmlFor="housing" hint="Your usual housing date, or the day they came in this year.">
+              <input id="housing" type="date" className="input" value={housing} onChange={(e) => setHousing(e.target.value)} />
+            </Field>
+            <Field label="When do you expect to let them out in spring?" htmlFor="turnout" hint="Turnout. The silage has to last until then.">
+              <input id="turnout" type="date" className="input" value={turnout} min={housing || undefined} onChange={(e) => setTurnout(e.target.value)} />
+            </Field>
+            <fieldset className="space-y-3">
+              <legend className="label">Where are they today?</legend>
+              <div className="grid grid-cols-2 gap-2">
+                <Button variant="secondary" onClick={() => setWhere(Object.fromEntries(winterGroups.map((a) => [a.key, 'in'])))}>All in</Button>
+                <Button variant="secondary" onClick={() => setWhere(Object.fromEntries(winterGroups.map((a) => [a.key, 'out'])))}>All out at grass</Button>
+              </div>
+              {winterGroups.map((a) => (
+                <div key={a.key} className="space-y-2 rounded-2xl border border-line px-3.5 py-3">
+                  <Chips label={`${ANIMAL_CLASS_LABEL[a.cls]} (${a.count})`} columns={2} value={where[a.key] ?? null}
+                    onChange={(v) => setWhere({ ...where, [a.key]: v })}
+                    options={[{ value: 'in', label: 'In now' }, { value: 'out', label: 'Out at grass' }]} />
+                  {where[a.key] === 'out' && (
+                    <Field label="Coming in about (optional)" htmlFor={`in-${a.key}`} hint={inOn[a.key] ? 'Counted from that day.' : housing && housing > today ? `Blank = with the rest, ${fmtDay(housing)}.` : 'Blank = counted from today, so the plan errs short.'}>
+                      <input id={`in-${a.key}`} type="date" className="input" min={today} value={inOn[a.key] ?? ''} onChange={(e) => setInOn({ ...inOn, [a.key]: e.target.value })} />
+                    </Field>
+                  )}
+                </div>
+              ))}
+              <p className="hint">Animals out at grass aren't eating silage yet, so they're counted from the day they come in.</p>
+            </fieldset>
+            {(types.includes('dairy') || types.includes('suckler')) && (
+              <Field label="When is the first calf due? (optional)" htmlFor="calf" hint={`Agri-It lays out drying off, minerals, tags and the calving checklist from it. Only know when the bull went in? Add about 283 days (9 months and 10 days).`}>
+                <input id="calf" type="date" className="input" min={today} value={firstCalf} onChange={(e) => setFirstCalf(e.target.value)} />
+              </Field>
+            )}
+          </div>
+        )}
+
         {step === 'crops' && (
           <ul className="divide-y divide-line rounded-2xl border border-line">
             {COMMON_CROPS.map((c) => (
@@ -198,7 +271,7 @@ export default function Onboarding() {
       </div>
 
       <SaveBar>
-        {step === 'types' && types.length === 0 ? (
+        {(step === 'types' && types.length === 0) || (step === 'winter' && !housing && !turnout && !firstCalf) ? (
           <Button block variant="secondary" onClick={next}>Skip for now</Button>
         ) : !last ? (
           <Button block disabled={step === 'farm' && (!name.trim() || !county)} onClick={next}>Next</Button>
@@ -208,6 +281,11 @@ export default function Onboarding() {
       </SaveBar>
     </div>
   );
+}
+
+/** Pigs, poultry and horses are not part of the silage budget. */
+function eatsSilage(cls: AnimalClass) {
+  return !['pigs', 'poultry', 'horses'].includes(speciesOf(cls));
 }
 
 /** A compact −/+ with the number typed in between, for long lists of counts. */

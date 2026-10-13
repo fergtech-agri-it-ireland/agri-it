@@ -18,6 +18,8 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      # Agri-It Online still builds on every push, even while it isn't published (see pages job)
+      - run: npm run build:online
 
   database:
     # Applies every migration and the seed to a real local Supabase stack
@@ -59,6 +61,8 @@ jobs:
     concurrency:
       group: pages
       cancel-in-progress: false
+    env:
+      PUBLISH_ONLINE: 'false'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -72,11 +76,15 @@ jobs:
       - run: npm run build:pages
         env:
           PAGES_BASE: ${{ steps.pages.outputs.base_path }}/
-      # The online app (signed in to Supabase), served next to it at online/ as a separate app
+      # The online app (signed in to Supabase) at online/, as a separate app. NOT PUBLISHED for now
+      # (13 Oct 2026): Feargal is improving the phone app first. To publish it, set
+      # PUBLISH_ONLINE to 'true' below once the hosted database is set up (docs/HANDOVER.md, Start here).
       - run: npm run build:online
+        if: env.PUBLISH_ONLINE == 'true'
         env:
           PAGES_BASE: ${{ steps.pages.outputs.base_path }}/
       - run: cp -r dist-online dist-pages/online
+        if: env.PUBLISH_ONLINE == 'true'
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist-pages

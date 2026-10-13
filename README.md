@@ -6,9 +6,9 @@ Irish farm intelligence for day-to-day decisions: purchased feed run-out and reo
 
 Built from the *Agri-It MVP Overview* (September 2026). Mobile-first, installable, and works offline.
 
-**Two versions, installed as separate apps:**
-- **[Agri-It](https://fergtech-agri-it-ireland.github.io/agri-it/)** (phone app): no account; every record stays on the phone. Settings > Kept on this phone backs it up.
-- **[Agri-It Online](https://fergtech-agri-it-ireland.github.io/agri-it/online/)**: sign in; records are kept in your account (Supabase), shared with family, a farm worker (no money) or an adviser (read only), with a change history and reminders sent by the server even when the app is closed. **Move my phone data** copies the phone app's records in, keeping every date and whether bills are paid or owed; doing it twice adds nothing.
+**The app:** [Agri-It](https://fergtech-agri-it-ireland.github.io/agri-it/), installable from the browser. No account; every record stays on the phone, and Settings > Kept on this phone backs it up.
+
+**Coming later: Agri-It Online** (built and tested, not published yet). Sign in and records are kept in your account (Supabase), shared with family, a farm worker (no money) or an adviser (read only), with a change history and reminders sent by the server even when the app is closed. **Move my phone data** copies the phone app's records in, keeping every date and whether bills are paid or owed; doing it twice adds nothing.
 
 | Today | Tick-off checklist | Routines | Dawn mode |
 | --- | --- | --- | --- |
@@ -98,7 +98,7 @@ git push -u origin main
 
 ### Deploy
 
-CI publishes both versions to GitHub Pages from `main` once the app and database checks pass: `npm run build:pages` (phone app, `/agri-it/`) and `npm run build:online` (online app, `/agri-it/online/`, own manifest id and service worker scope). The online build reads `.env.online`, which holds only the public project URL and the publishable key. Never put a service key in the repo.
+CI publishes the phone app to GitHub Pages from `main` once the app and database checks pass (`npm run build:pages`, `/agri-it/`). The online app (`npm run build:online`, `/agri-it/online/`, own manifest id and service worker scope) is built on every push but only published when `PUBLISH_ONLINE` is `'true'` in the workflow; it is off until the hosted database is set up. The online build reads `.env.online`, which holds only the public project URL and the publishable key. Never put a service key in the repo.
 
 Hosted database (Supabase project `agri-it`):
 1. **Don't run `seed.sql` in production.** It creates the demo login. `python3 scripts/make_remote_setup.py` writes `supabase/remote/setup_agri_it.sql`, which applies the migrations, loads only the reference data (evidence sources, Teagasc allowances, supplier directory and branches) and runs the database checks in a rolled-back transaction. Paste it into the SQL editor once.

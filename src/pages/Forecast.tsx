@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { useFarmData } from '../lib/data/farm';
+import { useFarmData, useSave } from '../lib/data/farm';
 import { useDerived, silageWithFedOut } from '../lib/data/derived';
 import { forecastForage, silageSummary } from '../lib/forecast/forage';
-import { cashForecast90 } from '../lib/forecast/money';
+import { cashForecast90, reconcileCash } from '../lib/forecast/money';
 import { eur, fmtDay, fmtMonth, fmtNum, todayISO, cur } from '../lib/format';
 import { primaryRoute } from '../lib/suppliers';
-import { Card, ConfidenceBadge, Explain, LinkButton, Screen, Stepper, ToneIcon } from '../components/ui';
+import { Button, Card, ConfidenceBadge, Explain, LinkButton, NumberInput, Screen, Stepper, ToneIcon } from '../components/ui';
 import { FeedGauge } from '../components/FeedGauge';
 
 type Tab = 'feed' | 'forage' | 'cash';
@@ -133,21 +133,34 @@ function CashTab() {
     return (
       <Card>
         <p className="font-bold">Add your bank balance</p>
-        <p className="text-muted">Enter the balance on a recent date. Agri-It adds your recorded income and takes away costs from there.</p>
-        <LinkButton to="/settings" className="mt-3" variant="hivis">Add opening balance</LinkButton>
+        <p className="text-muted">Read the balance your bank shows now. Agri-It adds the income and takes away the bills you record from tomorrow on.</p>
+        <BankCheck recorded={null} open />
       </Card>
     );
   }
-  const plan = whatIf.incomePct || whatIf.costPct || whatIf.oneOff ? cashForecast90(b.farm, b.income, b.costs, b.budget, d.today, { incomePct: whatIf.incomePct, costPct: whatIf.costPct, oneOffEur: whatIf.oneOff, oneOffOn: whatIf.oneOffOn }) : d.cash90;
+  const plan = whatIf.incomePct || whatIf.costPct || whatIf.oneOff ? cashForecast90(b.farm, b.income, b.costs, b.budget, d.today, { incomePct: whatIf.incomePct, costPct: whatIf.costPct, oneOffEur: whatIf.oneOff, oneOffOn: whatIf.oneOffOn }, b.routines) : d.cash90;
   const max = Math.max(1, ...plan.rows.map((r) => Math.abs(r.closing)), Math.abs(d.cash.balance));
   return (
     <>
       <Card>
-        <p className="text-muted">Recorded cash now</p>
+        <p className="text-muted">Recorded cash</p>
         <p className="numeral text-5xl">{eur(d.cash.balance)}</p>
-        <p className="text-sm text-muted">From {eur(d.cash.opening)} on {fmtDay(d.cash.openingDate)}, counting bills when they are paid. Not a bank statement.</p>
+        <p className="text-sm text-muted">Not your bank balance: {eur(d.cash.opening)} from the bank {d.cash.openingDate > d.today ? 'at the end of today' : `on ${fmtDay(d.cash.openingDate)}`}, plus what you've recorded since. Bills count when they're paid.</p>
+        <p className={`mt-2 text-[0.9375rem] font-bold ${d.cashGaps.stale ? 'text-warn' : ''}`}>{checkedLine(d.cashGaps.daysSinceCheck)}</p>
         {d.money.owedTotal > 0 && <p className="mt-1 text-[0.9375rem]"><Link to="/money/bills" className="font-bold text-accent underline">{eur(d.money.owedTotal)} of bills owed</Link> come off in the forecast below, on their due dates{d.money.undatedCount || d.money.overdueCount ? ' (overdue or undated ones this month)' : ''}.</p>}
+        <BankCheck recorded={d.cash.balance} />
       </Card>
+      {d.cashGaps.gaps.filter((g) => g.id !== 'no-balance' && g.id !== 'stale').length > 0 && (
+        <Card className="border-2 border-warn/40">
+          <p className="font-bold">What the forecast can't see</p>
+          <p className="text-sm text-muted">Agri-It only knows what you record. These are likely missing, so the real figure may be lower or higher.</p>
+          <ul className="mt-2 space-y-2">
+            {d.cashGaps.gaps.filter((g) => g.id !== 'no-balance' && g.id !== 'stale').map((g) => (
+              <li key={g.id} className="text-[0.9375rem]">{g.text} {<Link to={g.to} className="font-bold text-accent underline">{g.fix}</Link>}</li>
+            ))}
+          </ul>
+        </Card>
+      )}
       <Card className={plan.scenario ? 'border-2 border-hivis' : ''}>
         <div className="mb-3 flex items-center justify-between gap-2">
           <p className="font-bold">Next 90 days</p>
@@ -161,8 +174,7 @@ function CashTab() {
                 <div className={`h-full ${r.closing < 0 ? 'bg-danger' : 'bg-field'}`} style={{ width: `${(Math.abs(r.closing) / max) * 100}%` }} />
               </div>
               <p className="text-sm text-muted">
-                Known: +{eur(r.knownIn)} / −{eur(r.knownOut)}{r.owedOut > 0 && <> (bills owed {eur(r.owedOut)})</>}
-                {(r.assumedIn > 0 || r.assumedOut > 0) && <>. Budget: +{eur(r.assumedIn)} / −{eur(r.assumedOut)}</>}
+                {flowLine(r) || 'Nothing known or budgeted'}
               </p>
             </div>
           ))}
@@ -181,9 +193,71 @@ function CashTab() {
         {plan.scenario && <button className="min-h-tap text-sm font-bold text-accent" onClick={() => setWhatIf(NO_WHAT_IF(d.today))}>Back to the forecast</button>}
       </Card>
       <Explain>
-        <p>Closing balance = recorded cash now + known future items + budget amounts for months where nothing is entered yet.</p>
+        <p>Closing balance = recorded cash + known future items (bills owed, entries with a later date) + your repeats (Routines) + budget amounts for anything not already entered.</p>
+        <p>Recorded cash is not a bank balance. Check it against the bank now and then: the difference is something not recorded, or not yet through the bank.</p>
         <p>Known items and budget assumptions are always shown separately.</p>
       </Explain>
     </>
   );
+}
+
+function checkedLine(days: number | null): string {
+  if (days === null) return 'Never checked against the bank.';
+  if (days === 0) return 'Checked against the bank today.';
+  return `Last checked against the bank ${days === 1 ? 'yesterday' : `${days} days ago`}.${days > 30 ? ' Check it again: anything not recorded since is missing.' : ''}`;
+}
+
+/**
+ * Check against the bank (review G02): the farmer types what the bank shows now. Agri-It
+ * keeps it as the balance at the end of today and says how far the recorded figure was out.
+ */
+function BankCheck({ recorded, open = false }: { recorded: number | null; open?: boolean }) {
+  const b = useFarmData();
+  const save = useSave();
+  const [editing, setEditing] = useState(open);
+  const [bank, setBank] = useState('');
+  const [result, setResult] = useState<string | null>(null);
+  const today = todayISO();
+  const go = async () => {
+    const r = reconcileCash(recorded, Number(bank), today);
+    const patch = { opening_cash_eur: r.opening_cash_eur, opening_cash_date: r.opening_cash_date };
+    const ok = await save([{ kind: 'update', table: 'farms', match: { id: b.farm.id }, patch }], { label: 'Bank balance saved', patch: (x) => ({ ...x, farm: { ...x.farm, ...patch } }) });
+    if (!ok) return;
+    setEditing(open);
+    setBank('');
+    const diff = r.difference;
+    setResult(diff === null ? 'Saved. Cash is tracked from here.'
+      : Math.abs(diff) < 1 ? 'Matches what you recorded.'
+      : diff > 0 ? `Your bank has ${eur(diff)} more than recorded: income not recorded, or a bill recorded as paid that hasn't gone through yet.`
+      : `Your bank has ${eur(-diff)} less than recorded: a payment not recorded, or income recorded that hasn't arrived yet.`);
+  };
+  if (!editing) {
+    return (
+      <>
+        <Button variant="secondary" block className="mt-3" onClick={() => { setEditing(true); setResult(null); }}>Check against the bank</Button>
+        {result && <p className="mt-2 font-bold" role="status">{result}</p>}
+      </>
+    );
+  }
+  return (
+    <div className="mt-3 space-y-2">
+      <NumberInput label="What your bank shows now" value={bank} onChange={setBank} unit={cur()} autoFocus={!open}
+        hint="Anything you've already recorded for today is taken as in this figure." />
+      <div className={open ? '' : 'grid grid-cols-2 gap-2'}>
+        {!open && <Button variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>}
+        <Button variant="primary" block={open} disabled={bank === '' || Number.isNaN(Number(bank))} onClick={go}>Save balance</Button>
+      </div>
+      {result && <p className="font-bold" role="status">{result}</p>}
+    </div>
+  );
+}
+
+/** "Known: +€X / −€Y (bills owed €Z). Repeats: ... Budget: ..." leaving out parts that are nothing. */
+function flowLine(r: { knownIn: number; knownOut: number; owedOut: number; regularIn: number; regularOut: number; assumedIn: number; assumedOut: number }): string {
+  const pair = (i: number, o: number) => [i > 0 ? `+${eur(i)}` : '', o > 0 ? `−\u2060${eur(o)}` : ''].filter(Boolean).join(' / ');
+  const parts: string[] = [];
+  if (r.knownIn > 0 || r.knownOut > 0) parts.push(`Known: ${pair(r.knownIn, r.knownOut)}${r.owedOut > 0 ? ` (bills owed ${eur(r.owedOut)})` : ''}`);
+  if (r.regularIn > 0 || r.regularOut > 0) parts.push(`Repeats: ${pair(r.regularIn, r.regularOut)}`);
+  if (r.assumedIn > 0 || r.assumedOut > 0) parts.push(`Budget: ${pair(r.assumedIn, r.assumedOut)}`);
+  return parts.join('. ');
 }

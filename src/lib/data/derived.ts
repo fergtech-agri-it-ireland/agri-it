@@ -3,7 +3,7 @@ import { IN_BROWSER, key } from '../env';
 import type { FarmBundle, ISODate } from '../types';
 import { forecastFeed, type FeedForecast } from '../forecast/feed';
 import { forecastForage, silageSummary } from '../forecast/forage';
-import { budgetAlerts, budgetVsActual, cashForecast90, cashPosition, yearEndPack } from '../forecast/money';
+import { budgetAlerts, budgetVsActual, cashCompleteness, cashForecast90, cashPosition, yearEndPack } from '../forecast/money';
 import { pricePoints } from '../forecast/prices';
 import { moneyStates, possibleDuplicateDeliveries } from '../forecast/bills';
 import { buildChecklist } from '../routines';
@@ -72,7 +72,8 @@ export function derive(b: FarmBundle, today: ISODate) {
     const feed = feedForecasts(b, today);
     const forage = forecastForage({ farm: b.farm, stores: silageWithFedOut(b), groups: b.groups, benchmarks: b.benchmarks, evidence: b.evidence, today });
     const cash = cashPosition(b.farm, b.income, b.costs, today);
-    const cash90 = cashForecast90(b.farm, b.income, b.costs, b.budget, today);
+    const cash90 = cashForecast90(b.farm, b.income, b.costs, b.budget, today, undefined, b.routines);
+    const cashGaps = cashCompleteness(b.farm, b, today);
     const budget = budgetVsActual(b.farm, b, today);
     const yearEnd = yearEndPack(b, today);
 
@@ -151,7 +152,8 @@ export function derive(b: FarmBundle, today: ISODate) {
     const ss = silageSummary(forage);
     if (ss && ss.shortOfWinterT > 0) p.push({ id: 'forage', tone: 'urgent', when: 'soon', title: 'Silage short for the winter', detail: ss.line, to: '/forecast?tab=forage' });
     else if (ss && ss.shortOfTargetT > 0) p.push({ id: 'forage', tone: 'warn', when: 'soon', title: 'Winter silage is tight', detail: ss.line, to: '/forecast?tab=forage' });
-    if (cash90.lowest && cash && cash90.lowest.closing < 0) p.push({ id: 'cash', tone: 'urgent', when: 'soon', title: 'Cash may go overdrawn', detail: `Lowest point about ${eur(cash90.lowest.closing)}, counting the bills you owe`, to: '/forecast?tab=cash' });
+    if (cash && cashGaps.stale) p.push({ id: 'cash-check', tone: 'info', when: 'later', title: 'Check your cash against the bank', detail: `Last checked ${cashGaps.daysSinceCheck} days ago. Recorded cash is not a bank balance`, to: '/forecast?tab=cash' });
+    if (cash90.lowest && cash && cash90.lowest.closing < 0) p.push({ id: 'cash', tone: 'urgent', when: 'soon', title: 'Cash may go overdrawn', detail: `Lowest point about ${eur(cash90.lowest.closing)}, from recorded cash, bills owed, repeats and budget`, to: '/forecast?tab=cash' });
     // Budget variance: only the year-so-far and this-month alerts reach Today; last month's note stays on Money
     const alerts = budgetAlerts(b.farm, b, today);
     for (const a of alerts.filter((x) => x.tone === 'warn')) {
@@ -173,7 +175,7 @@ export function derive(b: FarmBundle, today: ISODate) {
     const drafted = new Set(suggestions.map((x) => x.key.startsWith('order:') ? `feed-${x.key.split(':')[1]}` : x.key.startsWith('heads:') ? 'heads' : ''));
     for (let i = p.length - 1; i >= 0; i--) if (drafted.has(p[i].id)) p.splice(i, 1);
     p.sort((a, c) => whenRank[a.when] - whenRank[c.when] || toneRank[a.tone] - toneRank[c.tone]);
-    return { today, feed, forage, cash, cash90, budget, budgetAlerts: alerts, prices: pricePoints(b), yearEnd, money, priorities: p, suggestions, computedAt: new Date() };
+    return { today, feed, forage, cash, cash90, cashGaps, budget, budgetAlerts: alerts, prices: pricePoints(b), yearEnd, money, priorities: p, suggestions, computedAt: new Date() };
   }
 }
 

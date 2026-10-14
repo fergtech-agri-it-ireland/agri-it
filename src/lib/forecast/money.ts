@@ -7,6 +7,8 @@ import type { BudgetLine, Cost, CostCategory, Farm, FarmBundle, ISODate, Income,
 import { COST_LABEL, INCOME_LABEL, NON_OPERATING } from '../types';
 import { addDays, cur, daysBetween, eur, getCurrency, monthKey, toISO } from '../format';
 import { owedBills, paidOn, payeeOf } from './bills';
+import { dueDates } from '../routines';
+import type { Routine } from '../types';
 
 /** 1.1: cash moves when a bill is paid, not when it is incurred; owed bills are known future outflows. */
 export const CASH_RULE_VERSION = 'cash-flow@1.1';
@@ -60,6 +62,9 @@ export interface CashForecastMonth {
   knownOut: number;
   /** Part of knownOut that is bills still owed (due in this month, or overdue / undated in the first month). */
   owedOut: number;
+  /** Repeating income and bills the farmer set up (Routines), on their due days. */
+  regularIn: number;
+  regularOut: number;
   assumedIn: number;
   assumedOut: number;
   closing: number;
@@ -72,7 +77,7 @@ export interface CashForecastMonth {
  * "Assumed" = the farmer's own budget for months with no known entries of that kind.
  * The two are always reported separately (spec 10).
  */
-export function cashForecast90(farm: Farm, income: Income[], costs: Cost[], budget: BudgetLine[], today: ISODate, scenario?: CashScenario) {
+export function cashForecast90(farm: Farm, income: Income[], costs: Cost[], budget: BudgetLine[], today: ISODate, scenario?: CashScenario, routines: Routine[] = []) {
   const pos = cashPosition(farm, income, costs, today);
   const end = addDays(today, 90);
   const months = monthsBetween(monthKey(today), monthKey(end));
@@ -81,6 +86,9 @@ export function cashForecast90(farm: Farm, income: Income[], costs: Cost[], budg
   const owed = costs.filter((c) => paidOn(c) === null);
   const owedWhen = (c: Cost) => (c.due_on && c.due_on > today ? c.due_on : addDays(today, 1));
   const sc = scenario ?? { incomePct: 0, costPct: 0, oneOffEur: 0, oneOffOn: null };
+  // Repeats with an amount: each due day in the window (review G02: a complete forecast needs recurring items)
+  const repeats = routines.filter((r) => r.active && (r.kind === 'income' || r.kind === 'expense') && Number(r.amount) > 0)
+    .flatMap((r) => dueDates(r, addDays(today, 1), end).map((on) => ({ kind: r.kind, category: r.category, on, amount: Number(r.amount) })));
   const rows: CashForecastMonth[] = months.map((m) => {
     const inRange = (d: ISODate) => monthKey(d) === m && d > today && d <= end;
     const knownIn = income.filter((i) => inRange(i.occurred_on)).reduce((s, i) => s + Number(i.amount_eur), 0) * (1 + sc.incomePct / 100);
@@ -88,8 +96,13 @@ export function cashForecast90(farm: Farm, income: Income[], costs: Cost[], budg
     const scheduled = costs.filter((c) => { const p = paidOn(c); return p !== null && inRange(p); }).reduce((s, c) => s + Number(c.amount_eur), 0);
     const oneOff = sc.oneOffEur && sc.oneOffOn && inRange(sc.oneOffOn) ? sc.oneOffEur : 0;
     const knownOut = (scheduled + owedOut) * (1 + sc.costPct / 100) + oneOff;
+    const rep = repeats.filter((x) => monthKey(x.on) === m);
+    const regularIn = rep.filter((x) => x.kind === 'income').reduce((t, x) => t + x.amount, 0) * (1 + sc.incomePct / 100);
+    const regularOut = rep.filter((x) => x.kind === 'expense').reduce((t, x) => t + x.amount, 0) * (1 + sc.costPct / 100);
+    // A budget line for something a repeat already covers this month is not counted twice
+    const covered = new Set(rep.map((x) => `${x.kind === 'income' ? 'income' : 'cost'}:${x.category}`));
     const [y, mm] = m.split('-').map(Number);
-    const monthLines = budget.filter((b) => b.year === y && b.month === mm);
+    const monthLines = budget.filter((b) => b.year === y && b.month === mm && !covered.has(`${b.kind}:${b.category}`));
     // Pro-rate the current and final partial months by the days remaining in-window
     const monthStart = `${m}-01`;
     const monthEnd = addDays(toISO(new Date(Date.UTC(y, mm, 1))), -1);
@@ -99,8 +112,8 @@ export function cashForecast90(farm: Farm, income: Income[], costs: Cost[], budg
     // Owed bills don't stand in for the budget: they are last month's spending, not this month's
     const assumedIn = knownIn > 0 ? 0 : monthLines.filter((b) => b.kind === 'income').reduce((s, b) => s + Number(b.amount_eur), 0) * frac * (1 + sc.incomePct / 100);
     const assumedOut = scheduled > 0 ? 0 : monthLines.filter((b) => b.kind === 'cost').reduce((s, b) => s + Number(b.amount_eur), 0) * frac * (1 + sc.costPct / 100);
-    running += knownIn - knownOut + assumedIn - assumedOut;
-    return { month: m, knownIn, knownOut, owedOut, assumedIn, assumedOut, closing: running };
+    running += knownIn - knownOut + regularIn - regularOut + assumedIn - assumedOut;
+    return { month: m, knownIn, knownOut, owedOut, regularIn, regularOut, assumedIn, assumedOut, closing: running };
   });
   // Only report a low point if the balance actually dips below where it is today
   const minRow = rows.reduce<CashForecastMonth | null>((lo, r) => (!lo || r.closing < lo.closing ? r : lo), null);
@@ -421,4 +434,88 @@ export function ledgerCsv(pack: ReturnType<typeof yearEndPack>): string {
   const totalIn = pack.ledger.filter((r) => r.kind === 'income').reduce((s, r) => s + r.amount, 0);
   const totalOut = pack.ledger.filter((r) => r.kind === 'cost').reduce((s, r) => s + r.amount, 0);
   return [head, ...lines, [], ['', 'Total in', '', '', '', totalIn.toFixed(2)], ['', 'Total out', '', '', '', totalOut.toFixed(2)]].map(csvRow).join('\n');
+}
+
+// ---------------------------------------------------------------------------
+// How complete is the cash picture? (advisory review G02, gate G7)
+// Recorded cash is the farmer's bank balance on a date plus what they have recorded
+// since. It is not a bank balance. Say when it was last checked against the bank and
+// what the 90-day forecast cannot know about, so a gap is never mistaken for money.
+// ---------------------------------------------------------------------------
+export interface CashGap { id: string; text: string; fix: string; to: string }
+export interface CashCompleteness {
+  /** The day the balance was last taken from the bank, or null if never. */
+  checkedOn: ISODate | null;
+  daysSinceCheck: number | null;
+  /** More than 30 days since the bank balance was checked. */
+  stale: boolean;
+  /** Things the forecast leaves out, most important first. Empty = nothing obvious missing. */
+  gaps: CashGap[];
+}
+const STALE_DAYS = 30;
+
+export function cashCompleteness(farm: Farm, bundle: Pick<FarmBundle, 'income' | 'costs' | 'budget' | 'routines'>, today: ISODate): CashCompleteness {
+  const checkedOn = farm.opening_cash_eur !== null && farm.opening_cash_date ? farm.opening_cash_date : null;
+  // A balance taken "now" is stored as the start of tomorrow (see reconcileCash), so it counts as checked today
+  const daysSinceCheck = checkedOn ? Math.max(0, daysBetween(checkedOn, today)) : null;
+  const stale = daysSinceCheck !== null && daysSinceCheck > STALE_DAYS;
+  const gaps: CashGap[] = [];
+  if (!checkedOn) gaps.push({ id: 'no-balance', text: 'No bank balance entered, so there is no cash figure yet.', fix: 'Check against the bank', to: '/forecast?tab=cash' });
+  else if (stale) gaps.push({ id: 'stale', text: `Last checked against the bank ${daysSinceCheck} days ago. Anything not recorded since is missing.`, fix: 'Check against the bank', to: '/forecast?tab=cash' });
+
+  const end = addDays(today, 90);
+  const hasBudget = bundle.budget.length > 0;
+  if (!hasBudget) gaps.push({ id: 'no-budget', text: 'No budget, so regular income and bills you have not entered yet (milk, wages, fertiliser) are not in the forecast.', fix: 'Add a budget', to: '/money/budget' });
+
+  // Money that came in or went out regularly in the last 90 days, with nothing expected in the next 90
+  const since = addDays(today, -90);
+  const expectedIncome = new Set<string>([
+    ...bundle.income.filter((i) => i.occurred_on > today && i.occurred_on <= end).map((i) => i.income_type),
+    ...bundle.budget.filter((l) => l.kind === 'income' && budgetInWindow(l, today, end)).map((l) => l.category),
+    ...(bundle.routines ?? []).filter((r) => r.active && r.kind === 'income' && r.category).map((r) => String(r.category))
+  ]);
+  const expectedCost = new Set<string>([
+    ...bundle.costs.filter((c) => { const p = paidOn(c); return (p === null) || (p > today && p <= end); }).map((c) => c.category),
+    ...bundle.budget.filter((l) => l.kind === 'cost' && budgetInWindow(l, today, end)).map((l) => l.category),
+    ...(bundle.routines ?? []).filter((r) => r.active && r.kind === 'expense' && r.category).map((r) => String(r.category))
+  ]);
+  const regular = <T extends string>(rows: { key: T; on: ISODate; amount: number }[]) => {
+    const by = new Map<T, { n: number; total: number; months: Set<string> }>();
+    for (const r of rows) {
+      if (r.on < since || r.on > today) continue;
+      const x = by.get(r.key) ?? { n: 0, total: 0, months: new Set<string>() };
+      x.n++; x.total += r.amount; x.months.add(monthKey(r.on));
+      by.set(r.key, x);
+    }
+    // At least two months out of the last three: it is a regular item
+    return [...by.entries()].filter(([, x]) => x.months.size >= 2).sort((a, b) => b[1].total - a[1].total);
+  };
+  for (const [type, x] of regular(bundle.income.map((i) => ({ key: i.income_type, on: i.occurred_on, amount: Number(i.amount_eur) })))) {
+    if (expectedIncome.has(type)) continue;
+    gaps.push({ id: `income-${type}`, text: `${INCOME_LABEL[type]} came in ${x.n} times in the last 3 months (${eur(x.total)}), but none is expected in the next 90 days.`, fix: 'Add to the budget', to: '/money/budget' });
+  }
+  const regularCosts = regular(bundle.costs.filter((c) => !NON_OPERATING.includes(c.category) || c.category === 'loan_repayment')
+    .map((c) => ({ key: c.category, on: c.occurred_on, amount: Number(c.amount_eur) })))
+    .filter(([cat]) => !expectedCost.has(cat)).slice(0, 3);
+  for (const [cat, x] of regularCosts) {
+    gaps.push({ id: `cost-${cat}`, text: `${COST_LABEL[cat]} bills came ${x.n} times in the last 3 months (${eur(x.total)}), but none are expected in the next 90 days.`, fix: 'Add to the budget', to: '/money/budget' });
+  }
+  const undated = bundle.costs.filter((c) => paidOn(c) === null && !c.due_on);
+  if (undated.length) gaps.push({ id: 'undated', text: `${undated.length} bill${undated.length > 1 ? 's' : ''} owed with no due date, counted as paid tomorrow.`, fix: 'Add due dates', to: '/money/bills' });
+  return { checkedOn, daysSinceCheck, stale, gaps };
+}
+function budgetInWindow(l: BudgetLine, today: ISODate, end: ISODate): boolean {
+  if (l.month === null || l.month === undefined) return false; // annual lines are not in the 90-day forecast
+  const key = `${l.year}-${String(l.month).padStart(2, '0')}`;
+  return key >= monthKey(today) && key <= monthKey(end);
+}
+
+/**
+ * Check against the bank: the farmer reads the balance their bank shows now. It is kept as the
+ * balance at the end of today, so anything already recorded for today is taken as in it, and
+ * only what is recorded from tomorrow on is added. Returns the new opening date and how far the
+ * recorded figure was out (bank − recorded): positive = more in the bank than recorded.
+ */
+export function reconcileCash(recordedBalance: number | null, bankBalance: number, today: ISODate) {
+  return { opening_cash_eur: bankBalance, opening_cash_date: addDays(today, 1), difference: recordedBalance === null ? null : bankBalance - recordedBalance };
 }

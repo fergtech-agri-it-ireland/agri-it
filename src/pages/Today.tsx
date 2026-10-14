@@ -352,7 +352,7 @@ export default function Today() {
             <Mini title="Silage" value={silage.value === '?' ? 'Add details' : silage.value} sub={silage.value === '?' ? 'Is there enough for winter?' : `of winter. ${silage.status}`}
               fraction={silage.fraction} tone={silage.tone === 'ok' ? 'silage' : toneOf(silage.tone)} to={silage.value === '?' ? '/farm/silage' : '/progress?tab=forage'} />
           )}
-          {money && <Mini title="Cash" value={d.cash ? eur(d.cash.balance) : 'Add balance'} sub={d.cash ? cash.status : 'Unlocks the cash forecast'}
+          {money && <Mini title="Cash" value={d.cash ? eur(d.cash.balance) : 'Add balance'} sub={d.cash ? (d.cashGaps.stale ? 'Recorded. Check bank' : `Recorded. ${cash.status}`) : 'Unlocks the cash forecast'}
             fraction={cash.fraction} tone={cash.tone === 'ok' ? 'money' : toneOf(cash.tone)} to={d.cash ? '/progress?tab=cash' : '/settings'} />}
         </div>
 

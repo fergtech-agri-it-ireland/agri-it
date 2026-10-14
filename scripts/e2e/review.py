@@ -44,11 +44,11 @@ with sync_playwright() as p:
         # 2. Money: cash, owed, on order kept apart
         go(pg, '#/money')
         t = main_text(pg)
-        check('Money shows Cash now, To pay, On order', all(x in t for x in ['Cash now', 'To pay', 'On order']), t[:500])
+        check('Money shows Recorded cash, To pay, On order', all(x in t for x in ['Recorded cash', 'To pay', 'On order']), t[:500])
         check('To pay is the nut delivery plus the vet bill (€3,805)', '€3,805' in t, t[:500])
         check('On order is the 1 t of calf ration at the agreed €520/t', '€520' in t, t[:500])
         check('Loans kept out of running costs', 'on loans and capital' in t, t[:900])
-        cash_before = re.search(r'Cash now\s*€([\d,]+)', t)
+        cash_before = re.search(r'Recorded cash\s*€([\d,]+)', t)
 
         # 3. Bills: pay the overdue vet bill, cash moves once
         go(pg, '#/money/bills')
@@ -62,7 +62,7 @@ with sync_playwright() as p:
         check('Paid bill shows under paid in the last 30 days', 'Paid in the last 30 days' in main_text(pg))
         go(pg, '#/money')
         t = main_text(pg)
-        cash_after = re.search(r'Cash now\s*€([\d,]+)', t)
+        cash_after = re.search(r'Recorded cash\s*€([\d,]+)', t)
         if cash_before and cash_after:
             before = int(cash_before.group(1).replace(',', '')); after = int(cash_after.group(1).replace(',', ''))
             check('Cash down by exactly the bill (€685)', before - after == 685, f'{before} -> {after}')

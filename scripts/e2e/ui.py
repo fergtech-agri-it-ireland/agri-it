@@ -50,7 +50,8 @@ with sync_playwright() as p:
     body = pg.locator('main').inner_text()
     check('Silage card 87% and 133 t short', '87%' in body and '133 t short' in body)
     # €130,060: the last nut delivery (€3,120) and a vet bill (€685) are owed, so not out of cash yet
-    check('Cash card with balance, OK 90 days', '€130,060' in body and 'OK 90 days' in body)
+    # The demo balance was taken on 1 January, so the card asks for a bank check (review G02)
+    check('Cash card: recorded balance, asks to check against the bank', '€130,060' in body and 'Recorded. Check bank' in body)
     check("Today's diary summary", "Today's diary" in body and '0 of 3 ticked off' in body)
     check('Needs your attention lists priorities, overdue first', 'Needs your attention' in body and 'Silage short for the winter' in body and body.upper().index('OVERDUE') < body.upper().index('COMING UP'))
     check('Dairy farm sees the milk card', 'Last cheque' in body and 'Per litre' in body)

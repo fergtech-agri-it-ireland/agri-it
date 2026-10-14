@@ -1,0 +1,22 @@
+{
+ "source": "Central Statistics Office, Agricultural Price Indices",
+ "licence": "CC BY 4.0",
+ "note": "National average prices paid by farmers, euro per tonne, excluding VAT. Not a quote from any supplier.",
+ "fetched_on": "2026-10-14",
+ "tables": {
+  "AJM08": {
+   "kind": "feed",
+   "title": "Feed Stuff Price (Euro per Tonne)",
+   "url": "https://data.cso.ie/table/AJM08",
+   "latest_month": null,
+   "items": {}
+  },
+  "AJM09": {
+   "kind": "fertiliser",
+   "title": "Fertiliser Price (Euro per Tonne)",
+   "url": "https://data.cso.ie/table/AJM09",
+   "latest_month": null,
+   "items": {}
+  }
+ }
+}

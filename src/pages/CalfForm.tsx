@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { StatutoryNote } from '../components/StatutoryNote';
 import { useNavigate } from 'react-router-dom';
 import { useFarmData, useFarmCtx, useSave } from '../lib/data/farm';
 import { calfDeadlines } from '../lib/season';
@@ -74,7 +75,7 @@ export default function CalfForm() {
       </Card>
       <Card className="space-y-1" as="div">
         <p className="font-bold" data-testid="calf-deadlines">Tag by {fmtDay(dl.tagBy)}. Register by {fmtDay(dl.registerBy)}.</p>
-        <p className="hint">{b.farm.jurisdiction === 'NI' ? 'NI: dairy calves within 36 hours of birth, others within 20 days; notify within 27 days.' : 'Calves must be tagged before 20 days of age and registered within 27 days.'} Agri-It reminds you until you mark them done. It is not the official register.</p>
+        <StatutoryNote rules={[dl.rules.tag, dl.rules.register]} />
         {cg && <p className="text-[0.9375rem]">{cg.name} goes up by {n}.{cowMove ? ` One cow back into ${milk!.name}, so her feeding plan counts again.` : ''}</p>}
         {!season && <p className="text-[0.9375rem] text-muted">No calving season covers this date. It's still recorded with its deadlines.</p>}
       </Card>

@@ -154,3 +154,36 @@ describe('Gate G5: no delivery date is ever guessed', () => {
     expect(order.row.effective_on).toBe(today);
   });
 });
+
+describe('Gate G5 / review G06: statutory deadlines are jurisdictional, dated and source backed', () => {
+  it('every rule names its official source, the day it was checked, and is not past its recheck', async () => {
+    const { STATUTORY_RULES, ruleFor } = await import('./deadlines');
+    const official = /^https:\/\/(www\.)?(irishstatutebook\.ie|gov\.ie|daera-ni\.gov\.uk)\//;
+    for (const r of STATUTORY_RULES) {
+      expect(r.source.url, `${r.jurisdiction} ${r.id}`).toMatch(official);
+      expect(r.checkedOn <= today).toBe(true);
+      // The build fails 30 days after a rule's recheck date, so it can never quietly go stale.
+      // To fix: check the source, then update checkedOn and reviewBy (or add a new version) in lib/deadlines.ts.
+      expect(addDays(r.reviewBy, 30) >= today, `${r.jurisdiction} ${r.id} is overdue a recheck (review by ${r.reviewBy})`).toBe(true);
+    }
+    for (const j of ['ROI', 'NI'] as const) for (const herd of ['dairy', 'other'] as const) {
+      expect(ruleFor('calf_tag', j, herd, today)).not.toBeNull();
+      expect(ruleFor('calf_register', j, herd, today)).not.toBeNull();
+    }
+    expect(ruleFor('calf_tag', 'NI', 'dairy', today)!.hours).toBe(36);
+    expect(ruleFor('calf_tag', 'NI', 'other', today)!.days).toBe(20);
+    expect(ruleFor('calf_tag', 'ROI', 'dairy', today)!.officialSystem).toMatch(/AgFood/);
+  });
+
+  it('a rule that changes keeps the old rule for births before the change', async () => {
+    const { STATUTORY_RULES, ruleFor } = await import('./deadlines');
+    const old = ruleFor('calf_register', 'ROI', 'dairy', today)!;
+    STATUTORY_RULES.push({ ...old, version: 2, days: 20, effectiveFrom: D(10) });
+    try {
+      expect(ruleFor('calf_register', 'ROI', 'dairy', D(9))!.days).toBe(27);
+      expect(ruleFor('calf_register', 'ROI', 'dairy', D(10))!.days).toBe(20);
+    } finally {
+      STATUTORY_RULES.pop();
+    }
+  });
+});

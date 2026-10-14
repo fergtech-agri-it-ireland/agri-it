@@ -21,6 +21,7 @@
  * Agri-It never says how much to feed a dry cow: that stays with the farmer and their adviser.
  */
 import type { CalfBirth, CalvingSeason, Farm, ISODate, SuggestionDecision } from './types';
+import { deadlineFrom, ruleFor, type StatutoryRule } from './deadlines';
 import { addDays, daysBetween, fmtDay } from './format';
 
 export const SEASON_RULE_VERSION = 'season-plan@1.0';
@@ -173,18 +174,24 @@ export interface CalfDeadline {
   /** 'tag' or 'register', whichever is next and not yet done */
   next: 'tag' | 'register' | null;
   nextBy: ISODate | null;
+  /** The rules the dates come from, for their sources */
+  rules: { tag: StatutoryRule | null; register: StatutoryRule | null };
 }
 
 /**
- * Last day to tag and to register. ROI: tagged before 20 days of age, registered within 27 days (T5).
- * NI: dairy herds tag within 36 hours (the next day), other herds within 20 days; notify within 27 days (T6).
+ * Last day to tag and to register, from the checked statutory rules in lib/deadlines.ts
+ * (review G06): ROI tag no later than 20 days after birth, register within 27 days; NI dairy
+ * herds tag within 36 hours (shown as the next day), other herds 20 days, notify within 27 days.
+ * No checked rule for a case: no date (never guessed).
  */
 export function calfDeadlines(birth: CalfBirth, jurisdiction: 'ROI' | 'NI', herd: 'dairy' | 'suckler'): CalfDeadline {
-  const tagDays = jurisdiction === 'NI' ? (herd === 'dairy' ? 1 : 20) : 19;
-  const tagBy = birth.tagged_on ? null : addDays(birth.born_on, tagDays);
-  const registerBy = birth.registered_on ? null : addDays(birth.born_on, 27);
+  const h = herd === 'dairy' ? 'dairy' : 'other';
+  const tagRule = ruleFor('calf_tag', jurisdiction, h, birth.born_on);
+  const registerRule = ruleFor('calf_register', jurisdiction, h, birth.born_on);
+  const tagBy = birth.tagged_on || !tagRule ? null : deadlineFrom(tagRule, birth.born_on);
+  const registerBy = birth.registered_on || !registerRule ? null : deadlineFrom(registerRule, birth.born_on);
   const next = tagBy ? 'tag' : registerBy ? 'register' : null;
-  return { birth, tagBy, registerBy, next, nextBy: next === 'tag' ? tagBy : registerBy };
+  return { birth, tagBy, registerBy, next, nextBy: next === 'tag' ? tagBy : registerBy, rules: { tag: tagRule, register: registerRule } };
 }
 
 export interface CalfTodo { kind: 'tag' | 'register'; calves: number; firstBy: ISODate; overdue: number; births: CalfBirth[] }

@@ -10,11 +10,12 @@
  * Nothing is invented: no supplier price, lead time or quantity the farmer hasn't used before.
  */
 import type { CalvingSeason, Cost, FarmBundle, ISODate, Job, Routine, SuggestionDecision } from './types';
+import { ruleSourceLine } from './deadlines';
 import { COST_LABEL } from './types';
 import type { FeedForecast } from './forecast/feed';
 import type { Op } from './offline/outbox';
 import { addDays, daysBetween, eur, fmtDay, fmtKg, uuid } from './format';
-import { calfTodos, decisionFor, seasonSteps, stepDecisionKey, stepWhen, type SeasonStep } from './season';
+import { calfDeadlines, calfTodos, decisionFor, seasonSteps, stepDecisionKey, stepWhen, type SeasonStep } from './season';
 import { estimateStore } from './forecast/forage';
 
 export const SUGGESTIONS_RULE_VERSION = 'suggestions@1.0';
@@ -315,7 +316,11 @@ export function calfSuggestions(b: FarmBundle, today: ISODate): Suggestion[] {
       key: `calves:${t.kind}`, when, tone: when === 'overdue' || when === 'today' ? 'warn' : 'info', canDecline: false,
       title: `${verb} ${t.calves} ${t.calves === 1 ? 'calf' : 'calves'}`,
       detail: `${t.overdue ? `${t.overdue} past the deadline. ` : ''}First one by ${fmtDay(t.firstBy)}.`,
-      why: t.kind === 'tag' ? (b.farm.jurisdiction === 'NI' ? 'NI: dairy calves within 36 hours, others within 20 days' : 'Calves must be tagged before 20 days of age') : 'Calves must be registered within 27 days of birth',
+      // The rule in force, with its source and the official system (review G06)
+      why: (() => {
+        const r = calfDeadlines(t.births[0], b.farm.jurisdiction, herdOf(t.births[0])).rules[t.kind];
+        return r ? `${r.text} The record is ${r.officialSystem}. ${ruleSourceLine(r)}` : 'Check the official system for this deadline';
+      })(),
       approve: {
         label: t.kind === 'tag' ? 'All tagged today' : 'All registered today',
         ops: ids.map((id) => ({ kind: 'update' as const, table: 'calf_births', match: { id }, patch: { [field]: today } })),

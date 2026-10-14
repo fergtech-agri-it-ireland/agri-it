@@ -1,4 +1,6 @@
 import { Check, ChevronRight, ExternalLink } from 'lucide-react';
+import { StatutoryNote } from '../components/StatutoryNote';
+import { ruleFor } from '../lib/deadlines';
 import { Link } from 'react-router-dom';
 import { useFarmData, useSave } from '../lib/data/farm';
 import { calfDeadlines, SEASON_SOURCES, seasonSteps, stepWhen } from '../lib/season';
@@ -118,7 +120,9 @@ function Births({ season }: { season: CalvingSeason | null }) {
         })}
       </ul>
       <p className="px-4 pb-3 pt-1 text-[0.8125rem] text-muted">
-        {b.farm.jurisdiction === 'NI' ? 'NI: dairy calves tagged within 36 hours, others within 20 days; births notified within 27 days.' : 'Calves tagged before 20 days of age and registered within 27 days.'} A reminder for you, not the official register.
+      </p>
+      <div className="px-4 pb-1"><StatutoryNote rules={[ruleFor('calf_tag', b.farm.jurisdiction, herd === 'dairy' ? 'dairy' : 'other', today), ruleFor('calf_register', b.farm.jurisdiction, herd === 'dairy' ? 'dairy' : 'other', today)]} /></div>
+      <p className="px-4 pb-3 pt-1 text-[0.8125rem] text-muted">
         <Link to="/record/calf" className="ml-1 inline-flex items-center font-bold text-accent">Add a calf<ChevronRight className="h-4 w-4" aria-hidden /></Link>
       </p>
     </section>

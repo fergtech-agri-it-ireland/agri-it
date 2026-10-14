@@ -62,9 +62,10 @@ describe('calving season plan', () => {
 });
 
 describe('calf tagging and registration', () => {
-  it('ROI: tag before 20 days of age, register within 27 days', () => {
+  it('ROI: tag no later than 20 days after birth (S.I. 591/2022), register within 27 days', () => {
     const d = calfDeadlines(birth(), 'ROI', 'dairy');
-    expect(d.tagBy).toBe('2027-02-22');
+    expect(d.tagBy).toBe('2027-02-23');
+    expect(d.rules.tag!.source.url).toMatch(/irishstatutebook/);
     expect(d.registerBy).toBe('2027-03-02');
     expect(d.next).toBe('tag');
     expect(calfDeadlines(birth({ tagged_on: '2027-02-05' }), 'ROI', 'dairy')).toMatchObject({ tagBy: null, next: 'register' });
@@ -75,9 +76,9 @@ describe('calf tagging and registration', () => {
   });
   it('gathers calves still to do, counting twins and the ones past the deadline', () => {
     const list = [birth({ id: 'a', born_on: '2027-02-01', calves: 2 }), birth({ id: 'b', born_on: '2027-02-15' }), birth({ id: 'c', born_on: '2027-02-02', tagged_on: '2027-02-03' })];
-    const todos = calfTodos(list, 'ROI', () => 'dairy', '2027-02-21');
+    const todos = calfTodos(list, 'ROI', () => 'dairy', '2027-02-22');
     const tag = todos.find((t) => t.kind === 'tag')!;
-    expect(tag).toMatchObject({ calves: 3, firstBy: '2027-02-20', overdue: 2 });
+    expect(tag).toMatchObject({ calves: 3, firstBy: '2027-02-21', overdue: 2 });
     expect(todos.find((t) => t.kind === 'register')!.calves).toBe(4);
   });
 });

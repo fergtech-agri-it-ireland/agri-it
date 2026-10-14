@@ -19,7 +19,7 @@ describe('money in the farm currency (advisory review G05)', () => {
   });
   it('names the right department and animal system', () => {
     expect(jurisdictionInfo('NI').department).toBe('DAERA');
-    expect(jurisdictionInfo('NI').animalSystem).toMatch(/APHIS/);
+    expect(jurisdictionInfo('NI').animalSystem).toMatch(/DAERA Online Services/);
     expect(jurisdictionInfo('ROI').animalSystem).toMatch(/AgFood/);
     expect(jurisdictionInfo(undefined).currency).toBe('EUR');
   });

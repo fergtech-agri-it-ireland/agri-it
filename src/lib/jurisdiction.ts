@@ -40,7 +40,7 @@ export const JURISDICTIONS: Record<Jurisdiction, JurisdictionInfo> = {
     currencyName: 'pounds sterling',
     department: 'DAERA',
     departmentLong: 'Department of Agriculture, Environment and Rural Affairs (DAERA)',
-    animalSystem: 'APHIS Online (DAERA)',
+    animalSystem: 'DAERA Online Services',
     taxAuthority: 'HMRC',
     postcodeLabel: 'Postcode',
     schemePayer: 'DAERA'

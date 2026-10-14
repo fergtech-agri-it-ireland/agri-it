@@ -103,6 +103,14 @@ with sync_playwright() as p:
     go(pg, '#/')
     check('Today no longer asks to place it', 'Place the Dairy nut 16% order' not in main_text(pg))
 
+    # --- G06: statutory deadlines carry their rule, source, checked date and the official system
+    go(pg, '#/record/calf')
+    note = pg.get_by_test_id('statutory-note').inner_text()
+    check('Calf deadlines quote the rule and its official source', 'no later than 20 days after birth' in note and 'Irish Statute Book' in note and 'checked 14 Oct 2026' in note, note)
+    check('Says the official system is the record', 'not the official record' in note and 'AgFood.ie or the Calf-Reg app' in note, note)
+    hrefs = pg.get_by_test_id('statutory-note').locator('a').evaluate_all('els => els.map(e => e.href)')
+    check('Source links go to the official sites', hrefs and all(h.startswith(('https://www.irishstatutebook.ie/', 'https://www.gov.ie/')) for h in hrefs), str(hrefs))
+
     b.close()
 
 for n, ok, d in results:

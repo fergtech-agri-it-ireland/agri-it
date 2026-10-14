@@ -25,6 +25,16 @@ def fetch(code: str) -> dict:
         return json.loads(r.read().decode('utf-8'))
 
 
+def to_month(code: str) -> str | None:
+    """'2026M07', '2026M7' or '202607' to '2026-07'."""
+    c = code.strip()
+    if len(c) >= 6 and c[:4].isdigit():
+        rest = c[4:].lstrip('Mm')
+        if rest.isdigit() and 1 <= int(rest) <= 12:
+            return f'{c[:4]}-{int(rest):02d}'
+    return None
+
+
 def series(ds: dict) -> tuple[str, dict[str, dict[str, float]], dict]:
     """JSON-stat 2.0 to {item label: {YYYY-MM: value}}. Finds the time and item dimensions by role/name."""
     ids, size, dims, values = ds['id'], ds['size'], ds['dimension'], ds['value']
@@ -35,6 +45,9 @@ def series(ds: dict) -> tuple[str, dict[str, dict[str, float]], dict]:
     if time_dim is None or len(item_dims) != 1:
         raise SystemExit(f'Unexpected table shape: {ids} {size}')
     item_dim = item_dims[0]
+    tidx = dims[time_dim]['category']['index']
+    tkeys = tidx if isinstance(tidx, list) else list(tidx)
+    print(f'  shape {ids} {size}; time codes {tkeys[:2]} .. {tkeys[-2:]}; values {type(values).__name__} {len(values)}')
 
     def cats(d):
         c = dims[d]['category']
@@ -51,10 +64,9 @@ def series(ds: dict) -> tuple[str, dict[str, dict[str, float]], dict]:
     i_order, i_label = cats(item_dim)
     ti, ii = ids.index(time_dim), ids.index(item_dim)
     for tpos, t in enumerate(t_order):
-        # '2026M07' -> '2026-07'
-        if 'M' not in t:
+        month = to_month(t)
+        if month is None:
             continue
-        month = f'{t[:4]}-{t[5:].zfill(2)}'
         for ipos, item in enumerate(i_order):
             flat = tpos * strides[ti] + ipos * strides[ii]  # other dimensions have size 1
             v = values[flat] if isinstance(values, list) else values.get(str(flat))
@@ -86,6 +98,8 @@ def main() -> None:
             'items': dict(sorted(items.items()))
         }
         print(f'{code}: {len(items)} items with data, latest {result["tables"][code]["latest_month"]}')
+    if not all(t['items'] for t in result['tables'].values()):
+        raise SystemExit('A table came back with no figures: nothing saved')
     OUT.parent.mkdir(parents=True, exist_ok=True)
     old = json.loads(OUT.read_text()) if OUT.exists() else None
     # Only the fetch date changed: leave the file alone so nothing is committed

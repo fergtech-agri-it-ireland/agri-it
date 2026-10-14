@@ -27,17 +27,17 @@ export default function Money() {
       right={<Link to="/diary" className="flex min-h-tap items-center gap-1.5 rounded-full bg-card px-4 font-bold text-accent shadow-lift"><BookOpen className="h-5 w-5" aria-hidden />Diary</Link>}>
       <Link to="/money/bills" aria-label="Cash, owed and on order" className="block rounded-[1.125rem] bg-card p-4 shadow-lift">
         <div className="grid grid-cols-3 gap-2">
-          <div className="min-w-0"><p className="text-sm text-muted">Cash now</p><p className={`numeral break-words text-xl ${d.cash && d.cash.balance < 0 ? 'text-danger' : ''}`}>{d.cash ? eur(d.cash.balance) : '?'}</p></div>
-          <div className="min-w-0"><p className="text-sm text-muted">To pay</p><p className={`numeral break-words text-xl ${d.money.overdueTotal > 0 ? 'text-danger' : ''}`}>{eur(d.money.owedTotal)}</p></div>
-          <div className="min-w-0"><p className="text-sm text-muted">On order</p><p className="numeral break-words text-xl">{eur(d.money.committedTotal)}</p></div>
+          <div className="amount-cell"><p className="text-sm text-muted">Cash now</p><p className={`numeral amount [--amount-max:1.25rem] ${d.cash && d.cash.balance < 0 ? 'text-danger' : ''}`}>{d.cash ? eur(d.cash.balance) : '?'}</p></div>
+          <div className="amount-cell"><p className="text-sm text-muted">To pay</p><p className={`numeral amount [--amount-max:1.25rem] ${d.money.overdueTotal > 0 ? 'text-danger' : ''}`}>{eur(d.money.owedTotal)}</p></div>
+          <div className="amount-cell"><p className="text-sm text-muted">On order</p><p className="numeral amount [--amount-max:1.25rem]">{eur(d.money.committedTotal)}</p></div>
         </div>
         <p className="mt-1.5 text-sm text-muted">{d.money.overdueCount ? `${d.money.overdueCount} overdue. ` : ''}Paid, owed and committed are kept apart, so nothing is counted twice.</p>
       </Link>
       <Card>
         <div className="grid grid-cols-3 gap-2">
-          <div className="min-w-0"><p className="text-sm text-muted">Income</p><p className="numeral break-words text-2xl">{eur(ye.totalIncome)}</p></div>
-          <div className="min-w-0"><p className="text-sm text-muted">Running costs</p><p className="numeral break-words text-2xl">{eur(ye.totalCosts)}</p></div>
-          <div className="min-w-0"><p className="text-sm text-muted">Difference</p><p className={`numeral break-words text-2xl ${ye.net < 0 ? 'text-danger' : ''}`}>{eur(ye.net)}</p></div>
+          <div className="amount-cell"><p className="text-sm text-muted">Income</p><p className="numeral amount">{eur(ye.totalIncome)}</p></div>
+          <div className="amount-cell"><p className="text-sm text-muted">Costs</p><p className="numeral amount">{eur(ye.totalCosts)}</p></div>
+          <div className="amount-cell"><p className="text-sm text-muted">Difference</p><p className={`numeral amount ${ye.net < 0 ? 'text-danger' : ''}`}>{eur(ye.net)}</p></div>
         </div>
         {ye.totalNonOperating > 0 && <p className="mt-1 text-sm text-muted">Plus {eur(ye.totalNonOperating)} on loans and capital this year, kept out of running costs.</p>}
         <div className="mt-4 flex items-end gap-2" style={{ height: 120 }} role="img" aria-label="Money in and out, last six months">

@@ -83,13 +83,15 @@ function f(): Fmts {
 }
 /** "€127K" for dials and tiles where space is tight. Under 10,000 shows in full. */
 export function eurCompact(n: number): string {
-  return Math.abs(n) < 10_000 ? f().whole.format(n) : f().compact.format(n);
+  return glue(Math.abs(n) < 10_000 ? f().whole.format(n) : f().compact.format(n));
 }
+/** A minus sign may never be left at the end of a line, apart from its amount (review G13). */
+const glue = (s: string) => (s.startsWith('-') ? `-\u2060${s.slice(1)}` : s);
 
 /** An amount in the farm's currency ("€1,200" or "£1,200"). The name is kept from when every farm used euro. */
 export function eur(n: number | null | undefined, cents = false): string {
   if (n === null || n === undefined || Number.isNaN(n)) return '';
-  return (cents ? f().cents : f().whole).format(n);
+  return glue((cents ? f().cents : f().whole).format(n));
 }
 
 const num = new Intl.NumberFormat('en-IE', { maximumFractionDigits: 1 });

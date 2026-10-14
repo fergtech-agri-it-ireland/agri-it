@@ -6,7 +6,7 @@
  *   Cash   = full when the 90-day outlook never goes below zero
  */
 import type { FeedForecast } from './forecast/feed';
-import type { ForageForecast } from './forecast/forage';
+import { silageSummary, type ForageForecast } from './forecast/forage';
 import type { DialTone } from '../components/Dial';
 import type { FeedProduct } from './types';
 import { cur, eurCompact, fmtDay, fmtNum } from './format';
@@ -50,19 +50,16 @@ export function feedDial(products: FeedProduct[], feed: Map<string, FeedForecast
 
 export function silageDial(forage: ForageForecast): DialSpec {
   const base = { id: 'silage' as const, label: 'Silage', to: '/forecast?tab=forage' };
-  if (forage.status === 'incomplete' || !forage.needT) {
-    return { ...base, value: '?', unit: 'of winter', fraction: 0, tone: 'info', status: 'Add details', description: 'silage budget needs details' };
+  const s = silageSummary(forage);
+  if (!s) return { ...base, value: '?', unit: 'of winter', fraction: 0, tone: 'info', status: 'Add details', description: 'silage budget needs details' };
+  const pct = `${Math.min(s.percentOfWinter, 999)}%`;
+  if (s.shortOfWinterT > 0) {
+    return { ...base, value: pct, unit: 'of winter', fraction: Math.min(1, s.storeT / s.winterNeedT), tone: 'urgent', status: `${fmtNum(s.shortOfWinterT)} t short`, description: `${pct} of winter covered. ${s.line}` };
   }
-  const share = forage.availableT / forage.needT;
-  const pct = Math.round(share * 100);
-  if (forage.status === 'deficit') {
-    const short = Math.round(forage.needT - forage.availableT);
-    return { ...base, value: `${pct}%`, unit: 'of winter', fraction: share, tone: 'urgent', status: `${fmtNum(short)} t short`, description: `${pct}% of winter covered, ${short} tonnes short before reserve` };
+  if (s.shortOfTargetT > 0) {
+    return { ...base, value: pct, unit: 'of winter', fraction: 1, tone: 'warn', status: 'Reserve short', description: s.line };
   }
-  if (forage.status === 'tight') {
-    return { ...base, value: `${Math.min(pct, 999)}%`, unit: 'of winter', fraction: 1, tone: 'warn', status: 'Reserve short', description: `winter covered but not your ${forage.reservePercent}% reserve` };
-  }
-  return { ...base, value: `${Math.min(pct, 999)}%`, unit: 'of winter', fraction: 1, tone: 'ok', status: 'Covered', description: `winter covered with your ${forage.reservePercent}% reserve` };
+  return { ...base, value: pct, unit: 'of winter', fraction: 1, tone: 'ok', status: 'Covered', description: s.line };
 }
 
 export function cashDial(cash: { balance: number } | null, lowest: { closing: number } | null): DialSpec {

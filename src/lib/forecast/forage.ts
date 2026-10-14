@@ -246,3 +246,43 @@ export function forecastForage(input: {
     inputsHash: hashString(JSON.stringify(inputs)), inputs
   };
 }
+
+/**
+ * One set of silage sums for every screen (advisory review G13): the dashboard, Needs your
+ * attention and the winter plan all say the same thing. Rounding is done once, here, so the
+ * parts always add up: store + short = winter need, winter need + reserve = target.
+ */
+export interface SilageSummary {
+  storeT: number;
+  winterNeedT: number;
+  reserveT: number;
+  targetT: number;
+  /** Short of the winter itself (0 when covered). */
+  shortOfWinterT: number;
+  /** Short of the winter plus reserve (0 when covered). */
+  shortOfTargetT: number;
+  /** To spare after the reserve (0 when short). */
+  spareT: number;
+  /** Share of the winter (without reserve) the store covers, as a whole percent. */
+  percentOfWinter: number;
+  /** "133 t short for the winter, 289 t short counting your 15% reserve" */
+  line: string;
+}
+export function silageSummary(f: ForageForecast): SilageSummary | null {
+  if (f.needT === null || f.needT <= 0 || f.status === 'incomplete') return null;
+  const storeT = Math.round(f.availableT);
+  const winterNeedT = Math.round(f.needT);
+  const reserveT = Math.round(f.needT * (f.reservePercent / 100));
+  const targetT = winterNeedT + reserveT;
+  const shortOfWinterT = Math.max(0, winterNeedT - storeT);
+  const shortOfTargetT = Math.max(0, targetT - storeT);
+  const spareT = Math.max(0, storeT - targetT);
+  const t = (n: number) => `${n.toLocaleString('en-IE')} t`;
+  const r = `your ${f.reservePercent}% reserve (${t(reserveT)})`;
+  const line = shortOfWinterT > 0
+    ? `${t(shortOfWinterT)} short for the winter, ${t(shortOfTargetT)} short counting ${r}`
+    : shortOfTargetT > 0
+      ? `Winter covered, ${t(shortOfTargetT)} short of ${r}`
+      : `Winter and ${r} covered, ${t(spareT)} to spare`;
+  return { storeT, winterNeedT, reserveT, targetT, shortOfWinterT, shortOfTargetT, spareT, percentOfWinter: Math.round((storeT / winterNeedT) * 100), line };
+}

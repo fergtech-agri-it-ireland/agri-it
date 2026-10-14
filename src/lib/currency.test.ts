@@ -13,7 +13,7 @@ describe('money in the farm currency (advisory review G05)', () => {
   it('Northern Ireland farms show pounds, never euro', () => {
     setCurrency(currencyFor('NI'));
     expect(eur(1234)).toBe('£1,234');
-    expect(eur(-80, true)).toBe('-£80.00');
+    expect(eur(-80, true)).toBe('-\u2060£80.00'); // word joiner: the minus never wraps away from the amount
     expect(eurCompact(127_000)).toBe('£127K');
     expect(cur()).toBe('£');
   });

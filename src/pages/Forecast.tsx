@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useFarmData } from '../lib/data/farm';
 import { useDerived, silageWithFedOut } from '../lib/data/derived';
-import { forecastForage } from '../lib/forecast/forage';
+import { forecastForage, silageSummary } from '../lib/forecast/forage';
 import { cashForecast90 } from '../lib/forecast/money';
 import { eur, fmtDay, fmtMonth, fmtNum, todayISO, cur } from '../lib/format';
 import { primaryRoute } from '../lib/suppliers';
@@ -54,6 +54,7 @@ function ForageTab() {
         groups: b.groups.map((g) => ({ ...g, head_count: Math.max(0, g.head_count + (extra[g.id] ?? 0)) }))
       })
     : d.forage;
+  const sum = silageSummary(f);
   const headline = { deficit: 'Short for the winter', tight: 'Tight: reserve not fully covered', surplus: 'Covered, with reserve', incomplete: 'Needs more detail' }[f.status];
   const tone = f.status === 'deficit' ? 'urgent' : f.status === 'tight' ? 'warn' : f.status === 'surplus' ? 'ok' : 'info';
   const src = b.evidence.find((e) => e.code === 'S3');
@@ -62,11 +63,23 @@ function ForageTab() {
     <>
       <Card>
         <div className="flex items-center gap-2"><ToneIcon tone={tone} /><p className="text-xl font-bold">{headline}</p></div>
-        <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-          <div><p className="numeral text-3xl">{fmtNum(Math.round(f.availableT))}</p><p className="text-sm text-muted">t in store</p></div>
-          <div><p className="numeral text-3xl">{f.needWithReserveT !== null ? fmtNum(Math.round(f.needWithReserveT)) : '?'}</p><p className="text-sm text-muted">t needed incl. {f.reservePercent}%</p></div>
-          <div><p className="numeral text-3xl">{f.balanceT !== null ? (f.balanceT >= 0 ? '+' : '') + fmtNum(Math.round(f.balanceT)) : '?'}</p><p className="text-sm text-muted">t balance</p></div>
-        </div>
+        {sum ? (
+          <>
+            <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+              <div className="amount-cell"><p className="numeral amount [--amount-max:1.875rem]">{fmtNum(sum.storeT)}</p><p className="text-sm text-muted">t in store</p></div>
+              <div className="amount-cell"><p className="numeral amount [--amount-max:1.875rem]">{fmtNum(sum.winterNeedT)}</p><p className="text-sm text-muted">t for the winter</p></div>
+              <div className="amount-cell"><p className="numeral amount [--amount-max:1.875rem]">{fmtNum(sum.reserveT)}</p><p className="text-sm text-muted">t reserve ({f.reservePercent}%)</p></div>
+            </div>
+            <p className="mt-3 font-bold">{sum.line}.</p>
+            <p className="mt-1 text-sm text-muted">{fmtNum(sum.storeT)} in store against {fmtNum(sum.winterNeedT)} + {fmtNum(sum.reserveT)} reserve = {fmtNum(sum.targetT)} t. {sum.percentOfWinter}% of the winter covered.</p>
+          </>
+        ) : (
+          <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+            <div><p className="numeral text-3xl">{fmtNum(Math.round(f.availableT))}</p><p className="text-sm text-muted">t in store</p></div>
+            <div><p className="numeral text-3xl">?</p><p className="text-sm text-muted">t for the winter</p></div>
+            <div><p className="numeral text-3xl">?</p><p className="text-sm text-muted">t reserve</p></div>
+          </div>
+        )}
         <div className="mt-3"><ConfidenceBadge level={f.confidence} /></div>
       </Card>
 

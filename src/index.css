@@ -60,6 +60,9 @@ html.dawn {
 
 @layer components {
   .numeral { @apply font-display font-extrabold tracking-tight; font-variant-numeric: tabular-nums; }
+  /* A big amount in a narrow tile: never breaks across lines (review G13); shrinks to fit its cell instead */
+  .amount-cell { container-type: inline-size; min-width: 0; }
+  .amount { white-space: nowrap; font-size: min(var(--amount-max, 1.5rem), 17cqi); line-height: 1.15; }
   .h-display { @apply font-display font-extrabold leading-tight tracking-tight; }
   .input {
     @apply block w-full min-h-tap rounded-xl border border-line bg-card px-3.5 text-base text-ink placeholder:text-muted/70;

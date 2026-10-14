@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { IN_BROWSER, key } from '../env';
 import type { FarmBundle, ISODate } from '../types';
 import { forecastFeed, type FeedForecast } from '../forecast/feed';
-import { forecastForage } from '../forecast/forage';
+import { forecastForage, silageSummary } from '../forecast/forage';
 import { budgetAlerts, budgetVsActual, cashForecast90, cashPosition, yearEndPack } from '../forecast/money';
 import { pricePoints } from '../forecast/prices';
 import { moneyStates, possibleDuplicateDeliveries } from '../forecast/bills';
@@ -148,8 +148,9 @@ export function derive(b: FarmBundle, today: ISODate) {
         detail: `${names.slice(0, 3).join(', ')}${names.length > 3 ? ` and ${names.length - 3} more` : ''}. Tick, move or skip each one`, to: '/diary' });
     }
 
-    if (forage.status === 'deficit') p.push({ id: 'forage', tone: 'urgent', when: 'soon', title: 'Silage short for the winter', detail: `About ${Math.round(Math.abs((forage.needT ?? 0) - forage.availableT))} t short before reserve`, to: '/forecast?tab=forage' });
-    else if (forage.status === 'tight') p.push({ id: 'forage', tone: 'warn', when: 'soon', title: 'Winter silage is tight', detail: `Covers the winter but not your ${forage.reservePercent}% reserve`, to: '/forecast?tab=forage' });
+    const ss = silageSummary(forage);
+    if (ss && ss.shortOfWinterT > 0) p.push({ id: 'forage', tone: 'urgent', when: 'soon', title: 'Silage short for the winter', detail: ss.line, to: '/forecast?tab=forage' });
+    else if (ss && ss.shortOfTargetT > 0) p.push({ id: 'forage', tone: 'warn', when: 'soon', title: 'Winter silage is tight', detail: ss.line, to: '/forecast?tab=forage' });
     if (cash90.lowest && cash && cash90.lowest.closing < 0) p.push({ id: 'cash', tone: 'urgent', when: 'soon', title: 'Cash may go overdrawn', detail: `Lowest point about ${eur(cash90.lowest.closing)}, counting the bills you owe`, to: '/forecast?tab=cash' });
     // Budget variance: only the year-so-far and this-month alerts reach Today; last month's note stays on Money
     const alerts = budgetAlerts(b.farm, b, today);

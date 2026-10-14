@@ -1,0 +1,33 @@
+name: CSO prices
+# Once a month, fetch the CSO's national average feed and fertiliser prices (tables AJM08 and
+# AJM09) into src/lib/cso/cso-prices.json. If the figures changed, commit them to main; CI then
+# checks and republishes the phone app, so phones pick them up the next time they open.
+on:
+  schedule:
+    - cron: '17 6 18 * *' # the 18th of each month, 06:17 UTC (the CSO releases mid-month)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/cso/fetch_cso.py
+      - name: Commit new figures
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet -- src/lib/cso/cso-prices.json && git ls-files --error-unmatch src/lib/cso/cso-prices.json >/dev/null 2>&1; then
+            echo "No new CSO figures"; exit 0
+          fi
+          git config user.name "agri-it-bot"
+          git config user.email "agri-it-bot@users.noreply.github.com"
+          git add src/lib/cso/cso-prices.json
+          git commit -m "CSO feed and fertiliser prices, fetched $(date -u +%Y-%m-%d)"
+          git push
+          # A push made with the workflow token doesn't start other workflows, so start CI here
+          gh workflow run ci.yml --ref main

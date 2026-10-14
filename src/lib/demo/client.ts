@@ -14,6 +14,7 @@ import { todayISO } from '../format';
 import { IS_LOCAL } from '../env';
 import { farmTypes, legacyEnterprise } from '../farmTypes';
 import type { FarmType } from '../types';
+import { backupCompleteness, packBackup, unpackBackup, type BackupFile } from '../phoneBackup';
 
 const DB_KEY = IS_LOCAL ? 'agri-it:phone-db' : 'agri-it:demo-db';
 const SIGNED_OUT_KEY = 'agri-it:demo-signed-out';
@@ -76,19 +77,23 @@ export function resetDemo() {
   window.location.reload();
 }
 
-/** Phone build: everything needed to rebuild this farm on another phone (records, not photos). */
+/** Phone build: the records only, as text (used where files can't be saved, and by Move my phone data). */
 export function backupJson(): string {
   return JSON.stringify({ app: 'agri-it', kind: 'phone-backup', v: VERSION, saved_at: new Date().toISOString(), db });
 }
-/** Phone build: replace this phone's records with a backup file, then reload. Throws if the file is not a backup. */
-export function restoreBackup(text: string) {
-  const p = JSON.parse(text) as { app?: string; kind?: string; db?: DB };
+function checkBackup(text: string): DB {
+  let p: { app?: string; kind?: string; db?: DB };
+  try { p = JSON.parse(text); } catch { throw new Error('That file is not a complete Agri-It backup.'); }
   if (p.app !== 'agri-it' || p.kind !== 'phone-backup' || !p.db || !Array.isArray(p.db.farms)) {
     throw new Error('That file is not an Agri-It backup.');
   }
-  db = p.db;
+  return p.db;
+}
+function applyRestore(next: DB) {
+  const before = db;
+  db = next;
   persist();
-  if (!browserKeepsData) throw new Error('This browser would not keep the restored records.');
+  if (!browserKeepsData) { db = before; persist(); throw new Error('This browser would not keep the restored records. Nothing was changed.'); }
   try {
     const s = store();
     s?.removeItem('agri-it:cache');
@@ -97,6 +102,48 @@ export function restoreBackup(text: string) {
   } catch { /* ignore */ }
   window.location.hash = '#/';
   window.location.reload();
+}
+/** Phone build: replace this phone's records with a records-only backup (text), then reload. Throws if it is not a backup. */
+export function restoreBackup(text: string) {
+  applyRestore(checkBackup(text));
+}
+
+/**
+ * Phone build: the full backup (review G01): every record and every photo, invoice and docket
+ * kept on this phone, in one zip. `missing` lists photos the records point at that are not here.
+ */
+export async function fullBackup(): Promise<{ bytes: Uint8Array; records: number; photos: number; missing: string[] }> {
+  const files: BackupFile[] = [];
+  // Every photo a record points at (photos no record uses any more are left out)
+  const keys = [...new Set(table('documents').map((d) => String(d.storage_path ?? '')).filter(Boolean))];
+  for (const path of keys) {
+    try {
+      const blob = await fileOp<Blob | undefined>('readonly', (s) => s.get(path));
+      if (blob) files.push({ path, type: blob.type || 'image/jpeg', data: new Uint8Array(await blob.arrayBuffer()) });
+    } catch { /* counted as missing below */ }
+  }
+  const json = backupJson();
+  const done = backupCompleteness(db as never, files.map((f) => f.path));
+  return { bytes: packBackup(json, files), records: localSummary().records, photos: done.photos, missing: done.missing };
+}
+
+/** Phone build: restore a full (zip) or older (JSON) backup file: photos first, then the records, then reload. */
+export async function restoreFile(bytes: Uint8Array): Promise<void> {
+  const un = unpackBackup(bytes);
+  const next = checkBackup(un.json);
+  if (un.full) {
+    // Photos go in before the records, so the restored records never point at a photo that isn't there.
+    // Nothing is cleared: if anything fails, this phone's own records and photos are untouched.
+    try {
+      for (const f of un.files) {
+        await fileOp('readwrite', (s) => s.put(new Blob([f.data as BlobPart], { type: f.type }), f.path));
+      }
+    } catch {
+      throw new Error('This phone would not keep the photos from the backup. Nothing was changed.');
+    }
+    fileUrls.clear();
+  }
+  applyRestore(next);
 }
 /** Rough size of what this phone holds, for the Settings card. */
 export function localSummary() {

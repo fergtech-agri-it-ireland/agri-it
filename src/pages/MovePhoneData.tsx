@@ -11,6 +11,7 @@ import {
   type ImportResult, type PhoneBackup
 } from '../lib/phoneImport';
 import { farmTypes } from '../lib/farmTypes';
+import { unpackBackup } from '../lib/phoneBackup';
 
 /** The phone app keeps its records under this key, on the same web address as the online app. */
 const PHONE_DB_KEY = 'agri-it:phone-db';
@@ -59,6 +60,8 @@ export default function MovePhoneData() {
   const [source, setSource] = useState<Source>(here ? 'here' : 'file');
   const [backup, setBackup] = useState<PhoneBackup | null>(here);
   const [pasted, setPasted] = useState('');
+  // Photos carried inside a full (zip) backup file, by their phone path
+  const [zipPhotos, setZipPhotos] = useState<Map<string, Blob>>(new Map());
   const [error, setError] = useState<string | null>(null);
   const [phoneFarmId, setPhoneFarmId] = useState<string | null>(null);
   const [target, setTarget] = useState<string>('new');
@@ -90,8 +93,9 @@ export default function MovePhoneData() {
   if (sessionLoading || farmsLoading) return <Splash />;
   if (!session) return <Navigate to="/login" replace />;
 
-  const read = (text: string) => {
+  const read = (text: string, photos: Map<string, Blob> = new Map()) => {
     setError(null);
+    setZipPhotos(photos);
     try { const b = parseBackup(text); setBackup(b); setPhoneFarmId(null); } catch (e) { setBackup(null); setError((e as Error).message); }
   };
   const pick = (s: Source) => { setSource(s); setError(null); setBackup(s === 'here' ? here : null); };
@@ -123,7 +127,7 @@ export default function MovePhoneData() {
       // Photos the phone app kept in this browser go to the farm's folder
       let photos = 0;
       for (const ph of p.photoPaths) {
-        const blob = await phonePhoto(ph.from);
+        const blob = zipPhotos.get(ph.from) ?? (await phonePhoto(ph.from));
         if (!blob) continue;
         const { error: e } = await supabase.storage.from('records').upload(ph.to, blob, { upsert: false, contentType: blob.type || 'image/jpeg' });
         if (!e || /exist/i.test(e.message)) photos++;
@@ -146,7 +150,7 @@ export default function MovePhoneData() {
           <p className="flex items-start gap-3 text-lg font-bold"><CheckCircle2 className="mt-0.5 h-7 w-7 shrink-0 text-accent" aria-hidden />{resultLine(done.result)}</p>
           {done.photos > 0 && <p className="mt-2">{done.photos} photo{done.photos === 1 ? '' : 's'} copied from this phone.</p>}
           {plan && plan.photoPaths.length > done.photos && (
-            <p className="mt-2 text-sm text-muted">Photos stay on the phone they were taken on. Open this page on that phone to bring them across too.</p>
+            <p className="mt-2 text-sm text-muted">Some photos were not in this backup. Use a full backup file (Back up in the phone app), or open this page on the phone they were taken on.</p>
           )}
           <p className="mt-2 text-sm text-muted">The phone app still has its own copy. Nothing there was changed or deleted.</p>
         </Card>
@@ -173,8 +177,15 @@ export default function MovePhoneData() {
         <Card>
           <p className="text-sm">In the phone app: Settings, then Kept on this phone, then <b>Back up</b>. Then pick that file here.</p>
           <Button variant="secondary" block className="mt-3" onClick={() => file.current?.click()}><FileUp className="h-6 w-6" aria-hidden />Pick the backup file</Button>
-          <input ref={file} type="file" accept="application/json,.json" className="sr-only" aria-label="Backup file"
-            onChange={async (e) => { const f = e.target.files?.[0]; if (f) read(await f.text()); }} />
+          <input ref={file} type="file" accept=".zip,application/zip,application/json,.json" className="sr-only" aria-label="Backup file"
+            onChange={async (e) => {
+              const f = e.target.files?.[0];
+              if (!f) return;
+              try {
+                const un = unpackBackup(new Uint8Array(await f.arrayBuffer()));
+                read(un.json, new Map(un.files.map((x) => [x.path, new Blob([x.data as BlobPart], { type: x.type })])));
+              } catch (err) { setBackup(null); setError((err as Error).message); }
+            }} />
         </Card>
       )}
       {source === 'paste' && (

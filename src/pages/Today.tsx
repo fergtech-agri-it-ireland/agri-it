@@ -15,8 +15,9 @@ import { eur, fmtDay, fmtKg, fmtMonth, fmtNum, monthKey, todayISO } from '../lib
 import { primaryRoute, telHref } from '../lib/suppliers';
 import type { FarmBundle } from '../lib/types';
 import type { FeedForecast } from '../lib/forecast/feed';
-import { NS } from '../lib/env';
+import { IS_LOCAL, NS } from '../lib/env';
 import { ReadyToApprove } from '../components/ReadyToApprove';
+import { BackupNudge } from '../components/PhoneStorage';
 import { CalvingCard } from '../components/CalvingCard';
 
 type Derived = ReturnType<typeof useDerived>;
@@ -368,6 +369,7 @@ export default function Today() {
           </Link>
         )}
         <PhotoQueueNudge />
+        {IS_LOCAL && <BackupNudge />}
 
         {next.length > 0 && (
           <section aria-label="Needs your attention" className="overflow-hidden rounded-[1.125rem] bg-card shadow-lift">

@@ -109,7 +109,19 @@ export default function Record() {
       sub: `Last ${eur(Number(milk.amount_eur))}${milk.milk_litres ? ` for ${fmtNum(Number(milk.milk_litres))} L` : ''}`
     });
   }
-  const bill = b.costs.filter((c) => !c.feed_transaction_id && c.category !== 'feed').sort((x, y) => y.occurred_on.localeCompare(x.occurred_on))[0];
+  // Fertiliser: the last delivery and the last spreading, each one tap to do again
+  const fertBills = new Set(b.fertStock.map((x) => x.cost_id).filter(Boolean));
+  const lastFert = [...b.fertStock].filter((x) => x.kind === 'delivery').sort((x, y) => y.on_date.localeCompare(x.on_date))[0];
+  const lastFertProduct = lastFert && b.fertilisers.find((x) => x.id === lastFert.product_id && !x.archived);
+  if (lastFert && lastFertProduct) {
+    repeats.push({ key: lastFert.id, to: `/record/fertiliser?product=${lastFertProduct.id}`, Icon: Package, title: `${lastFertProduct.name}, ${fmtKg(Number(lastFert.quantity_kg))}`, sub: `Fertiliser delivery, last on ${fmtDay(lastFert.on_date)}` });
+  }
+  const lastSpread = [...b.spreads].sort((x, y) => y.spread_on.localeCompare(x.spread_on))[0];
+  const spreadProduct = lastSpread && b.fertilisers.find((x) => x.id === lastSpread.product_id && !x.archived);
+  if (lastSpread && spreadProduct) {
+    repeats.push({ key: lastSpread.id, to: `/record/spread?product=${spreadProduct.id}`, Icon: Package, title: `Spread ${spreadProduct.name}`, sub: `Last ${fmtKg(Number(lastSpread.total_kg))} on ${fmtDay(lastSpread.spread_on)}` });
+  }
+  const bill = b.costs.filter((c) => !c.feed_transaction_id && c.category !== 'feed' && !fertBills.has(c.id)).sort((x, y) => y.occurred_on.localeCompare(x.occurred_on))[0];
   if (bill) {
     repeats.push({
       key: bill.id, to: `/record/cost?repeat=${bill.id}`, Icon: Receipt,

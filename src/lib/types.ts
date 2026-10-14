@@ -141,6 +141,8 @@ export interface FeedProduct {
   safety_stock_value: number;
   lead_time_days: number | null;
   archived: boolean;
+  /** What kind of feed it is, from the pick list (lib/catalogue.ts), for the CSO comparison. Null = not said. */
+  catalogue_key?: string | null;
 }
 
 export interface FeedTransaction {
@@ -471,6 +473,71 @@ export interface SuggestionDecision {
   decided_at: string;
 }
 
+/** A field on the farm (14 Oct 2026). Spreading is recorded per field. */
+export type FieldUse = 'grazing' | 'silage' | 'tillage' | 'other';
+export interface Field {
+  id: string;
+  farm_id: string;
+  name: string;
+  acres: number | null;
+  use: FieldUse;
+  /** The farmer's own round: flag the field this many days after it was last spread */
+  spread_every_days: number | null;
+  /** Silage: the day the farmer plans to cut */
+  cut_on: ISODate | null;
+  archived: boolean;
+  sort_order: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface FertiliserProduct {
+  id: string;
+  farm_id: string;
+  name: string;
+  catalogue_key: string | null;
+  supplier_id: string | null;
+  /** The farmer's own low level, kg */
+  low_stock_kg: number | null;
+  archived: boolean;
+  created_at?: string;
+}
+
+export interface FertiliserStock {
+  id: string;
+  farm_id: string;
+  product_id: string;
+  kind: 'opening' | 'delivery' | 'count';
+  quantity_kg: number;
+  on_date: ISODate;
+  evidence: 'measured' | 'farmer_estimate' | 'docket';
+  supplier_id: string | null;
+  /** The bill for a delivery (category fertiliser); the price lives there */
+  cost_id: string | null;
+  notes: string | null;
+  created_at?: string;
+}
+
+export interface FertiliserSpread {
+  id: string;
+  farm_id: string;
+  product_id: string;
+  spread_on: ISODate;
+  kg_per_acre: number | null;
+  total_kg: number;
+  notes: string | null;
+  created_at?: string;
+}
+
+export interface FertiliserSpreadField {
+  id: string;
+  farm_id: string;
+  spread_id: string;
+  field_id: string;
+  acres: number | null;
+  kg: number;
+}
+
 export interface FarmBundle {
   farm: Farm;
   groups: AnimalGroup[];
@@ -499,6 +566,12 @@ export interface FarmBundle {
   seasons: CalvingSeason[];
   births: CalfBirth[];
   decisions: SuggestionDecision[];
+  /** Fields, fertiliser stock and spreading (14 Oct 2026) */
+  fields: Field[];
+  fertilisers: FertiliserProduct[];
+  fertStock: FertiliserStock[];
+  spreads: FertiliserSpread[];
+  spreadFields: FertiliserSpreadField[];
   /** This user's role on the farm (owner when not known, e.g. the phone-only build). */
   role?: MemberRole;
 }

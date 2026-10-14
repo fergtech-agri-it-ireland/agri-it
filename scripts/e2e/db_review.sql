@@ -147,6 +147,34 @@ do $$ begin
   insert into public.suggestion_decisions (farm_id, key, decision) values ('30000000-0000-0000-0000-000000000001', 'x', 'snoozed');
   raise exception 'FAILED: not now with no date';
 exception when check_violation then raise notice 'ok: not now needs a date'; end $$;
+-- Fields and fertiliser (14 Oct 2026) are farm work: a worker adds fields, stock and spreading
+insert into public.fields (id, farm_id, name, acres, use, spread_every_days) values
+  ('f1000000-0000-0000-0000-0000000000a1', '30000000-0000-0000-0000-000000000001', 'Paddock 1', 8, 'grazing', 21),
+  ('f1000000-0000-0000-0000-0000000000a2', '30000000-0000-0000-0000-000000000001', 'Paddock 2', 10, 'grazing', 21);
+insert into public.fertiliser_products (id, farm_id, name, catalogue_key, low_stock_kg) values ('f2000000-0000-0000-0000-0000000000a1', '30000000-0000-0000-0000-000000000001', 'CAN (27% N)', 'can', 1000);
+insert into public.fertiliser_stock (farm_id, product_id, kind, quantity_kg, on_date) values ('30000000-0000-0000-0000-000000000001', 'f2000000-0000-0000-0000-0000000000a1', 'count', 2000, current_date - 10);
+insert into public.fertiliser_spreads (id, farm_id, product_id, spread_on, kg_per_acre, total_kg) values ('f3000000-0000-0000-0000-0000000000a1', '30000000-0000-0000-0000-000000000001', 'f2000000-0000-0000-0000-0000000000a1', current_date - 2, 50, 900);
+insert into public.fertiliser_spread_fields (farm_id, spread_id, field_id, acres, kg) values
+  ('30000000-0000-0000-0000-000000000001', 'f3000000-0000-0000-0000-0000000000a1', 'f1000000-0000-0000-0000-0000000000a1', 8, 400),
+  ('30000000-0000-0000-0000-000000000001', 'f3000000-0000-0000-0000-0000000000a1', 'f1000000-0000-0000-0000-0000000000a2', 10, 500);
+select pg_temp.check((select count(*) = 2 from public.fertiliser_spread_fields), 'a worker records spreading on two fields at once');
+do $$ begin
+  update public.fields set spread_every_days = 3 where id = 'f1000000-0000-0000-0000-0000000000a1';
+  raise exception 'FAILED: a 3-day round allowed';
+exception when check_violation then raise notice 'ok: a round is 7 to 120 days'; end $$;
+do $$ begin
+  insert into public.fertiliser_spreads (farm_id, product_id, spread_on, total_kg) values ('30000000-0000-0000-0000-000000000001', 'f2000000-0000-0000-0000-0000000000a1', current_date, 0);
+  raise exception 'FAILED: spreading nothing allowed';
+exception when check_violation then raise notice 'ok: spreading must be more than 0 kg'; end $$;
+commit;
+-- Taking a spreading back takes its fields with it; another farm sees none of it
+delete from public.fertiliser_spreads where id = 'f3000000-0000-0000-0000-0000000000a1';
+select pg_temp.check((select count(*) = 0 from public.fertiliser_spread_fields where spread_id = 'f3000000-0000-0000-0000-0000000000a1'), 'undoing a spreading removes it from every field');
+select pg_temp.check((select count(*) > 0 from public.audit_log where table_name = 'fertiliser_spreads'), 'spreading is in the change history');
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = '20000000-0000-0000-0000-0000000000b9';
+select pg_temp.check((select count(*) = 0 from public.fields) and (select count(*) = 0 from public.fertiliser_products) and (select count(*) = 0 from public.fertiliser_stock), 'someone outside the farm sees no fields or fertiliser');
 commit;
 
 begin;

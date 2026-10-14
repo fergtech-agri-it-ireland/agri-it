@@ -36,7 +36,7 @@ export const DEFAULTS: Record<string, () => Row> = {
   suppliers: () => ({ farm_id: null, network: null, coverage: ['ROI'], central_phone: null, central_phone_label: null, secondary_phone: null, secondary_phone_label: null, website: null, local_contact_method: null, area_served: null, source_url: null, verified_on: null, needs_live_directory: false }),
   farm_supplier_settings: () => ({ rep_name: null, rep_phone: null, lead_time_days: null, account_number: null, last_used_at: null, updated_at: new Date().toISOString() }),
   documents: () => ({ record_type: 'other', storage_path: null, file_name: null, mime_type: null, extracted: null, state: 'unconfirmed' }),
-  feed_products: () => ({ supplier_id: null, storage_location: null, safety_stock_mode: 'days', safety_stock_value: 3, lead_time_days: null, analysis: null, archived: false }),
+  feed_products: () => ({ supplier_id: null, catalogue_key: null, storage_location: null, safety_stock_mode: 'days', safety_stock_value: 3, lead_time_days: null, analysis: null, archived: false }),
   feed_transactions: () => ({ placed: true, placed_on: null, order_date: null, delivery_date: null, expected_delivery_date: null, order_status: null, linked_order_id: null, supplier_id: null, total_price_eur: null, price_per_tonne_eur: null, evidence: 'farmer_estimate', document_id: null, notes: null }),
   feeding_rules: () => ({ head_count_override: null, start_date: todayISO(), end_date: null, is_temporary: false, label: null, confirm_daily: true }),
   routines: () => ({ interval_days: null, weekday: null, day_of_month: null, start_date: todayISO(), end_date: null, amount: null, category: null, counterparty: null, feed_product_id: null, silage_store_id: null, supplier_id: null, active: true }),
@@ -49,6 +49,11 @@ export const DEFAULTS: Record<string, () => Row> = {
   farm_records: () => ({ details: {}, document_id: null, state: 'confirmed' }),
   jobs: () => ({ due_on: null, done_at: null, dismissed_at: null }),
   crops: () => ({ variety: null, acres: null, sown_on: null, archived: false }),
+  fields: () => ({ acres: null, use: 'grazing', spread_every_days: null, cut_on: null, archived: false, sort_order: 0 }),
+  fertiliser_products: () => ({ catalogue_key: null, supplier_id: null, low_stock_kg: null, archived: false }),
+  fertiliser_stock: () => ({ evidence: 'measured', supplier_id: null, cost_id: null, notes: null }),
+  fertiliser_spreads: () => ({ kg_per_acre: null, notes: null }),
+  fertiliser_spread_fields: () => ({ acres: null }),
   forecast_snapshots: () => ({ subject_id: null, generated_at: new Date().toISOString() })
 };
 
@@ -297,6 +302,30 @@ export function buildSeed(): DB {
     id: '5e000000-0000-0000-0000-000000000001', farm_id: F, label: 'Spring calving', herd: 'dairy', calving_start: D(75), calving_end: D(150),
     cows_due: 160, thin_count: 12, dry_weeks: 8, dry_weeks_thin: 10, milking_group_id: G_COWS, dry_group_id: G_DRY, calf_group_id: G_CALF, archived: false, created_at: stamp(), updated_at: stamp()
   }]);
+  // Fields and fertiliser (14 Oct 2026). No bill on the demo delivery, so the demo's money figures stay as they were.
+  const FLD = (n: number) => `f1000000-0000-0000-0000-00000000000${n}`;
+  put('fields', [
+    { id: FLD(1), farm_id: F, name: 'Paddock 1', acres: 8, use: 'grazing', spread_every_days: 21, sort_order: 1 },
+    { id: FLD(2), farm_id: F, name: 'Paddock 2', acres: 9.5, use: 'grazing', spread_every_days: 21, sort_order: 2 },
+    { id: FLD(3), farm_id: F, name: 'Paddock 3', acres: 7, use: 'grazing', spread_every_days: 21, sort_order: 3 },
+    { id: FLD(4), farm_id: F, name: 'Bottom field', acres: 20, use: 'silage', sort_order: 4 }
+  ]);
+  const CAN = 'f2000000-0000-0000-0000-000000000001';
+  put('fertiliser_products', [{ id: CAN, farm_id: F, name: 'CAN (27% N)', catalogue_key: 'can', supplier_id: TIRLAN, low_stock_kg: 1000 }]);
+  put('fertiliser_stock', [
+    { farm_id: F, product_id: CAN, kind: 'count', quantity_kg: 1500, on_date: D(-70), evidence: 'measured', created_at: stamp() },
+    { farm_id: F, product_id: CAN, kind: 'delivery', quantity_kg: 2000, on_date: D(-60), evidence: 'docket', supplier_id: TIRLAN, created_at: stamp() }
+  ]);
+  const SP = (n: number) => `f3000000-0000-0000-0000-00000000000${n}`;
+  put('fertiliser_spreads', [
+    { id: SP(1), farm_id: F, product_id: CAN, spread_on: D(-50), kg_per_acre: 50, total_kg: 1225, created_at: stamp() },
+    { id: SP(2), farm_id: F, product_id: CAN, spread_on: D(-30), kg_per_acre: 50, total_kg: 875, created_at: stamp() }
+  ]);
+  put('fertiliser_spread_fields', [
+    { farm_id: F, spread_id: SP(1), field_id: FLD(1), acres: 8, kg: 400 }, { farm_id: F, spread_id: SP(1), field_id: FLD(2), acres: 9.5, kg: 475 },
+    { farm_id: F, spread_id: SP(1), field_id: FLD(3), acres: 7, kg: 350 },
+    { farm_id: F, spread_id: SP(2), field_id: FLD(1), acres: 8, kg: 400 }, { farm_id: F, spread_id: SP(2), field_id: FLD(2), acres: 9.5, kg: 475 }
+  ]);
   for (const t of ['documents', 'forecast_snapshots', 'calf_births', 'suggestion_decisions']) db[t] = db[t] ?? [];
   return db;
 }

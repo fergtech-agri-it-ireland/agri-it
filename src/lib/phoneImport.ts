@@ -36,7 +36,9 @@ export const IMPORT_ORDER = [
   'feed_products', 'feed_transactions', 'feeding_rules', 'feed_use_logs',
   'silage_stores', 'routines', 'income', 'costs', 'routine_completions',
   'budget_lines', 'farm_records', 'jobs',
-  'calving_seasons', 'calf_births', 'suggestion_decisions'
+  'calving_seasons', 'calf_births', 'suggestion_decisions',
+  // After costs: a fertiliser delivery points at its bill
+  'fields', 'fertiliser_products', 'fertiliser_stock', 'fertiliser_spreads', 'fertiliser_spread_fields'
 ] as const;
 export type ImportTable = (typeof IMPORT_ORDER)[number];
 
@@ -54,7 +56,9 @@ export const TABLE_LABEL: Record<ImportTable, string> = {
   feed_products: 'feeds', feed_transactions: 'feed deliveries, orders and counts', feeding_rules: 'feeding plans', feed_use_logs: 'ticked-off feeding',
   silage_stores: 'silage and bales', routines: 'routines', income: 'income', costs: 'bills and costs', routine_completions: 'ticked-off routines',
   budget_lines: 'budget lines', farm_records: 'records', jobs: 'jobs',
-  calving_seasons: 'calving seasons', calf_births: 'calves born', suggestion_decisions: 'answers to suggestions'
+  calving_seasons: 'calving seasons', calf_births: 'calves born', suggestion_decisions: 'answers to suggestions',
+  fields: 'fields', fertiliser_products: 'fertilisers', fertiliser_stock: 'fertiliser deliveries and stock checks',
+  fertiliser_spreads: 'spreading', fertiliser_spread_fields: 'spreading by field'
 };
 
 export interface ImportPlan {

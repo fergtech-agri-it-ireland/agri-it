@@ -211,7 +211,7 @@ function withDefaults(t: string, r: Row): Row {
 }
 
 /** Tables with updated_at (mirrors the migration), so an offline edit can spot a newer change. */
-const TOUCHED = new Set(['farms', 'animal_groups', 'feed_products', 'feed_transactions', 'feeding_rules', 'silage_stores', 'budget_lines', 'farm_records', 'jobs', 'routines', 'crops', 'documents', 'costs', 'income', 'farm_supplier_settings']);
+const TOUCHED = new Set(['farms', 'animal_groups', 'feed_products', 'feed_transactions', 'feeding_rules', 'silage_stores', 'budget_lines', 'farm_records', 'jobs', 'routines', 'crops', 'documents', 'costs', 'income', 'farm_supplier_settings', 'fields', 'fertiliser_products', 'fertiliser_stock', 'fertiliser_spreads', 'fertiliser_spread_fields']);
 /** Same as the costs_payment_dates trigger: a paid cost has a paid date, an owed one never does. */
 function paymentDates(t: string, r: Row): Row {
   if (t !== 'costs') return r;
@@ -221,7 +221,7 @@ function paymentDates(t: string, r: Row): Row {
 }
 
 /** Same as the audit_row trigger: who changed what and when. On this phone, "who" is the phone. */
-const AUDITED = new Set(['costs', 'income', 'feed_transactions', 'animal_groups', 'feeding_rules', 'documents', 'farm_records', 'budget_lines', 'jobs', 'feed_products', 'silage_stores']);
+const AUDITED = new Set(['costs', 'income', 'feed_transactions', 'animal_groups', 'feeding_rules', 'documents', 'farm_records', 'budget_lines', 'jobs', 'feed_products', 'silage_stores', 'fields', 'fertiliser_products', 'fertiliser_stock', 'fertiliser_spreads', 'fertiliser_spread_fields']);
 let auditSeq = 0;
 function audit(t: string, action: 'insert' | 'update' | 'delete', oldRow: Row | null, newRow: Row | null) {
   if (!AUDITED.has(t)) return;
@@ -253,6 +253,16 @@ function cascade(t: string, removed: Row[]) {
     db.routines = table('routines').filter((x) => !ids.has(x.feed_product_id));
     cascade('routines', rt);
   }
+  // Fields and fertiliser (14 Oct 2026)
+  if (t === 'fertiliser_products') {
+    db.fertiliser_stock = table('fertiliser_stock').filter((x) => !ids.has(x.product_id));
+    const sp = table('fertiliser_spreads').filter((x) => ids.has(x.product_id));
+    db.fertiliser_spreads = table('fertiliser_spreads').filter((x) => !ids.has(x.product_id));
+    cascade('fertiliser_spreads', sp);
+  }
+  if (t === 'fertiliser_spreads') db.fertiliser_spread_fields = table('fertiliser_spread_fields').filter((x) => !ids.has(x.spread_id));
+  if (t === 'fields') db.fertiliser_spread_fields = table('fertiliser_spread_fields').filter((x) => !ids.has(x.field_id));
+  if (t === 'costs') for (const x of table('fertiliser_stock')) if (ids.has(x.cost_id)) x.cost_id = null;
   if (t === 'feeding_rules') db.feed_use_logs = table('feed_use_logs').filter((x) => !ids.has(x.feeding_rule_id));
   if (t === 'routines') db.routine_completions = table('routine_completions').filter((x) => !ids.has(x.routine_id));
   if (t === 'silage_stores') {

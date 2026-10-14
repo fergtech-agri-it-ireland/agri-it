@@ -6,6 +6,7 @@ import { todayISO, uuid } from '../lib/format';
 import type { Op } from '../lib/offline/outbox';
 import { Button, Card, Chips, SaveBar, Screen, Stepper, TextInput } from '../components/ui';
 import { QuantityInput, SupplierPicker } from '../components/pickers';
+import { ProductPick } from '../components/ProductPick';
 
 export default function FeedEdit() {
   const { id } = useParams();
@@ -14,7 +15,8 @@ export default function FeedEdit() {
   const save = useSave();
   const nav = useNavigate();
   const existing = b.products.find((p) => p.id === id);
-  const [name, setName] = useState(existing?.name ?? '');
+  const [pick, setPick] = useState({ name: existing?.name ?? '', catalogueKey: existing?.catalogue_key ?? null });
+  const name = pick.name;
   const [supplierId, setSupplierId] = useState<string | null>(existing?.supplier_id ?? null);
   const [storage, setStorage] = useState(existing?.storage_location ?? '');
   const [mode, setMode] = useState<'days' | 'kg'>(existing?.safety_stock_mode ?? 'days');
@@ -25,12 +27,11 @@ export default function FeedEdit() {
   const [unit, setUnit] = useState<'kg' | 't'>('t');
   const [evidence, setEvidence] = useState<Evidence>('measured');
 
-  const recentNames = [...new Set(b.products.map((p) => p.name))];
 
   async function submit() {
     const pid = existing?.id ?? uuid();
     const row = {
-      id: pid, farm_id: farmId, name: name.trim(), supplier_id: supplierId, storage_location: storage || null,
+      id: pid, farm_id: farmId, name: name.trim(), catalogue_key: pick.catalogueKey, supplier_id: supplierId, storage_location: storage || null,
       safety_stock_mode: mode, safety_stock_value: safety, lead_time_days: knowLead ? lead : null
     };
     const ops: Op[] = existing
@@ -61,10 +62,9 @@ export default function FeedEdit() {
   return (
     <Screen title={existing ? 'Edit feed' : 'Add a feed'} back>
       <Card className="space-y-5">
-        <TextInput label="Feed name" value={name} onChange={setName} placeholder="e.g. Dairy nut 16%" list="feed-names" autoFocus={!existing}
-          hint="As it appears on your docket. Agri-It doesn't guess the nutrition from the name." />
-        <datalist id="feed-names">{recentNames.map((n) => <option key={n} value={n} />)}</datalist>
         <SupplierPicker b={b} value={supplierId} onChange={setSupplierId} />
+        <ProductPick kind="feed" supplierId={supplierId} name={name} catalogueKey={pick.catalogueKey} onChange={setPick} label="Feed name" />
+        <p className="hint -mt-3">As it appears on your docket. Agri-It doesn't guess the nutrition from the name.</p>
         <TextInput label="Bin or store (optional)" value={storage} onChange={setStorage} placeholder="e.g. Bin 1" />
         {!existing && (
           <>

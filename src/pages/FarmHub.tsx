@@ -1,6 +1,6 @@
 import type { ComponentType, ReactNode } from 'react';
 import {
-  Baby, Banknote, BookOpen, ChevronRight, ClipboardList, FileSpreadsheet, ListChecks, MessageCircleQuestion, PiggyBank, Repeat, Settings, Sprout, Tractor, Truck, Users, Warehouse, Wheat
+  Baby, Banknote, BookOpen, Map as MapIcon, ChevronRight, ClipboardList, FileSpreadsheet, ListChecks, MessageCircleQuestion, PiggyBank, Repeat, Settings, Sprout, Tractor, Truck, Users, Warehouse, Wheat
 } from 'lucide-react';
 import { useFarmData } from '../lib/data/farm';
 import { useDerived } from '../lib/data/derived';
@@ -42,6 +42,8 @@ export default function FarmHub() {
         <Row to="/farm/groups" icon={icon(Users)} title="Animals and breeds" sub={heads ? `${b.groups.filter((g) => !g.archived).length} groups, ${fmtNum(heads)} head` : 'Add your groups'} right={chev} />
         {grows(types) && cropsRow}
         <Row to="/progress?tab=feed" icon={icon(Wheat)} title="Bought-in feed" sub={`${b.products.filter((p) => !p.archived).length} feeds tracked`} right={chev} />
+        <Row to="/fertiliser" icon={icon(Sprout)} title="Fertiliser and spreading" sub={(() => { const due = d.fertiliser.due.filter((x) => x.kind !== 'cut_passed').length; const n = b.fertilisers.filter((p) => !p.archived).length; return due ? `${due} field${due > 1 ? 's' : ''} due` : n ? `${n} in stock` : 'Stock, spreading, closed period'; })()} right={chev} />
+        <Row to="/farm/fields" icon={icon(MapIcon)} title="Fields" sub={b.fields.filter((f) => !f.archived).length ? `${b.fields.filter((f) => !f.archived).length} fields` : 'Names and acres, for spreading'} right={chev} />
         <Row to="/farm/silage" icon={icon(Warehouse)} title="Silage and bales" sub={d.forage.availableT ? `${fmtNum(Math.round(d.forage.availableT))} t in store` : 'Not recorded'} right={chev} />
         {!grows(types) && cropsRow}
       </Group>

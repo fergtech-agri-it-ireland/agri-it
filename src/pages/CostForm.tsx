@@ -7,7 +7,7 @@ import { extractedRecord, isReferenceNote, keepEvidence } from '../lib/docket/fl
 import { dropToRead } from '../lib/docket/photoStore';
 import { NotReadTag, ReadSummary, ReadTag } from '../components/PhotoRead';
 import { useToast } from '../components/Toast';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useFarmData, useFarmCtx, useSave } from '../lib/data/farm';
 import { COST_LABEL, type Cost, type CostCategory } from '../lib/types';
 import { eur, todayISO, uuid, cur } from '../lib/format';
@@ -20,6 +20,7 @@ import { setPendingPhoto } from '../lib/pendingPhoto';
 import { fmtDay } from '../lib/format';
 import type { FarmType } from '../lib/types';
 import { Field } from '../components/ui';
+import { CATALOGUE } from '../lib/catalogue';
 
 export default function CostForm() {
   const [params] = useSearchParams();
@@ -126,7 +127,18 @@ export default function CostForm() {
             hint={category === 'feed' ? 'Tip: log meal through "Feed arrived" and the cost is added for you, with stock.' : undefined} />
           {read && (read.costCategory ? <ReadTag field="category" read={read.costCategory} edited={edited.category} /> : <NotReadTag field="category" what="what it was for" />)}
         </div>
-        {category === 'other' && <TextInput label="Describe it" value={otherLabel} onChange={setOtherLabel} voice />}
+        {category === 'other' && (
+          <div className="space-y-2">
+            <TextInput label="Describe it" value={otherLabel} onChange={setOtherLabel} voice />
+            <div className="flex flex-wrap gap-2">
+              {CATALOGUE.filter((c) => c.kind === 'other').map((c) => (
+                <button key={c.key} type="button" aria-pressed={otherLabel === c.name} onClick={() => setOtherLabel(c.name)}
+                  className={`min-h-[2.75rem] rounded-full border px-4 text-[0.9375rem] font-semibold ${otherLabel === c.name ? 'border-field bg-field text-white' : 'border-line bg-card'}`}>{c.name}</button>
+              ))}
+            </div>
+          </div>
+        )}
+        {category === 'fertiliser' && <p className="rounded-xl bg-pasture p-3 text-[0.9375rem]">Bought fertiliser to keep in the shed? Record it as a <Link className="font-bold text-accent underline" to="/record/fertiliser">fertiliser delivery</Link> so it goes on the stock and the bill is added for you.</p>}
         {openDeliveries.length > 0 && (
           <div className="rounded-xl bg-field-light p-3">
             <p className="font-bold text-accent">Is this the invoice for feed already recorded?</p>

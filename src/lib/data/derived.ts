@@ -7,6 +7,8 @@ import { budgetAlerts, budgetVsActual, cashCompleteness, cashForecast90, cashPos
 import { pricePoints } from '../forecast/prices';
 import { moneyStates, possibleDuplicateDeliveries } from '../forecast/bills';
 import { buildChecklist } from '../routines';
+import { forecastFertiliser } from '../forecast/fertiliser';
+import { ruleSourceLine } from '../spreading';
 import { suggestions as buildSuggestions } from '../suggestions';
 import { addDays, daysBetween, fmtDay, fmtKg, todayISO, eur } from '../format';
 import { supabase } from '../supabase';
@@ -158,6 +160,62 @@ export function derive(b: FarmBundle, today: ISODate) {
     const ss = silageSummary(forage);
     if (ss && ss.shortOfWinterT > 0) p.push({ id: 'forage', tone: 'urgent', when: 'soon', title: 'Silage short for the winter', detail: ss.line, to: '/forecast?tab=forage' });
     else if (ss && ss.shortOfTargetT > 0) p.push({ id: 'forage', tone: 'warn', when: 'soon', title: 'Winter silage is tight', detail: ss.line, to: '/forecast?tab=forage' });
+    // Fertiliser (14 Oct 2026): spreading season from the statutory closed period, fields due on
+    // the farmer's own round or cutting date, low stock at the farmer's own level
+    const fert = forecastFertiliser(b, today);
+    const usesFert = b.fields.some((f) => !f.archived) || b.fertilisers.some((x) => !x.archived);
+    if (fert.season && usesFert) {
+      const s = fert.season;
+      const zone = s.rule.zone === 'NI' ? 'Northern Ireland' : `Zone ${s.rule.zone}`;
+      const toLast = daysBetween(today, s.lastDay);
+      if (s.open && toLast >= 0 && toLast <= 14) {
+        const left = fert.due.filter((x) => x.kind !== 'cut_passed').length;
+        p.push({ id: 'fert-close', tone: 'warn', when: toLast === 0 ? 'today' : 'soon',
+          title: toLast === 0 ? 'Last day for chemical fertiliser' : `Last day for chemical fertiliser: ${fmtDay(s.lastDay)}`,
+          detail: `${zone} closes from ${fmtDay(s.closedFrom)}.${left ? ` ${left} field${left > 1 ? 's' : ''} due before then.` : ''} ${s.rule.exempt}`, to: '/fertiliser' });
+      }
+      const toOpen = daysBetween(today, s.opensOn);
+      if (!s.open && toOpen >= 0 && toOpen <= 14) {
+        p.push({ id: 'fert-open', tone: toOpen === 0 ? 'warn' : 'info', when: toOpen === 0 ? 'today' : 'soon', dismissable: toOpen > 0,
+          title: toOpen === 0 ? `Spreading opens today (${zone})` : `Spreading opens ${fmtDay(s.opensOn)} (${zone})`,
+          detail: `Chemical fertiliser is allowed again from ${fmtDay(s.opensOn)}. ${ruleSourceLine(s.rule)}`, to: '/fertiliser' });
+      }
+      if (fert.firstRound && toOpen < 0) {
+        p.push({ id: 'fert-first', tone: 'info', when: 'soon', dismissable: true, title: 'Spreading is open: first nitrogen when ground allows',
+          detail: 'Teagasc: when soil is above 6°C and rising, grass is growing, the field can carry a tractor and no heavy rain is forecast. Typically around the end of February', to: '/fertiliser' });
+      }
+    }
+    const rounds = fert.due.filter((x) => x.kind === 'round');
+    const whenFor = (d: ISODate): When => (d < today ? 'overdue' : d === today ? 'today' : 'soon');
+    if (rounds.length > 2) {
+      const first = rounds[0];
+      p.push({ id: 'fert-rounds', tone: 'warn', when: whenFor(first.dueOn), title: `${rounds.length} fields due another round`,
+        detail: `${rounds.map((x) => x.field.name).slice(0, 4).join(', ')}${rounds.length > 4 ? ` and ${rounds.length - 4} more` : ''}. On your own rounds`, to: '/fertiliser', action: 'Spread' });
+    } else {
+      for (const r of rounds) {
+        p.push({ id: `fert-round-${r.field.id}`, tone: 'warn', when: whenFor(r.dueOn), title: `Spread ${r.field.name}`,
+          detail: `${r.dueOn < today ? `Due since ${fmtDay(r.dueOn)}` : r.dueOn === today ? 'Due today' : `Due ${fmtDay(r.dueOn)}`} on your ${r.field.spread_every_days}-day round.${r.lastSpread ? ` Last spread ${fmtDay(r.lastSpread.on)}` : ' Not spread yet this season'}`,
+          to: `/record/spread?field=${r.field.id}`, action: 'Spread' });
+      }
+    }
+    for (const r of fert.due.filter((x) => x.kind === 'silage')) {
+      p.push({ id: `fert-silage-${r.field.id}`, tone: 'warn', when: whenFor(r.dueOn), title: `Spread ${r.field.name} by ${fmtDay(r.dueOn)}`,
+        detail: `For cutting about ${fmtDay(r.field.cut_on)}. Teagasc: nitrogen on at least 50 days before cutting`, to: `/record/spread?field=${r.field.id}`, action: 'Spread' });
+    }
+    for (const r of fert.due.filter((x) => x.kind === 'cut_passed')) {
+      p.push({ id: `fert-cut-${r.field.id}`, tone: 'info', when: 'later', dismissable: true, title: `Did you cut ${r.field.name}?`,
+        detail: `You planned to cut about ${fmtDay(r.field.cut_on)}. Set the next cutting date so Agri-It can flag the next round`, to: '/farm/fields' });
+    }
+    for (const x of fert.products) {
+      if (x.low) p.push({ id: `fert-low-${x.product.id}`, tone: 'warn', when: 'soon', title: `Low on ${x.product.name}: ${fmtKg(x.stockKg)} left`,
+        detail: `Your low level is ${fmtKg(Number(x.product.low_stock_kg))}`, to: `/fertiliser/${x.product.id}` });
+      if (x.overspentKg > 0) p.push({ id: `fert-check-${x.product.id}`, tone: 'info', when: 'later', title: `Check your ${x.product.name} stock`,
+        detail: `${fmtKg(x.overspentKg)} more spread than recorded. A stock check puts it right`, to: `/fertiliser/${x.product.id}` });
+    }
+    for (const sf of fert.shortfalls) {
+      p.push({ id: `fert-short-${sf.product.id}`, tone: 'warn', when: 'soon', title: `Not enough ${sf.product.name} for the fields due`,
+        detail: `About ${fmtKg(sf.needKg)} at your last rates (${sf.fields.join(', ')}); ${fmtKg(sf.haveKg)} in stock`, to: `/fertiliser/${sf.product.id}` });
+    }
     if (cash && cashGaps.stale) p.push({ id: 'cash-check', tone: 'info', when: 'later', title: 'Check your cash against the bank', detail: `Last checked ${cashGaps.daysSinceCheck} days ago. Recorded cash is not a bank balance`, to: '/forecast?tab=cash' });
     if (cash90.lowest && cash && cash90.lowest.closing < 0) p.push({ id: 'cash', tone: 'urgent', when: 'soon', title: 'Cash may go overdrawn', detail: `Lowest point about ${eur(cash90.lowest.closing)}, from recorded cash, bills owed, repeats and budget`, to: '/forecast?tab=cash' });
     // Budget variance: only the year-so-far and this-month alerts reach Today; last month's note stays on Money
@@ -181,7 +239,7 @@ export function derive(b: FarmBundle, today: ISODate) {
     const drafted = new Set(suggestions.map((x) => x.key.startsWith('order:') ? `feed-${x.key.split(':')[1]}` : x.key.startsWith('heads:') ? 'heads' : ''));
     for (let i = p.length - 1; i >= 0; i--) if (drafted.has(p[i].id)) p.splice(i, 1);
     p.sort((a, c) => whenRank[a.when] - whenRank[c.when] || toneRank[a.tone] - toneRank[c.tone]);
-    return { today, feed, forage, cash, cash90, cashGaps, budget, budgetAlerts: alerts, prices: pricePoints(b), yearEnd, money, priorities: p, suggestions, computedAt: new Date() };
+    return { today, feed, forage, cash, cash90, cashGaps, budget, budgetAlerts: alerts, prices: pricePoints(b), yearEnd, money, priorities: p, suggestions, fertiliser: fert, computedAt: new Date() };
   }
 }
 

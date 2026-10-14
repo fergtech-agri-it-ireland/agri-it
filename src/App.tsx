@@ -46,6 +46,11 @@ import Calving from './pages/Calving';
 import SeasonForm from './pages/SeasonForm';
 import DryOff from './pages/DryOff';
 import CalfForm from './pages/CalfForm';
+import Fields from './pages/Fields';
+import Fertiliser, { FertiliserDetail } from './pages/Fertiliser';
+import FertiliserEdit from './pages/FertiliserEdit';
+import FertiliserDelivery from './pages/FertiliserDelivery';
+import SpreadForm from './pages/SpreadForm';
 
 export default function App() {
   if (!supabaseConfigured) return <MissingConfig />;
@@ -78,6 +83,13 @@ export default function App() {
         <Route path="record/income" element={<IncomeForm />} />
         <Route path="record/invoice" element={<InvoiceForm />} />
         <Route path="record/calf" element={<CalfForm />} />
+        <Route path="record/spread" element={<SpreadForm />} />
+        <Route path="record/fertiliser" element={<FertiliserDelivery />} />
+        <Route path="fertiliser" element={<Fertiliser />} />
+        <Route path="fertiliser/new" element={<FertiliserEdit />} />
+        <Route path="fertiliser/:id" element={<FertiliserDetail />} />
+        <Route path="fertiliser/:id/edit" element={<FertiliserEdit />} />
+        <Route path="farm/fields" element={<Fields />} />
         <Route path="calving" element={<Calving />} />
         <Route path="calving/season/new" element={<SeasonForm />} />
         <Route path="calving/season/:id" element={<SeasonForm />} />

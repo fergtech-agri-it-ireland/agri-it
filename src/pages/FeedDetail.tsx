@@ -6,6 +6,9 @@ import { useDerived } from '../lib/data/derived';
 import { countVariances, rulesForDay, runoutSteps } from '../lib/forecast/feed';
 import { priceHistory } from '../lib/forecast/prices';
 import { PriceHistoryCard } from '../components/Prices';
+import { CsoCompare } from '../components/CsoCompare';
+import { CATALOGUE, catalogueItem } from '../lib/catalogue';
+import type { ISODate } from '../lib/types';
 import { supabase } from '../lib/supabase';
 import { EVIDENCE_LABEL } from '../lib/types';
 import { addDays, eur, fmtDate, fmtDay, fmtKg, fmtNum, todayISO } from '../lib/format';
@@ -238,6 +241,7 @@ export default function FeedDetail() {
       </Explain>
 
       <PriceHistoryCard h={prices} />
+      {b.role !== 'worker' && <CsoCard productId={product.id} catalogueKey={product.catalogue_key ?? null} paid={prices.latest ? { eurPerT: prices.latest.eurPerT, on: prices.latest.date } : null} />}
 
       {f.pricePerTonne !== null && (
         <Card>
@@ -286,5 +290,34 @@ export default function FeedDetail() {
         ))}
       </List>
     </Screen>
+  );
+}
+
+/** The CSO comparison, and (for a feed added before the pick list) a way to say what kind of feed it is. */
+function CsoCard({ productId, catalogueKey, paid }: { productId: string; catalogueKey: string | null; paid: { eurPerT: number; on: ISODate } | null }) {
+  const b = useFarmData();
+  const save = useSave();
+  const item = catalogueItem(catalogueKey);
+  const kinds = CATALOGUE.filter((c) => c.kind === 'feed' && !c.supplierId);
+  function setKind(key: string) {
+    const v = key || null;
+    void save([{ kind: 'update', table: 'feed_products', match: { id: productId }, patch: { catalogue_key: v } }], {
+      label: 'Saved', patch: (x) => ({ ...x, products: x.products.map((p) => (p.id === productId ? { ...p, catalogue_key: v } : p)) })
+    });
+  }
+  return (
+    <Card className="space-y-3">
+      <p className="font-bold">Your price against the CSO average</p>
+      {(!item || !item.supplierId) && b.farm.jurisdiction === 'ROI' && (
+        <label className="block">
+          <span className="label">What kind of feed is it?</span>
+          <select className="input" value={item && !item.supplierId ? item.key : ''} onChange={(e) => setKind(e.target.value)}>
+            <option value="">Not said</option>
+            {kinds.map((k) => <option key={k.key} value={k.key}>{k.name}{k.cso ? '' : ' (no CSO average)'}</option>)}
+          </select>
+        </label>
+      )}
+      <CsoCompare catalogueKey={catalogueKey} jurisdiction={b.farm.jurisdiction} paid={paid} />
+    </Card>
   );
 }

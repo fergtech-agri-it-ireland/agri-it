@@ -105,6 +105,7 @@ with sync_playwright() as p:
     # app must keep every record, read the old breed, and bring the directory up to date.
     n_before = pg.evaluate("""() => { const p = JSON.parse(localStorage.getItem('agri-it:phone-db')); const d = p.db;
       for (const g of d.animal_groups) { delete g.breeds; if (g.name === 'Dairy cows') g.breed = 'Holstein Friesian'; }
+      for (const t of ['fields', 'fertiliser_products', 'fertiliser_stock', 'fertiliser_spreads', 'fertiliser_spread_fields']) delete d[t];
       d.suppliers = d.suppliers.filter((s) => s.name !== 'Brett Brothers');
       d.supplier_branches = d.supplier_branches.filter((x) => !String(x.name).startsWith('Brett'));
       for (const s of d.suppliers) if (s.name === 'Aurivo Agribusiness') s.central_phone = '000 OLD';
@@ -123,6 +124,9 @@ with sync_playwright() as p:
     n_after = pg.evaluate("""() => { const d = JSON.parse(localStorage.getItem('agri-it:phone-db')).db;
       return ['costs', 'feed_products', 'animal_groups', 'crops'].map((t) => (d[t] || []).length).join(','); }""")
     check('Older phone: every record kept through the update', n_before == n_after, f'{n_before} -> {n_after}')
+    pg.goto(URL+'#/fertiliser'); pg.wait_for_timeout(1000)
+    ft=pg.locator('main').inner_text()
+    check('Older phone: Fertiliser opens with nothing recorded yet, season from Tipperary (Zone A)', 'No fertiliser yet' in ft and 'ZONE A' in ft.upper(), ft[:600])
     # settings card + backup
     pg.goto(URL+'#/settings'); pg.wait_for_timeout(1000)
     pg.get_by_role('heading',name='Kept on this phone').scroll_into_view_if_needed()

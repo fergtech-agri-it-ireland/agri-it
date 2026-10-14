@@ -1,6 +1,6 @@
 import { useId, useState } from 'react';
 import { Check, Plus } from 'lucide-react';
-import { breedList, breedsFor, FARM_TYPES, SPECIES } from '../lib/farmTypes';
+import { breedLabel, breedList, breedsFor, cleanBreeds, FARM_TYPES, MAX_BREED_LENGTH, MAX_BREEDS, SPECIES } from '../lib/farmTypes';
 import { ANIMAL_CLASS_LABEL, type AnimalClass, type FarmType } from '../lib/types';
 
 /** Pick any mix of farming. Nothing is required and nothing is ruled out. */
@@ -53,28 +53,59 @@ export function ClassPicker({ value, onChange, exclude = [] }: { value: AnimalCl
   );
 }
 
-/** Breed in the farmer's own words: the common ones one tap away, anything else typed. */
-export function BreedField({ cls, value, onChange, label = 'Breed (optional)' }: { cls: AnimalClass; value: string; onChange: (v: string) => void; label?: string }) {
+/**
+ * Breeds in the farmer's own words. Tap as many as the group holds (e.g. Holstein Friesian
+ * and Jersey cross); anything else is typed and added. Big chips for a gloved thumb.
+ */
+export function BreedField({ cls, value, onChange, label = 'Breeds (optional)' }: { cls: AnimalClass; value: string[]; onChange: (v: string[]) => void; label?: string }) {
   const id = useId();
   const listId = `${id}-breeds`;
   const [more, setMore] = useState(false);
+  const [typed, setTyped] = useState('');
+  const has = (x: string) => value.some((v) => v.toLowerCase() === x.toLowerCase());
+  const toggle = (x: string) => onChange(has(x) ? value.filter((v) => v.toLowerCase() !== x.toLowerCase()) : cleanBreeds([...value, x]));
+  const listed = breedsFor(cls);
   const quick = [...breedList(cls).slice(0, more ? undefined : 5), 'Crossbred', 'Mixed'];
+  // Breeds the farmer typed (or picked from "more") that aren't among the quick chips
+  const own = value.filter((v) => !quick.some((q) => q.toLowerCase() === v.toLowerCase()));
+  const full = value.length >= MAX_BREEDS;
+  function addTyped() {
+    const t = typed.trim();
+    if (!t) return;
+    onChange(cleanBreeds([...value, listed.find((x) => x.toLowerCase() === t.toLowerCase()) ?? t]));
+    setTyped('');
+  }
   return (
-    <div>
-      <label className="label" htmlFor={id}>{label}</label>
-      <input id={id} className="input" list={listId} value={value} onChange={(e) => onChange(e.target.value)} placeholder="Type a breed or pick one" maxLength={60} />
-      <datalist id={listId}>{breedsFor(cls).map((x) => <option key={x} value={x} />)}</datalist>
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        {quick.map((x) => (
-          <button key={x} type="button" aria-pressed={value === x} onClick={() => onChange(value === x ? '' : x)}
-            className={`min-h-[2.25rem] rounded-full border px-3 text-[0.8125rem] font-semibold ${value === x ? 'border-field bg-field text-white' : 'border-line bg-card'}`}>{x}</button>
-        ))}
+    <fieldset>
+      <legend className="label">{label}</legend>
+      <p className="-mt-1 mb-2 text-[0.8125rem] text-muted">{value.length ? `${breedLabel(value)}. Tap to add or take off.` : 'Tap every breed in this group.'}</p>
+      <div className="flex flex-wrap gap-2">
+        {[...own, ...quick].map((x) => {
+          const on = has(x);
+          return (
+            <button key={x} type="button" aria-pressed={on} disabled={!on && full} onClick={() => toggle(x)}
+              className={`flex min-h-[3rem] items-center gap-1.5 rounded-full border px-4 text-[0.9375rem] font-semibold disabled:opacity-40 ${on ? 'border-field bg-field text-white' : 'border-line bg-card'}`}>
+              {on && <Check className="h-4 w-4" strokeWidth={3} aria-hidden />}{x}
+            </button>
+          );
+        })}
         {!more && breedList(cls).length > 5 && (
-          <button type="button" onClick={() => setMore(true)} className="flex min-h-[2.25rem] items-center gap-1 rounded-full px-2 text-[0.8125rem] font-bold text-accent">
-            <Plus className="h-3.5 w-3.5" aria-hidden />More breeds
+          <button type="button" onClick={() => setMore(true)} className="flex min-h-[3rem] items-center gap-1 rounded-full px-3 text-[0.9375rem] font-bold text-accent">
+            <Plus className="h-4 w-4" aria-hidden />More breeds
           </button>
         )}
       </div>
-    </div>
+      <div className="mt-2 flex gap-2">
+        <label className="sr-only" htmlFor={id}>Type another breed</label>
+        <input id={id} className="input min-w-0 flex-1" list={listId} value={typed} disabled={full}
+          onChange={(e) => setTyped(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTyped(); } }}
+          placeholder={full ? `Up to ${MAX_BREEDS} breeds` : 'Type another breed'} maxLength={MAX_BREED_LENGTH} />
+        <datalist id={listId}>{listed.filter((x) => !has(x)).map((x) => <option key={x} value={x} />)}</datalist>
+        <button type="button" onClick={addTyped} disabled={!typed.trim() || full} aria-label="Add this breed"
+          className="flex min-h-[3rem] shrink-0 items-center gap-1 rounded-full border border-field px-4 text-[0.9375rem] font-bold text-accent disabled:opacity-40">
+          <Plus className="h-5 w-5" aria-hidden />Add
+        </button>
+      </div>
+    </fieldset>
   );
 }

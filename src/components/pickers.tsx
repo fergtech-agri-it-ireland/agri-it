@@ -12,8 +12,11 @@ export function supplierOptions(b: FarmBundle) {
 
 export function SupplierPicker({ b, value, onChange, label = 'Supplier' }: { b: FarmBundle; value: string | null; onChange: (id: string) => void; label?: string }) {
   const list = supplierOptions(b);
-  const recent = list.slice(0, 4);
-  const rest = list.slice(4);
+  // The four most used, plus the one picked (from a photo, a feed or the list) so it always shows as a chip
+  const picked = value ? list.find((s) => s.id === value) : undefined;
+  const top = list.slice(0, 4);
+  const recent = picked && !top.includes(picked) ? [...top.slice(0, 3), picked] : top;
+  const rest = list.filter((s) => !recent.includes(s));
   return (
     <div className="space-y-2">
       <Chips label={label} columns={2} value={value && recent.some((s) => s.id === value) ? value : null} onChange={onChange}

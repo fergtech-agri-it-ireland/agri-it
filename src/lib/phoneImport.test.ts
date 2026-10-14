@@ -89,6 +89,19 @@ describe('phone backup import plan', () => {
     expect(planPhoneImport(b, ONLINE).rows.costs.every((c) => c.payment_status === 'paid')).toBe(true);
   });
 
+  it('older phone groups with one breed move across as a list of one, newer ones keep their list', () => {
+    const b = structuredClone(backup);
+    const f = String(phoneFarm.id);
+    b.db.animal_groups = [
+      { id: '7f000000-0000-4000-8000-0000000000b1', farm_id: f, name: 'Ewes', animal_class: 'ewe', breed: 'Texel cross', head_count: 40 },
+      { id: '7f000000-0000-4000-8000-0000000000b2', farm_id: f, name: 'Calves', animal_class: 'calf', breed: null, head_count: 5 },
+      { id: '7f000000-0000-4000-8000-0000000000b3', farm_id: f, name: 'Cows', animal_class: 'dairy_cow', breed: 'Holstein Friesian, Jersey cross', breeds: ['Holstein Friesian', 'Jersey cross'], head_count: 90 }
+    ];
+    const g = planPhoneImport(b, ONLINE).rows.animal_groups;
+    expect(g.map((x) => x.breeds)).toEqual([['Texel cross'], [], ['Holstein Friesian', 'Jersey cross']]);
+    expect(g[0].breed).toBe('Texel cross');
+  });
+
   it('asks which farm when a backup holds two', () => {
     const b = structuredClone(backup);
     b.db.farms.push({ ...phoneFarm, id: '7f000000-0000-4000-8000-0000000000ff', name: 'Outfarm' });

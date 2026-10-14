@@ -7,7 +7,7 @@ import { headChangeRow, headsOn, upcomingHeadChanges } from '../lib/heads';
 import { Button, Card, Chips, DateChips, Empty, Field, NumberInput, Screen, Sheet, Stepper, TextInput } from '../components/ui';
 import { GroupPicker } from '../components/pickers';
 import { BreedField, ClassPicker } from '../components/FarmPickers';
-import { speciesOf } from '../lib/farmTypes';
+import { breedLabel, breedPatch, cleanBreeds, groupBreeds, speciesOf } from '../lib/farmTypes';
 
 function GroupCard({ g, history }: { g: AnimalGroup; history: HeadCountChange[] }) {
   const save = useSave();
@@ -19,13 +19,15 @@ function GroupCard({ g, history }: { g: AnimalGroup; history: HeadCountChange[] 
   const past = history.filter((h) => h.effective_on <= today).sort((a, c) => c.effective_on.localeCompare(a.effective_on) || c.created_at.localeCompare(a.created_at));
   const [usage, setUsage] = useState(g.forage_t_per_head_month !== null ? String(g.forage_t_per_head_month) : '');
   const [more, setMore] = useState(false);
-  const [breed, setBreed] = useState(g.breed ?? '');
+  const [breeds, setBreeds] = useState<string[]>(groupBreeds(g));
+  const saved = groupBreeds(g);
+  const breedsChanged = cleanBreeds(breeds).join('|') !== saved.join('|');
   const dirty = count !== g.head_count;
   const updated = g.head_count_updated_at.slice(0, 10);
   return (
     <Card className="space-y-3">
       <div className="flex items-start justify-between gap-2">
-        <div><p className="text-[1.0625rem] font-bold">{g.name}</p><p className="text-[0.8125rem] text-muted">{[ANIMAL_CLASS_LABEL[g.animal_class], g.breed].filter(Boolean).join(', ')}. Count updated {fmtRelative(updated)}</p></div>
+        <div><p className="text-[1.0625rem] font-bold">{g.name}</p><p className="text-[0.8125rem] text-muted">{[ANIMAL_CLASS_LABEL[g.animal_class], breedLabel(saved)].filter(Boolean).join(', ')}. Count updated {fmtRelative(updated)}</p></div>
       </div>
       {upcoming.map((h) => <p key={h.id} className="rounded-xl bg-field-light px-3 py-2 text-[0.9375rem] font-semibold text-accent">Goes to {h.head_count} head on {fmtDay(h.effective_on)} ({h.reason})</p>)}
       <Stepper label="Head" value={count} onChange={setCount} unit="head" />
@@ -66,9 +68,9 @@ function GroupCard({ g, history }: { g: AnimalGroup; history: HeadCountChange[] 
       <button type="button" className="min-h-[2.75rem] text-sm font-bold text-accent" onClick={() => setMore(!more)}>{more ? 'Hide details' : 'Breed, winter and housing'}</button>
       {more && (
         <div className="space-y-3">
-          <BreedField cls={g.animal_class} value={breed} onChange={setBreed} label="Breed" />
-          {(breed.trim() || null) !== (g.breed ?? null) && (
-            <Button variant="secondary" block onClick={() => save([{ kind: 'update', table: 'animal_groups', match: { id: g.id }, patch: { breed: breed.trim() || null } }], { label: 'Breed saved', patch: (x) => ({ ...x, groups: x.groups.map((y) => (y.id === g.id ? { ...y, breed: breed.trim() || null } : y)) }) })}>Save breed</Button>
+          <BreedField cls={g.animal_class} value={breeds} onChange={setBreeds} label="Breeds" />
+          {breedsChanged && (
+            <Button variant="secondary" block onClick={() => { const p = breedPatch(breeds); save([{ kind: 'update', table: 'animal_groups', match: { id: g.id }, patch: p }], { label: p.breeds.length > 1 ? 'Breeds saved' : 'Breed saved', patch: (x) => ({ ...x, groups: x.groups.map((y) => (y.id === g.id ? { ...y, ...p } : y)) }) }); }}>{cleanBreeds(breeds).length > 1 ? 'Save breeds' : 'Save breed'}</Button>
           )}
           {speciesOf(g.animal_class) !== 'pigs' && speciesOf(g.animal_class) !== 'poultry' && speciesOf(g.animal_class) !== 'horses' && <label className="flex min-h-tap items-center gap-3 text-[0.9375rem] font-semibold">
             <input type="checkbox" className="h-5 w-5 accent-field" checked={g.housed} onChange={(e) => save([{ kind: 'update', table: 'animal_groups', match: { id: g.id }, patch: { housed: e.target.checked } }], { label: 'Saved', patch: (x) => ({ ...x, groups: x.groups.map((y) => (y.id === g.id ? { ...y, housed: e.target.checked } : y)) }) })} />
@@ -92,17 +94,17 @@ export default function Groups() {
   const [cls, setCls] = useState<AnimalClass | null>(null);
   const [name, setName] = useState('');
   const [count, setCount] = useState(10);
-  const [breed, setBreed] = useState('');
+  const [breeds, setBreeds] = useState<string[]>([]);
   const groups = b.groups.filter((g) => !g.archived);
   const [moving, setMoving] = useState(false);
 
   async function add() {
-    const row = { id: uuid(), farm_id: farmId!, name: name || ANIMAL_CLASS_LABEL[cls!], animal_class: cls!, breed: breed.trim() || null, head_count: count, sort_order: groups.length };
+    const row = { id: uuid(), farm_id: farmId!, name: name || ANIMAL_CLASS_LABEL[cls!], animal_class: cls!, ...breedPatch(breeds), head_count: count, sort_order: groups.length };
     await save([{ kind: 'insert', table: 'animal_groups', row }], {
       label: 'Group added',
       patch: (x) => ({ ...x, groups: [...x.groups, { ...row, head_count_updated_at: new Date().toISOString(), forage_t_per_head_month: null, housed: true, archived: false }] })
     });
-    setOpen(false); setCls(null); setName(''); setCount(10); setBreed('');
+    setOpen(false); setCls(null); setName(''); setCount(10); setBreeds([]);
   }
 
   return (
@@ -113,11 +115,11 @@ export default function Groups() {
       <MoveSheet b={b} open={moving} onClose={() => setMoving(false)} />
       <Sheet open={open} onClose={() => setOpen(false)} title="New animal group">
         <div className="max-h-[70vh] space-y-4 overflow-auto pb-2">
-          <ClassPicker value={cls} onChange={(c) => { setCls(c); setName(ANIMAL_CLASS_LABEL[c]); setBreed(''); }} />
+          <ClassPicker value={cls} onChange={(c) => { setCls(c); setName(ANIMAL_CLASS_LABEL[c]); setBreeds([]); }} />
           {cls && (
             <>
               <TextInput label="Name" value={name} onChange={setName} hint="Your own name for the group, e.g. Spring calvers or Texel ewes" />
-              <BreedField cls={cls} value={breed} onChange={setBreed} />
+              <BreedField cls={cls} value={breeds} onChange={setBreeds} />
               <Stepper label="Head" value={count} step={speciesOf(cls) === 'sheep' || speciesOf(cls) === 'poultry' ? 10 : 5} onChange={setCount} />
             </>
           )}

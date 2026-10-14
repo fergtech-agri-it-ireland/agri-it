@@ -9,7 +9,7 @@
  * Implements only the parts of the client the app uses, and mirrors the SQL functions
  * in supabase/migrations so screens behave identically.
  */
-import { buildReference, buildSeed, DEFAULTS, DEMO_USER, type DB, type Row } from './seed';
+import { buildReference, buildSeed, refreshReference, DEFAULTS, DEMO_USER, type DB, type Row } from './seed';
 import { todayISO } from '../format';
 import { IS_LOCAL } from '../env';
 import { farmTypes, legacyEnterprise } from '../farmTypes';
@@ -20,7 +20,7 @@ const DB_KEY = IS_LOCAL ? 'agri-it:phone-db' : 'agri-it:demo-db';
 const SIGNED_OUT_KEY = 'agri-it:demo-signed-out';
 // Demo: bump when the seed's shape changes so stored demo data is rebuilt.
 // Phone: the farmer's own records. NEVER thrown away on a version change; migrate instead.
-const VERSION = IS_LOCAL ? 1 : 8; // demo 8 (13 Oct): calving season, dry cows group
+const VERSION = IS_LOCAL ? 1 : 9; // demo 9 (14 Oct): breeds as a list (dairy cows Holstein Friesian and Jersey cross)
 const LOCAL_USER = { id: '20000000-0000-0000-0000-0000000000aa', email: 'This phone' };
 const USER = IS_LOCAL ? LOCAL_USER : DEMO_USER;
 const fresh = (): DB => (IS_LOCAL ? buildReference() : buildSeed());
@@ -33,7 +33,9 @@ function load(): DB {
     const raw = store()?.getItem(DB_KEY);
     if (raw) {
       const p = JSON.parse(raw) as { v: number; db: DB };
-      if (p.v === VERSION || IS_LOCAL) return p.db;
+      // Phone: the farmer's records as stored, with the shared directory and sources brought up to date
+      if (IS_LOCAL) return refreshReference(p.db);
+      if (p.v === VERSION) return p.db;
     }
     // Older demo data: drop it and the app cache built from it, so nothing stale is shown.
     if (raw) { store()?.removeItem('agri-it:cache'); store()?.removeItem('agri-it:outbox'); }

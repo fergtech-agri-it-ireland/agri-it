@@ -5,7 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { ChevronLeft, Minus, Plus, Smartphone, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useFarmCtx } from '../lib/data/farm';
-import { COMMON_CROPS, currentHarvest, grows, keepsAnimals, speciesOf, suggestedClasses } from '../lib/farmTypes';
+import { breedPatch, COMMON_CROPS, currentHarvest, grows, keepsAnimals, speciesOf, suggestedClasses } from '../lib/farmTypes';
 import { ANIMAL_CLASS_LABEL, COUNTIES_NI, COUNTIES_ROI, type AnimalClass, type FarmType, type Jurisdiction } from '../lib/types';
 import { Button, Chips, Field, NumberInput, SaveBar, TextInput } from '../components/ui';
 import { fmtDay, todayISO, uuid } from '../lib/format';
@@ -14,7 +14,7 @@ import { Logo } from '../components/Logo';
 import { IS_ONLINE } from '../lib/env';
 
 type Step = 'farm' | 'types' | 'animals' | 'winter' | 'crops' | 'money';
-interface AnimalRow { key: string; cls: AnimalClass; count: number; breed: string }
+interface AnimalRow { key: string; cls: AnimalClass; count: number; breeds: string[] }
 
 /**
  * Sign-up. Any mix of farming, any animals, any breed. Nothing is required beyond a
@@ -69,8 +69,8 @@ export default function Onboarding() {
 
   function toAnimals() {
     // Offer the usual groups for what they picked, keeping anything already filled in
-    const keep = animals.filter((a) => a.count > 0 || a.breed);
-    const offered = suggestedClasses(types).filter((c) => !keep.some((a) => a.cls === c)).map((c) => ({ key: c, cls: c, count: 0, breed: '' }));
+    const keep = animals.filter((a) => a.count > 0 || a.breeds.length);
+    const offered = suggestedClasses(types).filter((c) => !keep.some((a) => a.cls === c)).map((c) => ({ key: c, cls: c, count: 0, breeds: [] as string[] }));
     setAnimals([...keep, ...offered]);
   }
   const winterGroups = animals.filter((a) => a.count > 0 && eatsSilage(a.cls));
@@ -106,7 +106,7 @@ export default function Onboarding() {
     const groups = animals.filter((a) => a.count > 0).map((a, i) => {
       const w = where[a.key];
       return {
-        id: uuid(), farm_id: farmId, name: ANIMAL_CLASS_LABEL[a.cls], animal_class: a.cls, breed: a.breed.trim() || null, head_count: a.count, sort_order: i,
+        id: uuid(), farm_id: farmId, name: ANIMAL_CLASS_LABEL[a.cls], animal_class: a.cls, ...breedPatch(a.breeds), head_count: a.count, sort_order: i,
         // Pigs, poultry and horses are not part of the silage budget
         housed: eatsSilage(a.cls),
         // In now: from the housing date if it has passed, else today. Out at grass: the day they come in, if known
@@ -139,7 +139,7 @@ export default function Onboarding() {
   const titles: Record<Step, [string, string]> = {
     farm: ['Your farm', 'Used to find your nearest supplier branch. We never need GPS.'],
     types: ['What do you farm?', 'Pick everything you do. Dairy and sheep and tillage is fine. Not sure? Skip it for now.'],
-    animals: ['Your animals', 'Rough numbers are fine. Add any kind of animal and its breed. You can change all of this later.'],
+    animals: ['Your animals', 'Rough numbers are fine. Add any kind of animal and tap every breed in it. You can change all of this later.'],
     winter: ['Key dates', 'These make the winter silage plan accurate. Your best guess is fine, and every one can be skipped.'],
     crops: ['Your crops', `Acres for harvest ${currentHarvest()}. Skip any you don't grow.`],
     money: ['Money and feed', 'Two numbers that make the forecasts work from day one. Both can be left blank and added later.']
@@ -197,7 +197,7 @@ export default function Onboarding() {
                     <p className="min-w-0 flex-1 font-semibold">{ANIMAL_CLASS_LABEL[a.cls]}</p>
                     <MiniStepper label={`How many ${ANIMAL_CLASS_LABEL[a.cls].toLowerCase()}`} value={a.count} step={speciesOf(a.cls) === 'sheep' || speciesOf(a.cls) === 'poultry' ? 10 : 5} onChange={(n) => setRow(a.key, { count: n })} />
                   </div>
-                  {a.count > 0 && <div className="mt-2 pb-1"><BreedField cls={a.cls} value={a.breed} onChange={(v) => setRow(a.key, { breed: v })} /></div>}
+                  {a.count > 0 && <div className="mt-2 pb-1"><BreedField cls={a.cls} value={a.breeds} onChange={(v) => setRow(a.key, { breeds: v })} /></div>}
                 </li>
               ))}
             </ul>
@@ -205,7 +205,7 @@ export default function Onboarding() {
               <div className="rounded-2xl bg-pasture p-3.5">
                 <div className="mb-2 flex items-center justify-between"><p className="font-bold">Add another kind</p>
                   <button aria-label="Close" onClick={() => setAdding(false)} className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-card"><X className="h-4 w-4" aria-hidden /></button></div>
-                <ClassPicker value={null} exclude={used} onChange={(c) => { setAnimals([...animals, { key: `${c}-${Date.now()}`, cls: c, count: 0, breed: '' }]); setAdding(false); }} />
+                <ClassPicker value={null} exclude={used} onChange={(c) => { setAnimals([...animals, { key: `${c}-${Date.now()}`, cls: c, count: 0, breeds: [] }]); setAdding(false); }} />
               </div>
             ) : (
               <Button variant="secondary" block onClick={() => setAdding(true)}><Plus className="h-5 w-5" aria-hidden />Add another kind of animal</Button>

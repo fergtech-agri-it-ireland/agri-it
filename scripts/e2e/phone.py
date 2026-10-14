@@ -25,6 +25,9 @@ with sync_playwright() as p:
     check('Animals step offers dairy and sheep groups', 'Dairy cows' in a and 'Ewes' in a and 'Rams' in a, a[:300])
     pg.get_by_role('button',name='Increase How many dairy cows').click()
     pg.get_by_role('button',name='Holstein Friesian').first.click()
+    # More than one breed in a group (14 Oct 2026)
+    pg.get_by_role('button',name='Jersey cross').first.click()
+    check('Two breeds picked for the dairy cows', pg.get_by_role('button',name='Jersey cross').first.get_attribute('aria-pressed') == 'true' and pg.get_by_role('button',name='Holstein Friesian').first.get_attribute('aria-pressed') == 'true')
     pg.get_by_role('button',name='Add another kind of animal').click()
     pg.get_by_role('button',name='Bullocks').click()
     pg.get_by_role('button',name='Increase How many bullocks').click()
@@ -57,7 +60,7 @@ with sync_playwright() as p:
     t=pg.locator('main').inner_text()
     check('Bank balance from setup shows as cash', '€15,000' in t, t[:800])
     check('Dashboard steers this farm: milk, sheep sales, crops', 'Getting started' in t and 'Crops' in t and 'Winter wheat' in t, t[:600])
-    check('Breeds saved with the animals', 'Holstein Friesian' in t and 'Aberdeen Angus' in t, t[-600:])
+    check('Breeds saved with the animals', 'Holstein Friesian and Jersey cross' in t and 'Aberdeen Angus' in t, t[-600:])
     check('First calf date from sign-up made a calving plan', 'First calf in 110 days' in t, t)
     pg.goto(URL+'#/farm/groups'); pg.wait_for_timeout(800)
     g=pg.locator('main').inner_text()
@@ -97,6 +100,29 @@ with sync_playwright() as p:
     mt=pg.locator('body').inner_text()
     check('Feed kept', '1 feeds tracked' in mt)
     check('Farm types kept', 'Dairy, Sheep, Tillage' in mt, mt[:400])
+    # An older phone (14 Oct 2026): records stored before breeds were a list, and a supplier
+    # directory from first install (no Brett Brothers, an out-of-date number). Opening the new
+    # app must keep every record, read the old breed, and bring the directory up to date.
+    n_before = pg.evaluate("""() => { const p = JSON.parse(localStorage.getItem('agri-it:phone-db')); const d = p.db;
+      for (const g of d.animal_groups) { delete g.breeds; if (g.name === 'Dairy cows') g.breed = 'Holstein Friesian'; }
+      d.suppliers = d.suppliers.filter((s) => s.name !== 'Brett Brothers');
+      d.supplier_branches = d.supplier_branches.filter((x) => !String(x.name).startsWith('Brett'));
+      for (const s of d.suppliers) if (s.name === 'Aurivo Agribusiness') s.central_phone = '000 OLD';
+      localStorage.setItem('agri-it:phone-db', JSON.stringify(p));
+      localStorage.removeItem('agri-it:cache'); // an older app version's cache is thrown away by the cache version bump
+      return ['costs', 'feed_products', 'animal_groups', 'crops'].map((t) => (d[t] || []).length).join(','); }""")
+    pg.close(); pg=ctx.new_page(); pg.on('pageerror',lambda e: errs.append(str(e)))
+    pg.goto(URL+'#/farm/groups'); pg.wait_for_timeout(1500)
+    g=pg.locator('main').inner_text()
+    check('Older phone: a single breed still shows after the update', 'Dairy cows' in g and 'Holstein Friesian' in g and 'Jersey cross' not in g.split('Bullocks')[0], g[:1500])
+    pg.goto(URL+'#/suppliers'); pg.wait_for_timeout(800)
+    s=pg.locator('main').inner_text()
+    check("Older phone: new directory suppliers arrive (Brett Brothers, Roche's, Howard Farms)", 'Brett Brothers' in s and "Roche's Feeds" in s and 'Howard Farms' in s, s[:800])
+    pg.get_by_text('Aurivo Agribusiness').first.click(); pg.wait_for_timeout(600)
+    check('Older phone: an out-of-date directory number is corrected', '071 9186500' in pg.locator('main').inner_text() and '000 OLD' not in pg.locator('main').inner_text())
+    n_after = pg.evaluate("""() => { const d = JSON.parse(localStorage.getItem('agri-it:phone-db')).db;
+      return ['costs', 'feed_products', 'animal_groups', 'crops'].map((t) => (d[t] || []).length).join(','); }""")
+    check('Older phone: every record kept through the update', n_before == n_after, f'{n_before} -> {n_after}')
     # settings card + backup
     pg.goto(URL+'#/settings'); pg.wait_for_timeout(1000)
     pg.get_by_role('heading',name='Kept on this phone').scroll_into_view_if_needed()

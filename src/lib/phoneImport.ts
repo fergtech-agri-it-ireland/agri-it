@@ -17,6 +17,8 @@
  * The server side is public.import_phone_backup (migration 20261011000400_online.sql).
  */
 
+import { groupBreeds } from './farmTypes';
+
 export type Row = Record<string, unknown>;
 
 export interface PhoneBackup {
@@ -126,6 +128,8 @@ export function planPhoneImport(b: PhoneBackup, farmId: string, phoneFarmId?: st
       }
       // Older phone records have no payment fields: they were paid on the day (as on the phone)
       if (t === 'costs' && !x.payment_status) x.payment_status = 'paid';
+      // Groups saved before breeds were a list (14 Oct 2026): a single breed becomes a list of one
+      if (t === 'animal_groups' && !Array.isArray(x.breeds)) x.breeds = groupBreeds(x as { breed?: string | null });
       return x;
     });
     // Orders before the deliveries that point at them

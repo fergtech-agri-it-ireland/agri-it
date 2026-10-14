@@ -3,7 +3,8 @@
  * demo shows exactly the farm a local `supabase db reset` would create.
  * Dates are relative to today, like the SQL seed.
  */
-import { addDays, todayISO, toISO } from '../format';
+import { addDays, todayISO, toISO, uuid } from '../format';
+import { breedPatch } from '../farmTypes';
 
 export type Row = Record<string, unknown>;
 export type DB = Record<string, Row[]>;
@@ -30,9 +31,9 @@ const T_CALF_ORDER = '90000000-0000-0000-0000-000000000002';
 /** Column defaults, mirroring the migration, applied to every insert. */
 export const DEFAULTS: Record<string, () => Row> = {
   farms: () => ({ eircode: null, jurisdiction: 'ROI', enterprise: 'dairy', enterprises: [], financial_year_start_month: 1, opening_cash_eur: null, opening_cash_date: null, default_lead_time_days: null, forage_reserve_percent: 15, feed_target_days: 30, housing_start: null, turnout_date: null, bill_warning_days: 7, order_warning_days: 7 }),
-  animal_groups: () => ({ breed: null, head_count: 0, head_count_updated_at: new Date().toISOString(), forage_t_per_head_month: null, housed: true, at_grass: false, housed_from: null, archived: false, sort_order: 0 }),
+  animal_groups: () => ({ breed: null, breeds: [], head_count: 0, head_count_updated_at: new Date().toISOString(), forage_t_per_head_month: null, housed: true, at_grass: false, housed_from: null, archived: false, sort_order: 0 }),
   head_count_history: () => ({ effective_on: todayISO(), reason: 'manual', previous_count: null }),
-  suppliers: () => ({ farm_id: null, network: null, coverage: ['ROI'], central_phone: null, central_phone_label: null, secondary_phone: null, secondary_phone_label: null, website: null, local_contact_method: null, source_url: null, verified_on: null, needs_live_directory: false }),
+  suppliers: () => ({ farm_id: null, network: null, coverage: ['ROI'], central_phone: null, central_phone_label: null, secondary_phone: null, secondary_phone_label: null, website: null, local_contact_method: null, area_served: null, source_url: null, verified_on: null, needs_live_directory: false }),
   farm_supplier_settings: () => ({ rep_name: null, rep_phone: null, lead_time_days: null, account_number: null, last_used_at: null, updated_at: new Date().toISOString() }),
   documents: () => ({ record_type: 'other', storage_path: null, file_name: null, mime_type: null, extracted: null, state: 'unconfirmed' }),
   feed_products: () => ({ supplier_id: null, storage_location: null, safety_stock_mode: 'days', safety_stock_value: 3, lead_time_days: null, analysis: null, archived: false }),
@@ -88,6 +89,8 @@ export function buildReference(): DB {
   put('forage_benchmarks', ([['dairy_cow', 1.6], ['suckler_cow', 1.4], ['in_calf_heifer', 1.3], ['store_cattle', 1.3], ['weanling', 0.7]] as const)
     .map(([animal_class, t]) => ({ animal_class, fresh_tonnes_per_month: t, source_code: 'S3', valid_from: '2026-09-01', notes: 'Planning allowance; use farm history where available' })));
 
+  const BRETT_ID = '10000000-0000-0000-0000-000000000008';
+  const HOWARD_ID = '10000000-0000-0000-0000-00000000000a';
   const sup = (sid: string, r: Row) => ({ ...DEFAULTS.suppliers(), ...r, id: sid });
   db.suppliers = [
     sup(TIRLAN, { name: 'Tirlán FarmLife', network: 'GAIN Feeds', coverage: ['ROI'], central_phone: '0818 321 321', central_phone_label: 'Customer services', website: 'https://www.tirlanfarmlife.com', local_contact_method: 'Customer services can connect you to your local Business Manager. Use the Tirlán store finder with your Eircode or town.', source_url: 'https://www.tirlanfarmlife.com/about-us/contact-us/contact', verified_on: '2026-10-11' }),
@@ -96,7 +99,12 @@ export function buildReference(): DB {
     sup('10000000-0000-0000-0000-000000000004', { name: 'Aurivo Agribusiness', network: 'Nutrias', coverage: ['ROI'], central_phone: '071 9186500', central_phone_label: 'Agribusiness', website: 'https://www.aurivo.ie', local_contact_method: 'Current Aurivo agribusiness contact or branch data; central number as fallback.', source_url: 'https://www.aurivo.ie/overview/', verified_on: '2026-10-11' }),
     sup('10000000-0000-0000-0000-000000000005', { name: 'Arrabawn Tipperary Co-op', network: "Dan O'Connor Feeds", coverage: ['ROI'], local_contact_method: "Arrabawn and Tipperary Co-op merged in Feb 2025. Contacts must come from the merged co-op's live directory, not legacy Arrabawn data.", source_url: 'https://www.rte.ie/news/business/2025/0228/1499516-arrabawn-tipperary-co-operative-society/', needs_live_directory: true }),
     sup('10000000-0000-0000-0000-000000000006', { name: 'Drummonds', coverage: ['ROI'], central_phone: '01 825 5011', central_phone_label: 'Head office (Clonee)', website: 'https://drummonds.ie', local_contact_method: 'Branch phones are listed by county. If there is more than one branch in your county, pick yours with Set my rep.', source_url: 'https://drummonds.ie/contact-us/', verified_on: '2026-10-11' }),
-    sup('10000000-0000-0000-0000-000000000007', { name: 'Fane Valley Feeds', coverage: ['NI'], central_phone: '028 9261 9620', central_phone_label: 'Fane Valley main line', website: 'https://fanevalley.com', local_contact_method: 'The Fane Valley site lists one main number and no separate Feeds line. Ask for Feeds, then save your adviser as your rep.', source_url: 'https://fanevalley.com/', verified_on: '2026-10-11' })
+    sup('10000000-0000-0000-0000-000000000007', { name: 'Fane Valley Feeds', coverage: ['NI'], central_phone: '028 9261 9620', central_phone_label: 'Fane Valley main line', website: 'https://fanevalley.com', local_contact_method: 'The Fane Valley site lists one main number and no separate Feeds line. Ask for Feeds, then save your adviser as your rep.', source_url: 'https://fanevalley.com/', verified_on: '2026-10-11' }),
+    // Checked on their own websites 14 Oct 2026 (Star Fuels' site was down: not verified, no number)
+    sup(BRETT_ID, { name: 'Brett Brothers', coverage: ['ROI'], central_phone: '056 775 5300', central_phone_label: 'Head office (Callan)', website: 'https://www.brettbrothers.ie', local_contact_method: 'Four branches, each with its own number. If more than one is near you, pick yours with Set my rep.', area_served: 'Leinster and Munster (branches in Kilkenny, Tipperary and Waterford)', source_url: 'https://www.brettbrothers.ie/contact/', verified_on: '2026-10-14' }),
+    sup('10000000-0000-0000-0000-000000000009', { name: "Roche's Feeds", network: 'J. H. Roche & Sons', coverage: ['ROI'], central_phone: '061 308 111', central_phone_label: "Roche's Feeds, Dock Road, Limerick", website: 'https://www.rochesfeeds.com', local_contact_method: 'One number on its website, for the mill on the Dock Road in Limerick. It lists no branches or reps: save yours with Set my rep.', source_url: 'https://www.rochesfeeds.com/contact', verified_on: '2026-10-14' }),
+    sup(HOWARD_ID, { name: 'Howard Farms', coverage: ['ROI'], central_phone: '022 26184', central_phone_label: 'Head office (Kilcanway, Mallow)', website: 'https://www.howardfarms.ie', local_contact_method: 'Howard Farms names an area contact for each part of Munster on its website. Where two cover your county, pick yours with Set my rep.', area_served: 'Clare, Cork, Kerry, Limerick, Tipperary and Waterford (from its area contacts)', source_url: 'https://www.howardfarms.ie/contact-us/', verified_on: '2026-10-14' }),
+    sup('10000000-0000-0000-0000-00000000000b', { name: 'Star Fuels & Farm Supplies', coverage: ['ROI'], website: 'https://starfuels.ie', local_contact_method: 'Its website was down when checked on 14 Oct 2026, so Agri-It has no checked number yet. Add the branch you use with Set my rep.', area_served: 'Clonmel and Mitchelstown (not checked)', source_url: 'https://starfuels.ie/', needs_live_directory: true })
   ];
   // Drummonds branches (drummonds.ie/contact-us, checked 11 Oct 2026): each serves its own county
   const DRUMMONDS = '10000000-0000-0000-0000-000000000006';
@@ -108,7 +116,52 @@ export function buildReference(): DB {
     id: `11000000-0000-0000-0000-00000000000${i + 1}`, supplier_id: DRUMMONDS, name: `Drummonds ${name}`, town, counties: [county], phone,
     contact_name: null, contact_role: null, source_url: 'https://drummonds.ie/contact-us/', verified_on: '2026-10-11'
   }));
+  // Brett Brothers branches and Howard Farms area contacts, from their own contact pages (14 Oct 2026)
+  const BR = (n: string) => `11000000-0000-0000-0000-${n.padStart(12, '0')}`;
+  const brett = 'https://www.brettbrothers.ie/contact/';
+  const howard = 'https://www.howardfarms.ie/contact-us/';
+  db.supplier_branches.push(
+    ...([['9', 'Callan', 'Kilkenny', '056 775 5300'], ['a', 'Windgap', 'Kilkenny', '051 648 204'], ['b', 'Ardfinnan', 'Tipperary', '052 746 6208'], ['c', 'Portlaw', 'Waterford', '051 387 396']] as const)
+      .map(([n, town, county, phone]) => ({ id: BR(n), supplier_id: BRETT_ID, name: `Brett Brothers ${town}`, town, counties: [county], phone, contact_name: null, contact_role: null, source_url: brett, verified_on: '2026-10-14' })),
+    ...([['d', 'Clare and Limerick', ['Clare', 'Limerick'], '087 138 0693', 'Bryan King'],
+      ['e', 'East Cork, East Limerick, Tipperary and Waterford', ['Cork', 'Limerick', 'Tipperary', 'Waterford'], '087 218 8294', 'Robert Meagher'],
+      ['f', 'Cork', ['Cork'], '087 288 6041', 'John McLoughlin'], ['10', 'Kerry', ['Kerry'], '087 131 5577', "William O'Connor"]] as const)
+      .map(([n, area, counties, phone, who]) => ({ id: BR(n), supplier_id: HOWARD_ID, name: `Howard Farms, ${area}`, town: null, counties: [...counties], phone, contact_name: who, contact_role: 'Area contact', source_url: howard, verified_on: '2026-10-14' }))
+  );
   return db;
+}
+
+/**
+ * Phone build: bring the shared reference data on this phone up to date (14 Oct 2026).
+ * The phone keeps its own copy of the supplier directory, branches and published sources,
+ * made on the day it was first opened, so later corrections and new suppliers never reached
+ * it. This runs each time the app opens. It only touches shared rows: directory suppliers
+ * (no farm), their branches, published sources (matched by code) and Teagasc allowances
+ * (matched by animal class). The farm's own records and suppliers it added are left alone,
+ * and a directory supplier that has since left the directory is kept (a feed may point at it).
+ */
+export function refreshReference(db: DB): DB {
+  const ref = buildReference();
+  const out: DB = { ...db };
+  const byKey = (table: string, key: (r: Row) => string, onlyShared = false) => {
+    const mine = db[table] ?? [];
+    const fresh = ref[table] ?? [];
+    const freshKeys = new Set(fresh.map(key));
+    const usedIds = new Set(mine.map((r) => String(r.id)));
+    const kept = mine.filter((r) => (onlyShared && r.farm_id) || !freshKeys.has(key(r)));
+    const merged = fresh.map((r) => {
+      const old = mine.find((m) => !(onlyShared && m.farm_id) && key(m) === key(r));
+      // Keep this phone's id for a row it already had, so nothing pointing at it breaks
+      if (old) return { ...old, ...r, id: old.id, created_at: old.created_at ?? r.created_at };
+      return usedIds.has(String(r.id)) ? { ...r, id: uuid() } : r;
+    });
+    out[table] = [...kept, ...merged];
+  };
+  byKey('evidence_sources', (r) => String(r.code));
+  byKey('forage_benchmarks', (r) => String(r.animal_class));
+  byKey('suppliers', (r) => String(r.id), true);
+  byKey('supplier_branches', (r) => String(r.id));
+  return out;
 }
 
 export function buildSeed(): DB {
@@ -127,10 +180,10 @@ export function buildSeed(): DB {
 
   const recent = new Date(Date.now() - 2 * 86_400_000).toISOString();
   db.animal_groups = [
-    [G_COWS, 'Dairy cows', 'dairy_cow', 120, 1, 'Holstein Friesian'], [G_HEIF, 'In-calf heifers', 'in_calf_heifer', 40, 2, 'Holstein Friesian'],
-    [G_WEAN, 'Weanlings', 'weanling', 30, 3, 'Aberdeen Angus'], [G_CALF, 'Calves', 'calf', 18, 4, 'Mixed'],
-    [G_DRY, 'Dry cows', 'dairy_cow', 0, 5, 'Holstein Friesian']
-  ].map(([gid, name, cls, heads, order, breed]) => ({ ...DEFAULTS.animal_groups(), id: gid, farm_id: F, name, animal_class: cls, breed, head_count: heads, sort_order: order, head_count_updated_at: recent, created_at: stamp() }));
+    [G_COWS, 'Dairy cows', 'dairy_cow', 120, 1, ['Holstein Friesian', 'Jersey cross']], [G_HEIF, 'In-calf heifers', 'in_calf_heifer', 40, 2, ['Holstein Friesian']],
+    [G_WEAN, 'Weanlings', 'weanling', 30, 3, ['Aberdeen Angus']], [G_CALF, 'Calves', 'calf', 18, 4, ['Mixed']],
+    [G_DRY, 'Dry cows', 'dairy_cow', 0, 5, ['Holstein Friesian']]
+  ].map(([gid, name, cls, heads, order, breeds]) => ({ ...DEFAULTS.animal_groups(), id: gid, farm_id: F, name, animal_class: cls, ...breedPatch(breeds as string[]), head_count: heads, sort_order: order, head_count_updated_at: recent, created_at: stamp() }));
   put('head_count_history', db.animal_groups.map((g) => ({ farm_id: F, animal_group_id: g.id, head_count: g.head_count, effective_on: D(-20), reason: 'opening' })));
 
   db.farm_supplier_settings = [{ ...DEFAULTS.farm_supplier_settings(), farm_id: F, supplier_id: TIRLAN, lead_time_days: 3, last_used_at: new Date(Date.now() - 4 * 86_400_000).toISOString() }];

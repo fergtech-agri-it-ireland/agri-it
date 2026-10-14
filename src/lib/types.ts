@@ -56,6 +56,13 @@ export interface AnimalGroup {
   animal_class: AnimalClass;
   /** The farmer's own words, e.g. "Holstein Friesian" or "Texel cross". */
   breed?: string | null;
+  /**
+   * Every breed in the group, in the farmer's own words (14 Oct 2026), e.g.
+   * ["Holstein Friesian", "Jersey cross"]. Missing on older groups: read through
+   * groupBreeds(), which turns the single `breed` into a list of one. `breed` is kept
+   * in step (the list joined) for older code.
+   */
+  breeds?: string[] | null;
   head_count: number;
   head_count_updated_at: string;
   forage_t_per_head_month: number | null;
@@ -81,6 +88,8 @@ export interface Supplier {
   secondary_phone_label: string | null;
   website: string | null;
   local_contact_method: string | null;
+  /** Where the supplier says it serves, in its own words (14 Oct 2026). Missing = not stated. */
+  area_served?: string | null;
   source_url: string | null;
   verified_on: ISODate | null;
   needs_live_directory: boolean;

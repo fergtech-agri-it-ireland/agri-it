@@ -1,4 +1,4 @@
-import { farmTypes } from '../farmTypes';
+import { farmTypes, groupBreeds } from '../farmTypes';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Session } from '@supabase/supabase-js';
@@ -150,6 +150,10 @@ export function normalizeBundle(b: FarmBundle): FarmBundle {
     // Farms saved before farm types were a list: work the list out from the old single type
     if (noTypes && b.farm) fixed.farm = { ...b.farm, enterprises: farmTypes(b.farm) };
     out = fixed as unknown as FarmBundle;
+  }
+  // Groups saved before breeds were a list: a single breed becomes a list of one
+  if (out.groups.some((g) => !Array.isArray(g.breeds))) {
+    out = { ...out, groups: out.groups.map((g) => (Array.isArray(g.breeds) ? g : { ...g, breeds: groupBreeds(g) })) };
   }
   // Money shows in this farm's currency: pounds for Northern Ireland, euro for the Republic
   setCurrency(currencyFor(out.farm?.jurisdiction));

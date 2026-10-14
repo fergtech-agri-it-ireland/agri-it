@@ -68,6 +68,15 @@ It is not a herd, grassland or accounting system. It does not prescribe rations,
 
 **Important:** the build sandbox resets between chats. Attach the GitHub repo `fergtech-agri-it-ireland/agri-it` in a new chat and clone it.
 
+## NEW (14 Oct, afternoon): several breeds per group, more suppliers, phone directory refresh
+
+- **Breeds as a list:** `animal_groups.breeds text[]` (migration `20261014000200_breeds_list.sql`, at most 8, each 1 to 60 characters via `breeds_ok()`). The old `breed` column stays and a trigger keeps the two in step (older client writes `breed`: list of one; list written: `breed` = list joined, cut to 60). Helpers in `lib/farmTypes.ts`: `groupBreeds()` (an older group's one breed becomes a list of one, exactly as written), `breedLabel()` ("Holstein Friesian and Jersey cross"), `cleanBreeds()`, `breedPatch()` (both fields for a save). `normalizeBundle` fills `breeds` for older phone records; Move my phone data does the same. `BreedField` is now a multi-pick: big chips, tap any number, type your own and Add. Sign-up, Animals and breeds (add and edit) and the dashboard all use it. Demo dairy cows are Holstein Friesian and Jersey cross. `CACHE_VERSION` `v7-breeds`, demo `VERSION` 9, phone `VERSION` still 1.
+- **Directory additions** (migration `20261014000300_supplier_directory_more.sql`, `seed.sql`, `buildReference()`), each checked on its own website 14 Oct 2026: Brett Brothers (Callan, four branches: Callan, Windgap, Ardfinnan, Portlaw), Roche's Feeds (J. H. Roche & Sons, Dock Road, Limerick, one number), Howard Farms (Kilcanway, Mallow, head office plus four named area contacts from its own contact page). **Star Fuels & Farm Supplies** (Clonmel and Mitchelstown) is a separate business from Roche's; its website showed "account suspended" on 14 Oct, so it has no number and shows as not verified until Feargal confirms. New column `suppliers.area_served` (the supplier's own words; null = not stated, shown as such).
+- **Phone directory refresh:** the phone app kept the directory from the day it was first opened, so the 11 Oct corrections never reached installed phones. `refreshReference(db)` in `demo/seed.ts` now runs on every open (`load()` in `demo/client.ts`): directory suppliers and branches by id, sources by code, allowances by class. Farm records and suppliers the farmer added are never touched; ids the phone already had are kept. `phone.py` simulates an older phone (single breed, old directory) and checks nothing is lost.
+- Supplier picker: a picked supplier always shows as a chip, even if it isn't one of the four most used.
+- Tests: `breeds.test.ts` (6), `directory.test.ts` (7), `phoneImport.test.ts` +1, `db_review.sql` +7 breed checks, `ui.py` 116, `phone.py` 37.
+- **Waiting on Feargal:** Star Fuels details; product pick lists (C) and published prices (D), see the 14 Oct chat.
+
 ## NEW (14 Oct): advisory board review fixes
 
 Full detail: `docs/ADVISORY-RESPONSE.md`. Pilot plan: `docs/PILOT.md`.

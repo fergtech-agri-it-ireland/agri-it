@@ -51,7 +51,7 @@ export default function SeasonForm() {
   const [label, setLabel] = useState(ex?.label ?? '');
 
   const newGroup = (name: string, cls: 'dairy_cow' | 'calf'): AnimalGroup => ({
-    id: uuid(), farm_id: farmId!, name, animal_class: cls, breed: null, head_count: 0, head_count_updated_at: new Date().toISOString(),
+    id: uuid(), farm_id: farmId!, name, animal_class: cls, breed: null, breeds: [], head_count: 0, head_count_updated_at: new Date().toISOString(),
     forage_t_per_head_month: null, housed: true, archived: false, sort_order: groups.length + 1
   });
 

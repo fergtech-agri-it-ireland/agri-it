@@ -1205,6 +1205,121 @@ comment on column public.feed_transactions.placed_on is
   'Orders only: the day the farmer placed it with the supplier (null for older orders: order_date).';
 commit;
 
+-- 2. 20261014000200_breeds_list.sql
+begin;
+-- Breeds as a list (14 Oct 2026). One group often holds more than one breed
+-- (dairy cows: Holstein Friesian and Jersey cross), so a group keeps a list.
+-- The old single `breed` column stays for older code and reports: it holds the
+-- list joined ("Holstein Friesian, Jersey cross"), cut to 60 characters.
+-- Older groups: their one breed becomes a list of one, exactly as written.
+-- No deletes or drops in this file, so the Supabase connector can apply it.
+
+alter table public.animal_groups
+  add column if not exists breeds text[] not null default '{}';
+
+-- At most 8 breeds, each 1 to 60 characters (a check can't hold a subquery, so a function)
+create or replace function public.breeds_ok(p text[]) returns boolean
+language sql immutable set search_path = public as $$
+  select cardinality(p) <= 8
+     and coalesce((select bool_and(x is not null and char_length(btrim(x)) between 1 and 60) from unnest(p) x), true)
+$$;
+
+alter table public.animal_groups
+  add constraint animal_groups_breeds_ok check (public.breeds_ok(breeds));
+
+update public.animal_groups
+   set breeds = array[btrim(breed)]
+ where breed is not null and btrim(breed) <> '' and cardinality(breeds) = 0;
+
+-- Keep the two in step whichever one a client writes:
+--  * a newer client writes the list: `breed` becomes the list joined;
+--  * an older client (or an older phone backup) writes only `breed`: the list becomes that one breed.
+create or replace function public.animal_groups_breeds_in_step() returns trigger
+language plpgsql set search_path = public as $$
+declare
+  v_joined text;
+begin
+  if tg_op = 'UPDATE' and new.breeds is not distinct from old.breeds and new.breed is distinct from old.breed then
+    new.breeds := case when new.breed is null or btrim(new.breed) = '' then '{}'::text[] else array[btrim(new.breed)] end;
+  elsif tg_op = 'INSERT' and cardinality(coalesce(new.breeds, '{}')) = 0 and new.breed is not null and btrim(new.breed) <> '' then
+    new.breeds := array[btrim(new.breed)];
+  end if;
+  new.breeds := coalesce(new.breeds, '{}');
+  if cardinality(new.breeds) = 0 then
+    new.breed := null;
+  else
+    v_joined := array_to_string(new.breeds, ', ');
+    new.breed := case when char_length(v_joined) <= 60 then v_joined else rtrim(left(v_joined, 57)) || '...' end;
+  end if;
+  return new;
+end $$;
+
+create trigger animal_groups_breeds_in_step before insert or update on public.animal_groups
+  for each row execute function public.animal_groups_breeds_in_step();
+commit;
+
+-- 2. 20261014000300_supplier_directory_more.sql
+begin;
+-- More feed and farm supplies businesses in the directory (14 Oct 2026). Each one was
+-- checked on its own website that day; only what was seen there is marked verified.
+--  * Brett Brothers Ltd, Callan: four branches (brettbrothers.ie/contact).
+--  * Roche's Feeds (J. H. Roche & Sons), Dock Road, Limerick: one number (rochesfeeds.com/contact).
+--  * Howard Farms, Kilcanway, Mallow: head office and four area contacts named on its own
+--    contact page (howardfarms.ie/contact-us).
+--  * Star Fuels & Farm Supplies, Clonmel and Mitchelstown: a separate business from Roche's.
+--    Its website showed "account suspended" on 14 Oct 2026, so nothing could be checked:
+--    no number is loaded and it shows as not verified.
+-- New column: where the supplier says it serves, in its own words. Null = not stated.
+-- No deletes or drops, so the Supabase connector can apply it.
+
+alter table public.suppliers add column if not exists area_served text;
+
+-- On a fresh database the directory comes from seed.sql after the migrations (with the same
+-- rows), so only add these where the directory is already loaded (the hosted project).
+insert into public.suppliers (id, name, network, coverage, central_phone, central_phone_label,
+  secondary_phone, secondary_phone_label, website, local_contact_method, area_served, source_url, verified_on, needs_live_directory)
+select v.id::uuid, v.name, v.network, v.coverage::public.jurisdiction[], v.central_phone, v.central_phone_label,
+  null, null, v.website, v.local_contact_method, v.area_served, v.source_url, v.verified_on::date, v.needs_live_directory
+from (values
+('10000000-0000-0000-0000-000000000008', 'Brett Brothers', null, '{ROI}', '056 775 5300', 'Head office (Callan)',
+  'https://www.brettbrothers.ie',
+  'Four branches, each with its own number. If more than one is near you, pick yours with Set my rep.',
+  'Leinster and Munster (branches in Kilkenny, Tipperary and Waterford)',
+  'https://www.brettbrothers.ie/contact/', '2026-10-14', false),
+('10000000-0000-0000-0000-000000000009', 'Roche''s Feeds', 'J. H. Roche & Sons', '{ROI}', '061 308 111', 'Roche''s Feeds, Dock Road, Limerick',
+  'https://www.rochesfeeds.com',
+  'One number on its website, for the mill on the Dock Road in Limerick. It lists no branches or reps: save yours with Set my rep.',
+  null,
+  'https://www.rochesfeeds.com/contact', '2026-10-14', false),
+('10000000-0000-0000-0000-00000000000a', 'Howard Farms', null, '{ROI}', '022 26184', 'Head office (Kilcanway, Mallow)',
+  'https://www.howardfarms.ie',
+  'Howard Farms names an area contact for each part of Munster on its website. Where two cover your county, pick yours with Set my rep.',
+  'Clare, Cork, Kerry, Limerick, Tipperary and Waterford (from its area contacts)',
+  'https://www.howardfarms.ie/contact-us/', '2026-10-14', false),
+('10000000-0000-0000-0000-00000000000b', 'Star Fuels & Farm Supplies', null, '{ROI}', null, null,
+  'https://starfuels.ie',
+  'Its website was down when checked on 14 Oct 2026, so Agri-It has no checked number yet. Add the branch you use with Set my rep.',
+  'Clonmel and Mitchelstown (not checked)',
+  'https://starfuels.ie/', null, true)
+) as v(id, name, network, coverage, central_phone, central_phone_label, website, local_contact_method, area_served, source_url, verified_on, needs_live_directory)
+where exists (select 1 from public.suppliers s where s.id = '10000000-0000-0000-0000-000000000001')
+on conflict (id) do nothing;
+
+insert into public.supplier_branches (id, supplier_id, name, town, counties, phone, contact_name, contact_role, source_url, verified_on)
+select v.id::uuid, v.supplier_id::uuid, v.name, v.town, v.counties::text[], v.phone, v.contact_name, v.contact_role, v.source_url, v.verified_on::date from (values
+('11000000-0000-0000-0000-000000000009', '10000000-0000-0000-0000-000000000008', 'Brett Brothers Callan', 'Callan', '{Kilkenny}', '056 775 5300', null, null, 'https://www.brettbrothers.ie/contact/', '2026-10-14'),
+('11000000-0000-0000-0000-00000000000a', '10000000-0000-0000-0000-000000000008', 'Brett Brothers Windgap', 'Windgap', '{Kilkenny}', '051 648 204', null, null, 'https://www.brettbrothers.ie/contact/', '2026-10-14'),
+('11000000-0000-0000-0000-00000000000b', '10000000-0000-0000-0000-000000000008', 'Brett Brothers Ardfinnan', 'Ardfinnan', '{Tipperary}', '052 746 6208', null, null, 'https://www.brettbrothers.ie/contact/', '2026-10-14'),
+('11000000-0000-0000-0000-00000000000c', '10000000-0000-0000-0000-000000000008', 'Brett Brothers Portlaw', 'Portlaw', '{Waterford}', '051 387 396', null, null, 'https://www.brettbrothers.ie/contact/', '2026-10-14'),
+('11000000-0000-0000-0000-00000000000d', '10000000-0000-0000-0000-00000000000a', 'Howard Farms, Clare and Limerick', null, '{Clare,Limerick}', '087 138 0693', 'Bryan King', 'Area contact', 'https://www.howardfarms.ie/contact-us/', '2026-10-14'),
+('11000000-0000-0000-0000-00000000000e', '10000000-0000-0000-0000-00000000000a', 'Howard Farms, East Cork, East Limerick, Tipperary and Waterford', null, '{Cork,Limerick,Tipperary,Waterford}', '087 218 8294', 'Robert Meagher', 'Area contact', 'https://www.howardfarms.ie/contact-us/', '2026-10-14'),
+('11000000-0000-0000-0000-00000000000f', '10000000-0000-0000-0000-00000000000a', 'Howard Farms, Cork', null, '{Cork}', '087 288 6041', 'John McLoughlin', 'Area contact', 'https://www.howardfarms.ie/contact-us/', '2026-10-14'),
+('11000000-0000-0000-0000-000000000010', '10000000-0000-0000-0000-00000000000a', 'Howard Farms, Kerry', null, '{Kerry}', '087 131 5577', 'William O''Connor', 'Area contact', 'https://www.howardfarms.ie/contact-us/', '2026-10-14')
+) as v(id, supplier_id, name, town, counties, phone, contact_name, contact_role, source_url, verified_on)
+where exists (select 1 from public.suppliers s where s.id = v.supplier_id::uuid)
+on conflict (id) do nothing;
+commit;
+
 -- 3. Reference data from seed.sql (top half only: no demo login, no demo farm)
 begin;
 -- Agri-It local seed. Runs on `supabase db reset` (and first `supabase start`).
@@ -1280,6 +1395,50 @@ insert into public.supplier_branches (id, supplier_id, name, town, counties, pho
 ('11000000-0000-0000-0000-000000000007','10000000-0000-0000-0000-000000000006','Drummonds Navan','Navan','{Meath}','046 902 1641','https://drummonds.ie/contact-us/','2026-10-11'),
 ('11000000-0000-0000-0000-000000000008','10000000-0000-0000-0000-000000000006','Drummonds Rathcoffey','Rathcoffey','{Kildare}','087 400 3896','https://drummonds.ie/contact-us/','2026-10-11')
 on conflict (id) do nothing;
+
+
+-- Brett Brothers, Roche's Feeds, Howard Farms (checked on their own websites 14 Oct 2026) and
+-- Star Fuels & Farm Supplies (website down that day: not verified, no number).
+insert into public.suppliers (id, name, network, coverage, central_phone, central_phone_label,
+  secondary_phone, secondary_phone_label, website, local_contact_method, area_served, source_url, verified_on, needs_live_directory)
+select v.id::uuid, v.name, v.network, v.coverage::public.jurisdiction[], v.central_phone, v.central_phone_label,
+  null, null, v.website, v.local_contact_method, v.area_served, v.source_url, v.verified_on::date, v.needs_live_directory
+from (values
+('10000000-0000-0000-0000-000000000008', 'Brett Brothers', null, '{ROI}', '056 775 5300', 'Head office (Callan)',
+  'https://www.brettbrothers.ie',
+  'Four branches, each with its own number. If more than one is near you, pick yours with Set my rep.',
+  'Leinster and Munster (branches in Kilkenny, Tipperary and Waterford)',
+  'https://www.brettbrothers.ie/contact/', '2026-10-14', false),
+('10000000-0000-0000-0000-000000000009', 'Roche''s Feeds', 'J. H. Roche & Sons', '{ROI}', '061 308 111', 'Roche''s Feeds, Dock Road, Limerick',
+  'https://www.rochesfeeds.com',
+  'One number on its website, for the mill on the Dock Road in Limerick. It lists no branches or reps: save yours with Set my rep.',
+  null,
+  'https://www.rochesfeeds.com/contact', '2026-10-14', false),
+('10000000-0000-0000-0000-00000000000a', 'Howard Farms', null, '{ROI}', '022 26184', 'Head office (Kilcanway, Mallow)',
+  'https://www.howardfarms.ie',
+  'Howard Farms names an area contact for each part of Munster on its website. Where two cover your county, pick yours with Set my rep.',
+  'Clare, Cork, Kerry, Limerick, Tipperary and Waterford (from its area contacts)',
+  'https://www.howardfarms.ie/contact-us/', '2026-10-14', false),
+('10000000-0000-0000-0000-00000000000b', 'Star Fuels & Farm Supplies', null, '{ROI}', null, null,
+  'https://starfuels.ie',
+  'Its website was down when checked on 14 Oct 2026, so Agri-It has no checked number yet. Add the branch you use with Set my rep.',
+  'Clonmel and Mitchelstown (not checked)',
+  'https://starfuels.ie/', null, true)
+) as v(id, name, network, coverage, central_phone, central_phone_label, website, local_contact_method, area_served, source_url, verified_on, needs_live_directory)
+on conflict (id) do nothing;
+
+insert into public.supplier_branches (id, supplier_id, name, town, counties, phone, contact_name, contact_role, source_url, verified_on)
+select v.id::uuid, v.supplier_id::uuid, v.name, v.town, v.counties::text[], v.phone, v.contact_name, v.contact_role, v.source_url, v.verified_on::date from (values
+('11000000-0000-0000-0000-000000000009', '10000000-0000-0000-0000-000000000008', 'Brett Brothers Callan', 'Callan', '{Kilkenny}', '056 775 5300', null, null, 'https://www.brettbrothers.ie/contact/', '2026-10-14'),
+('11000000-0000-0000-0000-00000000000a', '10000000-0000-0000-0000-000000000008', 'Brett Brothers Windgap', 'Windgap', '{Kilkenny}', '051 648 204', null, null, 'https://www.brettbrothers.ie/contact/', '2026-10-14'),
+('11000000-0000-0000-0000-00000000000b', '10000000-0000-0000-0000-000000000008', 'Brett Brothers Ardfinnan', 'Ardfinnan', '{Tipperary}', '052 746 6208', null, null, 'https://www.brettbrothers.ie/contact/', '2026-10-14'),
+('11000000-0000-0000-0000-00000000000c', '10000000-0000-0000-0000-000000000008', 'Brett Brothers Portlaw', 'Portlaw', '{Waterford}', '051 387 396', null, null, 'https://www.brettbrothers.ie/contact/', '2026-10-14'),
+('11000000-0000-0000-0000-00000000000d', '10000000-0000-0000-0000-00000000000a', 'Howard Farms, Clare and Limerick', null, '{Clare,Limerick}', '087 138 0693', 'Bryan King', 'Area contact', 'https://www.howardfarms.ie/contact-us/', '2026-10-14'),
+('11000000-0000-0000-0000-00000000000e', '10000000-0000-0000-0000-00000000000a', 'Howard Farms, East Cork, East Limerick, Tipperary and Waterford', null, '{Cork,Limerick,Tipperary,Waterford}', '087 218 8294', 'Robert Meagher', 'Area contact', 'https://www.howardfarms.ie/contact-us/', '2026-10-14'),
+('11000000-0000-0000-0000-00000000000f', '10000000-0000-0000-0000-00000000000a', 'Howard Farms, Cork', null, '{Cork}', '087 288 6041', 'John McLoughlin', 'Area contact', 'https://www.howardfarms.ie/contact-us/', '2026-10-14'),
+('11000000-0000-0000-0000-000000000010', '10000000-0000-0000-0000-00000000000a', 'Howard Farms, Kerry', null, '{Kerry}', '087 131 5577', 'William O''Connor', 'Area contact', 'https://www.howardfarms.ie/contact-us/', '2026-10-14')
+) as v(id, supplier_id, name, town, counties, phone, contact_name, contact_role, source_url, verified_on)
+on conflict (id) do nothing;
 commit;
 
 -- 4. Migration history: the nine migration files, by their own versions
@@ -1299,7 +1458,9 @@ insert into supabase_migrations.schema_migrations (version, name) values
   ('20261013000100', 'automation'),
   ('20261013000200', 'silage_best_guess'),
   ('20261013000300', 'at_grass'),
-  ('20261014000100', 'order_to_place');
+  ('20261014000100', 'order_to_place'),
+  ('20261014000200', 'breeds_list'),
+  ('20261014000300', 'supplier_directory_more');
 commit;
 
 -- 5. db_review.sql checks, run against the demo farm inside one transaction and rolled back.
@@ -1611,6 +1772,27 @@ select pg_temp.check((select count(*) >= 2 from public.audit_log where table_nam
 set local role authenticated;
 set local request.jwt.claim.sub = '20000000-0000-0000-0000-0000000000b9';
 select pg_temp.check((select count(*) = 0 from public.calving_seasons) and (select count(*) = 0 from public.calf_births) and (select count(*) = 0 from public.suggestion_decisions), 'someone outside the farm sees no calving records');
+
+-- Breeds as a list (14 Oct 2026): older clients write one breed, newer ones a list; the two stay in step
+update public.animal_groups set breed = 'Holstein Friesian' where id = '40000000-0000-0000-0000-000000000001';
+select pg_temp.check((select breeds = array['Holstein Friesian'] from public.animal_groups where id = '40000000-0000-0000-0000-000000000001'), 'an older client''s single breed becomes a list of one');
+update public.animal_groups set breeds = array['Holstein Friesian', 'Jersey cross'] where id = '40000000-0000-0000-0000-000000000001';
+select pg_temp.check((select breed = 'Holstein Friesian, Jersey cross' from public.animal_groups where id = '40000000-0000-0000-0000-000000000001'), 'a list of breeds keeps the old breed column in step');
+update public.animal_groups set breeds = '{}' where id = '40000000-0000-0000-0000-000000000001';
+select pg_temp.check((select breed is null from public.animal_groups where id = '40000000-0000-0000-0000-000000000001'), 'no breeds clears the old breed column');
+do $$ begin
+  update public.animal_groups set breeds = array['a','b','c','d','e','f','g','h','i'] where id = '40000000-0000-0000-0000-000000000001';
+  raise exception 'FAILED: nine breeds allowed';
+exception when check_violation then raise notice 'ok: at most eight breeds'; end $$;
+do $$ begin
+  update public.animal_groups set breeds = array['  '] where id = '40000000-0000-0000-0000-000000000001';
+  raise exception 'FAILED: blank breed allowed';
+exception when check_violation then raise notice 'ok: no blank breeds'; end $$;
+insert into public.animal_groups (id, farm_id, name, animal_class, breed, head_count)
+  values ('40000000-0000-0000-0000-0000000000b7', '30000000-0000-0000-0000-000000000001', 'Old phone group', 'ewe', 'Texel cross', 10);
+select pg_temp.check((select breeds = array['Texel cross'] and breed = 'Texel cross' from public.animal_groups where id = '40000000-0000-0000-0000-0000000000b7'), 'a group added with only a breed (older phone backup) gets the list');
+update public.animal_groups set breeds = array['Holstein Friesian', 'British Friesian', 'Jersey cross', 'Norwegian Red'] where id = '40000000-0000-0000-0000-000000000001';
+select pg_temp.check((select char_length(breed) <= 60 and breed like '%...' from public.animal_groups where id = '40000000-0000-0000-0000-000000000001'), 'a long list fits the old 60-character breed column');
 
 -- Deleting a farm takes its trail with it (no orphan audit rows, no FK errors)
 delete from public.farms where id = '30000000-0000-0000-0000-000000000001';

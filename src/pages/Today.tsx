@@ -7,7 +7,7 @@ import { addDays } from '../lib/format';
 import { cashDial, silageDial } from '../lib/dials';
 import { useTheme } from '../lib/theme';
 import { buildChecklist, checklistProgress } from '../lib/routines';
-import { farmGuide, farmTypes, grows, keepsAnimals, speciesOf, SPECIES } from '../lib/farmTypes';
+import { breedLabel, farmGuide, groupBreeds, farmTypes, grows, keepsAnimals, speciesOf, SPECIES } from '../lib/farmTypes';
 import { ReminderNudge } from '../components/Reminders';
 import { PhotoQueueNudge } from '../components/PhotoQueue';
 import { ToneIcon } from '../components/ui';
@@ -219,7 +219,7 @@ function StockCard({ b }: { b: FarmBundle }) {
       <ul className="divide-y divide-line">
         {groups.slice(0, 5).map((g) => (
           <li key={g.id} className="flex min-h-[2.75rem] items-center gap-3 text-[0.9375rem]">
-            <span className="min-w-0 flex-1"><b className="font-semibold">{g.name}</b>{g.breed && <span className="text-muted">, {g.breed}</span>}</span>
+            <span className="min-w-0 flex-1"><b className="font-semibold">{g.name}</b>{groupBreeds(g).length > 0 && <span className="text-muted">, {breedLabel(groupBreeds(g))}</span>}</span>
             <span className="font-bold">{fmtNum(g.head_count)}</span>
           </li>
         ))}

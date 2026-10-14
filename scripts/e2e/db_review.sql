@@ -170,6 +170,27 @@ set local request.jwt.claim.sub = '20000000-0000-0000-0000-0000000000b9';
 select pg_temp.check((select count(*) = 0 from public.calving_seasons) and (select count(*) = 0 from public.calf_births) and (select count(*) = 0 from public.suggestion_decisions), 'someone outside the farm sees no calving records');
 commit;
 
+-- Breeds as a list (14 Oct 2026): older clients write one breed, newer ones a list; the two stay in step
+update public.animal_groups set breed = 'Holstein Friesian' where id = '40000000-0000-0000-0000-000000000001';
+select pg_temp.check((select breeds = array['Holstein Friesian'] from public.animal_groups where id = '40000000-0000-0000-0000-000000000001'), 'an older client''s single breed becomes a list of one');
+update public.animal_groups set breeds = array['Holstein Friesian', 'Jersey cross'] where id = '40000000-0000-0000-0000-000000000001';
+select pg_temp.check((select breed = 'Holstein Friesian, Jersey cross' from public.animal_groups where id = '40000000-0000-0000-0000-000000000001'), 'a list of breeds keeps the old breed column in step');
+update public.animal_groups set breeds = '{}' where id = '40000000-0000-0000-0000-000000000001';
+select pg_temp.check((select breed is null from public.animal_groups where id = '40000000-0000-0000-0000-000000000001'), 'no breeds clears the old breed column');
+do $$ begin
+  update public.animal_groups set breeds = array['a','b','c','d','e','f','g','h','i'] where id = '40000000-0000-0000-0000-000000000001';
+  raise exception 'FAILED: nine breeds allowed';
+exception when check_violation then raise notice 'ok: at most eight breeds'; end $$;
+do $$ begin
+  update public.animal_groups set breeds = array['  '] where id = '40000000-0000-0000-0000-000000000001';
+  raise exception 'FAILED: blank breed allowed';
+exception when check_violation then raise notice 'ok: no blank breeds'; end $$;
+insert into public.animal_groups (id, farm_id, name, animal_class, breed, head_count)
+  values ('40000000-0000-0000-0000-0000000000b7', '30000000-0000-0000-0000-000000000001', 'Old phone group', 'ewe', 'Texel cross', 10);
+select pg_temp.check((select breeds = array['Texel cross'] and breed = 'Texel cross' from public.animal_groups where id = '40000000-0000-0000-0000-0000000000b7'), 'a group added with only a breed (older phone backup) gets the list');
+update public.animal_groups set breeds = array['Holstein Friesian', 'British Friesian', 'Jersey cross', 'Norwegian Red'] where id = '40000000-0000-0000-0000-000000000001';
+select pg_temp.check((select char_length(breed) <= 60 and breed like '%...' from public.animal_groups where id = '40000000-0000-0000-0000-000000000001'), 'a long list fits the old 60-character breed column');
+
 -- Deleting a farm takes its trail with it (no orphan audit rows, no FK errors)
 delete from public.farms where id = '30000000-0000-0000-0000-000000000001';
 select pg_temp.check((select count(*) = 0 from public.audit_log where farm_id = '30000000-0000-0000-0000-000000000001'), 'deleting a farm removes its audit trail cleanly');

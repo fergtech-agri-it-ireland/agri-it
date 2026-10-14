@@ -80,6 +80,49 @@ export function breedList(c: AnimalClass): string[] {
 }
 export const breedsFor = (c: AnimalClass): string[] => [...breedList(c), 'Crossbred', 'Mixed'];
 
+/** Most breeds one group can carry, and the longest a typed breed can be. */
+export const MAX_BREEDS = 8;
+export const MAX_BREED_LENGTH = 60;
+
+/** Tidy a list of breeds: trimmed, no blanks, no repeats (ignoring case), at most MAX_BREEDS. */
+export function cleanBreeds(list: readonly string[]): string[] {
+  const out: string[] = [];
+  for (const raw of list) {
+    const b = raw.trim().replace(/\s+/g, ' ').slice(0, MAX_BREED_LENGTH);
+    if (b && !out.some((x) => x.toLowerCase() === b.toLowerCase())) out.push(b);
+  }
+  return out.slice(0, MAX_BREEDS);
+}
+
+/**
+ * A group's breeds as a list. Groups saved before 14 Oct 2026 have one free-text `breed`
+ * and no list: that breed becomes a list of one, exactly as the farmer wrote it.
+ */
+export function groupBreeds(g: { breed?: string | null; breeds?: readonly string[] | null }): string[] {
+  if (Array.isArray(g.breeds)) return cleanBreeds(g.breeds);
+  return g.breed && g.breed.trim() ? [g.breed.trim()] : [];
+}
+
+/** "Holstein Friesian", "Holstein Friesian and Jersey cross", "Angus, Hereford and Limousin". */
+export function breedLabel(list: readonly string[]): string {
+  if (list.length <= 1) return list[0] ?? '';
+  return `${list.slice(0, -1).join(', ')} and ${list[list.length - 1]}`;
+}
+
+/** The old single `breed` column, kept in step for older code and older phones (60 characters at most). */
+export function legacyBreed(list: readonly string[]): string | null {
+  const clean = cleanBreeds(list);
+  if (!clean.length) return null;
+  const joined = clean.join(', ');
+  return joined.length <= MAX_BREED_LENGTH ? joined : `${joined.slice(0, MAX_BREED_LENGTH - 3).trimEnd()}...`;
+}
+
+/** Both breed fields for a save, from the list the farmer picked. */
+export function breedPatch(list: readonly string[]): { breeds: string[]; breed: string | null } {
+  const breeds = cleanBreeds(list);
+  return { breeds, breed: legacyBreed(breeds) };
+}
+
 const SUGGESTED: Record<FarmType, AnimalClass[]> = {
   dairy: ['dairy_cow', 'in_calf_heifer', 'heifer', 'calf', 'bull'],
   suckler: ['suckler_cow', 'calf', 'weanling', 'heifer', 'bull'],

@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useFarmData, useFarmCtx, useSave } from '../lib/data/farm';
 import { forecastFeed } from '../lib/forecast/feed';
 import type { Evidence, FeedTransaction } from '../lib/types';
-import { eur, fmtDay, fmtKg, fmtMonth, todayISO, uuid } from '../lib/format';
+import { eur, fmtDay, fmtKg, fmtMonth, todayISO, uuid, cur } from '../lib/format';
 import { budgetVsActual, fyRange } from '../lib/forecast/money';
 import { clearPendingPhoto, peekPendingPhoto, peekPendingQueueId, peekPendingRead } from '../lib/pendingPhoto';
 import { usable } from '../lib/docket/extract';
@@ -259,8 +259,8 @@ export default function DeliveryForm() {
             : <NotReadTag field="supplier" what="the supplier" />)}
         </div>
         {money && <>
-        <Chips label="Price" columns={2} value={priceMode} onChange={setPriceMode} options={[{ value: 'per_t', label: '€ per tonne' }, { value: 'total', label: 'Total €' }]} />
-        <NumberInput label={priceMode === 'per_t' ? 'Price per tonne' : 'Total price'} value={price} onChange={setPrice} unit="€"
+        <Chips label="Price" columns={2} value={priceMode} onChange={setPriceMode} options={[{ value: 'per_t', label: `${cur()} per tonne` }, { value: 'total', label: `Total ${cur()}` }]} />
+        <NumberInput label={priceMode === 'per_t' ? 'Price per tonne' : 'Total price'} value={price} onChange={setPrice} unit={cur()}
           hint={total !== null && perT !== null
             ? `${priceMode === 'per_t' ? `Total ${eur(total, true)}` : `${eur(perT, true)} per tonne`}${samePrice ? `. Same as your last delivery (${fmtDay(check!.against.date)}): check the docket` : ''}`
             : 'Optional. Adds to feed costs and cash flow.'} />

@@ -9,7 +9,7 @@ import type { FeedForecast } from './forecast/feed';
 import type { ForageForecast } from './forecast/forage';
 import type { DialTone } from '../components/Dial';
 import type { FeedProduct } from './types';
-import { eurCompact, fmtDay, fmtNum } from './format';
+import { cur, eurCompact, fmtDay, fmtNum } from './format';
 
 export interface DialSpec {
   id: 'feed' | 'silage' | 'cash';
@@ -68,7 +68,7 @@ export function silageDial(forage: ForageForecast): DialSpec {
 export function cashDial(cash: { balance: number } | null, lowest: { closing: number } | null): DialSpec {
   const base = { id: 'cash' as const, label: 'Cash' };
   if (!cash) {
-    return { ...base, value: '€?', unit: 'in bank', fraction: 0, tone: 'info', status: 'Add balance', description: 'add your bank balance to track cash', to: '/settings' };
+    return { ...base, value: `${cur()}?`, unit: 'in bank', fraction: 0, tone: 'info', status: 'Add balance', description: 'add your bank balance to track cash', to: '/settings' };
   }
   const low = lowest?.closing ?? cash.balance;
   const negative = Math.min(cash.balance, low) < 0;

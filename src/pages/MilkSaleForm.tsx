@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useFarmData, useFarmCtx, useSave } from '../lib/data/farm';
 import type { Income } from '../lib/types';
-import { eur, fmtNum, todayISO, uuid } from '../lib/format';
+import { eur, fmtNum, todayISO, uuid, cur } from '../lib/format';
 import { budgetVsActual, cashPosition, fyRange } from '../lib/forecast/money';
 import { clearPendingPhoto, peekPendingPhoto } from '../lib/pendingPhoto';
 import { showSaved } from '../lib/saved';
@@ -81,7 +81,7 @@ export default function MilkSaleForm() {
   return (
     <Screen title="Milk cheque" back>
       <Card className="space-y-5">
-        <NumberInput label="Amount received" value={amount} onChange={setAmount} unit="€" autoFocus />
+        <NumberInput label="Amount received" value={amount} onChange={setAmount} unit={cur()} autoFocus />
         <NumberInput label="Litres (optional)" value={litres} onChange={setLitres} unit="L" hint={cpl ? `${fmtNum(cpl)} c/L` : last?.milk_litres ? `Last cheque: ${fmtNum(Number(last.milk_litres))} L for ${eur(Number(last.amount_eur))}` : undefined} />
         {!showSolids ? (
           <button type="button" className="min-h-tap font-bold text-accent underline" onClick={() => setShowSolids(true)}>Add fat and protein kg</button>

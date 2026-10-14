@@ -13,7 +13,7 @@
  * - Low-confidence values are offered as suggestions, never filled in.
  */
 import type { CostCategory, ISODate } from '../types';
-import { daysBetween } from '../format';
+import { daysBetween, eur } from '../format';
 
 export const DOCKET_RULE = 'docket-read@1.0';
 
@@ -120,7 +120,7 @@ function amountsIn(line: string): NumberToken[] {
   const n = norm(line);
   if (/\b\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4}\b/.test(n) && !/\d+\.\d{2}\b/.test(n.replace(/\b\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4}\b/g, ''))) return [];
   return numbersIn(line.replace(/\b\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4}\b/g, ' '))
-    .filter((t) => !t.percent && (t.raw.includes('.') || t.raw.includes(',') || /(€|eur)\s*$/i.test(line.slice(0, t.index))))
+    .filter((t) => !t.percent && (t.raw.includes('.') || t.raw.includes(',') || /(€|£|eur|gbp|stg)\s*$/i.test(line.slice(0, t.index))))
     .filter((t) => t.raw.replace(/\D/g, '').length <= 9);
 }
 
@@ -134,7 +134,7 @@ function minConf(...cs: ReadConfidence[]): ReadConfidence {
 function atLeast(c: ReadConfidence, floor: ReadConfidence): ReadConfidence {
   return RANK[c] >= RANK[floor] ? c : floor;
 }
-const money = (n: number) => `€${n.toLocaleString('en-IE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const money = (n: number) => eur(n, true);
 const near = (a: number, b: number, tol = 0.01) => Math.abs(a - b) <= Math.max(0.02, Math.abs(b) * tol);
 
 // ---------------------------------------------------------------------------
@@ -451,7 +451,7 @@ export function readDocket(rawLines: OcrLine[], ctx: MatchContext, reader: strin
   let pricePerTonne: Read<number> | undefined;
   for (const line of lines) {
     const n = norm(line.text);
-    if (!/(per\s*(tonne|ton|t)\b|\/\s*(t|tn|tonne|ton)\b|price\s*\/?\s*t\b|\brate\b|€\s*\/\s*t)/.test(n) || /\bvat\b/.test(n)) continue;
+    if (!/(per\s*(tonne|ton|t)\b|\/\s*(t|tn|tonne|ton)\b|price\s*\/?\s*t\b|\brate\b|[€£]\s*\/\s*t)/.test(n) || /\bvat\b/.test(n)) continue;
     const a = amountsIn(line.text).filter((t) => t.value >= 50 && t.value <= 3000);
     if (a.length) { pricePerTonne = { value: a[0].value, confidence: ocrConfidence(line.confidence), from: line.text }; break; }
   }

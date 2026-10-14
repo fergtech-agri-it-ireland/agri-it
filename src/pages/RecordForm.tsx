@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { jurisdictionInfo } from '../lib/jurisdiction';
 import { IN_BROWSER } from '../lib/env';
 import { useSearchParams } from 'react-router-dom';
 import { clearPendingPhoto, peekPendingPhoto } from '../lib/pendingPhoto';
@@ -68,7 +69,7 @@ export default function RecordForm() {
         <DateChips label="Date" value={date} onChange={setDate} />
         <PhotoInput file={photo} onFile={setPhoto} />
       </Card>
-      <p className="px-1 text-sm text-muted">Kept as your evidence. It does not replace an official register or a notification to the Department.</p>
+      <p className="px-1 text-sm text-muted">Kept as your evidence. It does not replace an official register or a notification to {jurisdictionInfo(b.farm.jurisdiction).department}.</p>
       <SaveBar><Button block disabled={!title && !product} onClick={submit}>Save record</Button></SaveBar>
     </Screen>
   );

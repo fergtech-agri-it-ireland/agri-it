@@ -4,7 +4,7 @@ import { useFarmData } from '../lib/data/farm';
 import { useDerived, silageWithFedOut } from '../lib/data/derived';
 import { forecastForage } from '../lib/forecast/forage';
 import { cashForecast90 } from '../lib/forecast/money';
-import { eur, fmtDay, fmtMonth, fmtNum, todayISO } from '../lib/format';
+import { eur, fmtDay, fmtMonth, fmtNum, todayISO, cur } from '../lib/format';
 import { primaryRoute } from '../lib/suppliers';
 import { Card, ConfidenceBadge, Explain, LinkButton, Screen, Stepper, ToneIcon } from '../components/ui';
 import { FeedGauge } from '../components/FeedGauge';
@@ -162,7 +162,7 @@ function CashTab() {
         <p className="text-sm text-muted">Try a change without recording anything. Shown as a scenario, never as the forecast.</p>
         <Stepper label="Income (milk price, sales)" value={whatIf.incomePct} min={-50} step={5} onChange={(n) => setWhatIf({ ...whatIf, incomePct: n })} unit="%" />
         <Stepper label="Costs (feed, fertiliser, bills)" value={whatIf.costPct} min={-50} step={5} onChange={(n) => setWhatIf({ ...whatIf, costPct: n })} unit="%" />
-        <Stepper label="A one-off spend" value={whatIf.oneOff} step={1000} onChange={(n) => setWhatIf({ ...whatIf, oneOff: n })} unit="€" />
+        <Stepper label="A one-off spend" value={whatIf.oneOff} step={1000} onChange={(n) => setWhatIf({ ...whatIf, oneOff: n })} unit={cur()} />
         {whatIf.oneOff > 0 && <label className="block"><span className="label">On</span><input type="date" className="input" value={whatIf.oneOffOn} min={d.today} onChange={(e) => setWhatIf({ ...whatIf, oneOffOn: e.target.value })} /></label>}
         {plan.scenario && plan.lowest && <p className="font-bold">{plan.lowest.closing < 0 ? `Goes overdrawn: about ${eur(plan.lowest.closing)} by the end of ${fmtMonth(plan.lowest.month)}` : `Lowest about ${eur(plan.lowest.closing)} in ${fmtMonth(plan.lowest.month)}`}</p>}
         {plan.scenario && <button className="min-h-tap text-sm font-bold text-accent" onClick={() => setWhatIf(NO_WHAT_IF(d.today))}>Back to the forecast</button>}

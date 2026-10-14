@@ -10,7 +10,7 @@ import { useToast } from '../components/Toast';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useFarmData, useFarmCtx, useSave } from '../lib/data/farm';
 import { COST_LABEL, type Cost, type CostCategory } from '../lib/types';
-import { eur, todayISO, uuid } from '../lib/format';
+import { eur, todayISO, uuid, cur } from '../lib/format';
 import { Button, Card, Chips, DateChips, NumberInput, SaveBar, Screen, TextInput } from '../components/ui';
 import { PhotoInput } from '../components/pickers';
 import { EnterpriseChips } from '../components/EnterpriseChips';
@@ -135,7 +135,7 @@ export default function CostForm() {
           </div>
         )}
         <div>
-          <NumberInput label="Amount" value={amount} onChange={setAmount} unit="€" hint={read?.vat && rAmount !== undefined && read.total ? 'The total paid, VAT included' : undefined} />
+          <NumberInput label="Amount" value={amount} onChange={setAmount} unit={cur()} hint={read?.vat && rAmount !== undefined && read.total ? 'The total paid, VAT included' : undefined} />
           {read && (rAmountRead ? <ReadTag field="amount" read={rAmountRead} edited={edited.amount} /> : <NotReadTag field="amount" what="the amount" />)}
         </div>
         <Chips label="Paid yet?" columns={2} value={payState} onChange={setPayState}
@@ -162,7 +162,7 @@ export default function CostForm() {
         )}
         <div className="grid grid-cols-2 gap-2">
           <TextInput label="Invoice no. (optional)" value={ref} onChange={setRef} />
-          <NumberInput label="VAT in it (optional)" value={vat} onChange={setVat} unit="€" />
+          <NumberInput label="VAT in it (optional)" value={vat} onChange={setVat} unit={cur()} />
         </div>
         <EnterpriseChips types={types} value={enterprise} onChange={setEnterprise} />
         {dupe && (

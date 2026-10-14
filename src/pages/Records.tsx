@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { jurisdictionInfo } from '../lib/jurisdiction';
 import { Link } from 'react-router-dom';
 import { Download, Search } from 'lucide-react';
 import { useFarmData, useSave } from '../lib/data/farm';
@@ -111,7 +112,7 @@ export default function Records() {
         ))}
       <Card className="border border-line">
         <p className="font-bold">Evidence, not an official register</p>
-        <p className="text-[0.9375rem] text-muted">Photos are kept as taken and every change is in the change history. Keeping a record here does not replace notifying the Department or keeping a statutory register (animal medicines, movements, fertiliser). Check what applies to your farm with the authority or your adviser.</p>
+        <p className="text-[0.9375rem] text-muted">Photos are kept as taken and every change is in the change history. Keeping a record here does not replace notifying {jurisdictionInfo(b.farm.jurisdiction).department} ({jurisdictionInfo(b.farm.jurisdiction).animalSystem}) or keeping a statutory register (animal medicines, movements, fertiliser). Check what applies to your farm with the authority or your adviser.</p>
       </Card>
     </Screen>
   );

@@ -3,7 +3,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useFarmData, useFarmCtx, useSave } from '../lib/data/farm';
 import { nextDue, scheduleLabel } from '../lib/routines';
 import { COST_LABEL, INCOME_LABEL, ROUTINE_KIND_LABEL, type CostCategory, type IncomeType, type Routine, type RoutineFrequency, type RoutineKind } from '../lib/types';
-import { fmtDay, todayISO, uuid } from '../lib/format';
+import { fmtDay, todayISO, uuid, cur } from '../lib/format';
 import { Button, Card, Chips, Empty, Field, LinkButton, NumberInput, SaveBar, Screen, Stepper, TextInput } from '../components/ui';
 import { FeedPicker, QuantityInput, SupplierPicker } from '../components/pickers';
 
@@ -117,7 +117,7 @@ export default function RoutineForm() {
         {(kind === 'expense' || kind === 'income') && (
           <>
             <TextInput label={kind === 'expense' ? 'Paid to' : 'From'} value={counterparty} onChange={setCounterparty} placeholder={kind === 'expense' ? 'e.g. Bank' : 'e.g. Tirlán'} />
-            <NumberInput label={amountLabel} value={amount} onChange={setAmount} unit="€" hint="Leave blank if it changes each time. You'll enter it when you tick it off." />
+            <NumberInput label={amountLabel} value={amount} onChange={setAmount} unit={cur()} hint="Leave blank if it changes each time. You'll enter it when you tick it off." />
           </>
         )}
         {(kind === 'count' || kind === 'order') && <FeedPicker b={b} value={feedId} onChange={(v) => { setFeedId(v); setSupplierId(b.products.find((p) => p.id === v)?.supplier_id ?? null); }} />}

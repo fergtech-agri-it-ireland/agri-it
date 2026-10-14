@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { jurisdictionInfo } from '../lib/jurisdiction';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { ChevronLeft, Minus, Plus, Smartphone, X } from 'lucide-react';
@@ -164,7 +165,8 @@ export default function Onboarding() {
           <>
             <TextInput label="Farm name" value={name} onChange={setName} placeholder="e.g. Glenview Farm" autoFocus />
             <Chips label="Where is the farm?" columns={2} value={jurisdiction} onChange={(v) => { setJurisdiction(v); setCounty(''); }}
-              options={[{ value: 'ROI', label: 'Republic of Ireland' }, { value: 'NI', label: 'Northern Ireland' }]} />
+              options={[{ value: 'ROI', label: 'Republic of Ireland' }, { value: 'NI', label: 'Northern Ireland' }]}
+              hint={`Money in ${jurisdictionInfo(jurisdiction).currencyName}. Deadlines and contacts for ${jurisdictionInfo(jurisdiction).name}${jurisdiction === 'NI' ? ' (DAERA)' : ''}.`} />
             <Field label="County" htmlFor="county">
               <select id="county" className="input" value={county} onChange={(e) => setCounty(e.target.value)}>
                 <option value="">Choose county</option>
@@ -256,7 +258,7 @@ export default function Onboarding() {
         )}
         {step === 'money' && (
           <div className="space-y-5">
-            <NumberInput label="Money in the bank today (optional)" value={cash} onChange={setCash} unit="€"
+            <NumberInput label="Money in the bank today (optional)" value={cash} onChange={setCash} unit={jurisdiction === 'NI' ? '£' : '€'}
               hint="Starts your cash position. Agri-It adds income and takes off bills as you pay them. It is never shared." />
             <Field label="Your financial year starts" htmlFor="fy">
               <select id="fy" className="input" value={fyMonth} onChange={(e) => setFyMonth(Number(e.target.value))}>

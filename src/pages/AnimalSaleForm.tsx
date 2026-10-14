@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useFarmData, useFarmCtx, useSave } from '../lib/data/farm';
-import { eur, fmtDay, todayISO, uuid } from '../lib/format';
+import { eur, fmtDay, todayISO, uuid, cur } from '../lib/format';
 import { headChangeRow } from '../lib/heads';
 import { forecastFeed } from '../lib/forecast/feed';
 import { fyRange } from '../lib/forecast/money';
@@ -77,7 +77,7 @@ export default function AnimalSaleForm() {
       <Card className="space-y-5">
         <GroupPicker b={b} value={groupId} onChange={setGroupId} label="From which group?" />
         <Stepper label="How many?" value={count} min={1} onChange={setCount} unit="head" />
-        <NumberInput label="Total received" value={amount} onChange={setAmount} unit="€" hint={amount && count ? `${eur(Number(amount) / count)} per head` : undefined} />
+        <NumberInput label="Total received" value={amount} onChange={setAmount} unit={cur()} hint={amount && count ? `${eur(Number(amount) / count)} per head` : undefined} />
         <DateChips label="Sold on" value={date} onChange={setDate} />
         <TextInput label="Sold to" value={buyer} onChange={setBuyer} placeholder="e.g. Mart, factory, private" />
         {group && (

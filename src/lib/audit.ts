@@ -10,7 +10,7 @@ const THING: Record<string, string> = {
 const FIELD: Record<string, string> = {
   amount_eur: 'amount', occurred_on: 'date', paid_on: 'paid on', due_on: 'due', payment_status: 'paid or owed', invoice_ref: 'invoice no.',
   vat_eur: 'VAT', quantity_kg: 'quantity', head_count: 'head', kg_per_head_per_feed: 'kg per head', feeds_per_day: 'feeds a day',
-  total_price_eur: 'price', price_per_tonne_eur: '€/t', order_status: 'order', evidence: 'checked against', state: 'confirmed', title: 'title',
+  total_price_eur: 'price', price_per_tonne_eur: 'price per tonne', order_status: 'order', evidence: 'checked against', state: 'confirmed', title: 'title',
   done_at: 'done', dismissed_at: 'taken off the list', archived: 'archived', name: 'name', supplier_name: 'paid to', category: 'category',
   end_date: 'ends', start_date: 'starts', document_id: 'photo', enterprise: 'enterprise', description: 'note'
 };

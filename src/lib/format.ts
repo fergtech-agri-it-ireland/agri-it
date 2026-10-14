@@ -57,17 +57,39 @@ export function fmtRelative(s: ISODate, today: ISODate = todayISO()): string {
   return n > 0 ? `in ${n} days` : `${-n} days ago`;
 }
 
-const eur0 = new Intl.NumberFormat('en-IE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
-const eur2 = new Intl.NumberFormat('en-IE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const eurCompactFmt = new Intl.NumberFormat('en-IE', { style: 'currency', currency: 'EUR', notation: 'compact', maximumFractionDigits: 0 });
-/** "€127K" for dials and tiles where space is tight. Under €10,000 shows in full. */
+/**
+ * Money is shown in the farm's own currency (advisory review G05): euro for farms in the
+ * Republic, pounds sterling for Northern Ireland. Amounts are stored as entered, in that
+ * currency; nothing is ever converted. Set once the farm is loaded (normalizeBundle).
+ */
+export type Currency = 'EUR' | 'GBP';
+let currency: Currency = 'EUR';
+export function currencyFor(jurisdiction: string | null | undefined): Currency {
+  return jurisdiction === 'NI' ? 'GBP' : 'EUR';
+}
+export function setCurrency(c: Currency) { currency = c; }
+export function getCurrency(): Currency { return currency; }
+/** The farm's currency sign: "€" or "£". */
+export function cur(): string { return currency === 'GBP' ? '£' : '€'; }
+
+type Fmts = { whole: Intl.NumberFormat; cents: Intl.NumberFormat; compact: Intl.NumberFormat };
+const fmts: Partial<Record<Currency, Fmts>> = {};
+function f(): Fmts {
+  return (fmts[currency] ??= ((locale: string) => ({
+    whole: new Intl.NumberFormat(locale, { style: 'currency', currency, maximumFractionDigits: 0 }),
+    cents: new Intl.NumberFormat(locale, { style: 'currency', currency, minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+    compact: new Intl.NumberFormat(locale, { style: 'currency', currency, notation: 'compact', maximumFractionDigits: 0 })
+  }))(currency === 'GBP' ? 'en-GB' : 'en-IE'));
+}
+/** "€127K" for dials and tiles where space is tight. Under 10,000 shows in full. */
 export function eurCompact(n: number): string {
-  return Math.abs(n) < 10_000 ? eur0.format(n) : eurCompactFmt.format(n);
+  return Math.abs(n) < 10_000 ? f().whole.format(n) : f().compact.format(n);
 }
 
+/** An amount in the farm's currency ("€1,200" or "£1,200"). The name is kept from when every farm used euro. */
 export function eur(n: number | null | undefined, cents = false): string {
   if (n === null || n === undefined || Number.isNaN(n)) return '';
-  return (cents ? eur2 : eur0).format(n);
+  return (cents ? f().cents : f().whole).format(n);
 }
 
 const num = new Intl.NumberFormat('en-IE', { maximumFractionDigits: 1 });

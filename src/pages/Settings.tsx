@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useFarmData, useFarmCtx, useSave } from '../lib/data/farm';
 import { supabase } from '../lib/supabase';
 import { COUNTIES_NI, COUNTIES_ROI, type Farm } from '../lib/types';
-import { todayISO } from '../lib/format';
+import { todayISO, cur } from '../lib/format';
 import { Button, Card, Chips, DateChips, Field, List, NumberInput, Row, Screen, SectionTitle, Stepper, TextInput } from '../components/ui';
 import { ChevronRight, History, Users, Smartphone } from 'lucide-react';
 import { useTheme, type DawnPref } from '../lib/theme';
@@ -80,7 +80,7 @@ export default function Settings() {
 
       <SectionTitle>Money</SectionTitle>
       <Card className="space-y-4">
-        <NumberInput label="Bank balance on a known date" value={cash} onChange={setCash} unit="€" hint="Agri-It adds recorded income and takes away costs from this date." />
+        <NumberInput label="Bank balance on a known date" value={cash} onChange={setCash} unit={cur()} hint="Agri-It adds recorded income and takes away costs from this date." />
         {cash !== '' && <DateChips label="Balance was on" value={cashDate} onChange={setCashDate} />}
         <Field label="Financial year starts" htmlFor="fy">
           <select id="fy" className="input" value={fyMonth} onChange={(e) => setFyMonth(e.target.value)}>

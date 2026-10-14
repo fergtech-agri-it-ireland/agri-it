@@ -6,7 +6,7 @@ import { supabase } from '../supabase';
 import type { FarmBundle, MemberRole } from '../types';
 import { groupsAsOf } from '../heads';
 import { IN_BROWSER, key } from '../env';
-import { addDays, todayISO } from '../format';
+import { addDays, currencyFor, setCurrency, todayISO } from '../format';
 import { ConflictError, execute, flush, type Op } from '../offline/outbox';
 import { flushPhotoUploads, readWaiting } from '../docket/flow';
 import { useToast } from '../../components/Toast';
@@ -151,6 +151,8 @@ export function normalizeBundle(b: FarmBundle): FarmBundle {
     if (noTypes && b.farm) fixed.farm = { ...b.farm, enterprises: farmTypes(b.farm) };
     out = fixed as unknown as FarmBundle;
   }
+  // Money shows in this farm's currency: pounds for Northern Ireland, euro for the Republic
+  setCurrency(currencyFor(out.farm?.jurisdiction));
   // A head count booked for a later day isn't today's count yet (and one booked earlier is)
   const asOf = groupsAsOf(out.groups, out.headHistory, todayISO());
   return asOf === out.groups || asOf.every((g, i) => g === out.groups[i]) ? out : { ...out, groups: asOf };

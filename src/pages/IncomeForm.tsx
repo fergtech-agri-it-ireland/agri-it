@@ -1,11 +1,12 @@
 import { RepeatChips } from '../components/RepeatChips';
+import { jurisdictionInfo } from '../lib/jurisdiction';
 import { routineFromEntry, type RepeatChoice } from '../lib/routines';
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { farmTypes } from '../lib/farmTypes';
 import { useFarmData, useFarmCtx, useSave } from '../lib/data/farm';
 import type { Income } from '../lib/types';
-import { todayISO, uuid } from '../lib/format';
+import { todayISO, uuid, cur } from '../lib/format';
 import { Button, Card, Chips, DateChips, NumberInput, SaveBar, Screen, TextInput } from '../components/ui';
 
 export default function IncomeForm() {
@@ -43,9 +44,9 @@ export default function IncomeForm() {
           ...(grower || type === 'crop' ? [{ value: 'crop' as const, label: 'Grain or straw' }] : []),
           { value: 'grant', label: 'Grant or scheme' }, { value: 'other', label: 'Other' }
         ]} />
-        <NumberInput label="Amount" value={amount} onChange={setAmount} unit="€" />
+        <NumberInput label="Amount" value={amount} onChange={setAmount} unit={cur()} />
         <DateChips label="Received" value={date} onChange={setDate} />
-        <TextInput label="From" value={from} onChange={setFrom} placeholder={type === 'crop' ? 'e.g. merchant or neighbour' : 'e.g. Department of Agriculture'} />
+        <TextInput label="From" value={from} onChange={setFrom} placeholder={type === 'crop' ? 'e.g. merchant or neighbour' : `e.g. ${jurisdictionInfo(b.farm.jurisdiction).schemePayer}`} />
         <TextInput label="What for (optional)" value={desc} onChange={setDesc} voice />
         <RepeatChips value={repeat} onChange={setRepeat} date={date} />
       </Card>

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useFarmData, useFarmCtx, useSave } from '../lib/data/farm';
 import { COST_LABEL, INCOME_LABEL, type BudgetLine, type CostCategory, type IncomeType } from '../lib/types';
-import { eur, todayISO, uuid } from '../lib/format';
+import { eur, todayISO, uuid, cur } from '../lib/format';
 import type { Op } from '../lib/offline/outbox';
 import { Button, Card, NumberInput, SaveBar, Screen, SectionTitle } from '../components/ui';
 
@@ -47,7 +47,7 @@ export default function Budget() {
           <SectionTitle>{kind === 'income' ? 'Income per month' : 'Costs per month'}</SectionTitle>
           <Card className="space-y-4">
             {LINES.filter((l) => l.kind === kind).map((l) => (
-              <NumberInput key={l.category} label={l.label} unit="€" value={values[`${l.kind}:${l.category}`]} onChange={(v) => setValues({ ...values, [`${l.kind}:${l.category}`]: v })} />
+              <NumberInput key={l.category} label={l.label} unit={cur()} value={values[`${l.kind}:${l.category}`]} onChange={(v) => setValues({ ...values, [`${l.kind}:${l.category}`]: v })} />
             ))}
             <p className="font-bold">Year: {eur(total(kind))}</p>
           </Card>

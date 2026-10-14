@@ -5,7 +5,7 @@
  */
 import type { BudgetLine, Cost, CostCategory, Farm, FarmBundle, ISODate, Income, IncomeType } from '../types';
 import { COST_LABEL, INCOME_LABEL, NON_OPERATING } from '../types';
-import { addDays, daysBetween, monthKey, toISO } from '../format';
+import { addDays, cur, daysBetween, eur, getCurrency, monthKey, toISO } from '../format';
 import { owedBills, paidOn, payeeOf } from './bills';
 
 /** 1.1: cash moves when a bill is paid, not when it is incurred; owed bills are known future outflows. */
@@ -225,7 +225,7 @@ export function budgetAlerts(farm: Farm, bundle: Pick<FarmBundle, 'budget' | 'in
       : bundle.costs.filter((c) => c.category === cat && c.occurred_on >= fy.start && c.occurred_on <= today && set.has(monthKey(c.occurred_on))).reduce((s, c) => s + Number(c.amount_eur), 0);
   };
   const monthName = (m: string) => new Intl.DateTimeFormat('en-IE', { month: 'long', timeZone: 'UTC' }).format(new Date(`${m}-01T00:00:00Z`));
-  const money = (n: number) => `€${Math.round(n).toLocaleString('en-IE')}`;
+  const money = (n: number) => eur(n);
 
   const out: BudgetAlert[] = [];
   for (const r of bva.rows) {
@@ -368,7 +368,7 @@ export function yearEndPack(bundle: FarmBundle, today: ISODate, offset = 0) {
   const noInvoice = allCosts.filter((c) => c.category === 'feed' && c.feed_transaction_id && !c.invoice_ref && daysBetween(c.occurred_on, cutoff) > 40);
   if (noInvoice.length) missing.push({ id: 'feedinvoice', text: `${noInvoice.length} feed deliver${noInvoice.length > 1 ? 'ies' : 'y'} not matched to an invoice`, fix: 'Match invoices', to: '/record/invoice' });
   const noEvidence = allCosts.filter((c) => !c.document_id && Number(c.amount_eur) >= 500);
-  if (noEvidence.length) missing.push({ id: 'evidence', text: `${noEvidence.length} cost${noEvidence.length > 1 ? 's' : ''} over €500 without an invoice attached`, fix: 'Attach invoices', to: '/records' });
+  if (noEvidence.length) missing.push({ id: 'evidence', text: `${noEvidence.length} cost${noEvidence.length > 1 ? 's' : ''} over ${cur()}500 without an invoice attached`, fix: 'Attach invoices', to: '/records' });
   const unconfirmed = bundle.documents.filter((d) => d.state === 'unconfirmed');
   if (unconfirmed.length) missing.push({ id: 'docs', text: `${unconfirmed.length} document${unconfirmed.length > 1 ? 's' : ''} waiting for you to confirm`, fix: 'Confirm documents', to: '/records' });
   const undatedOwed = owedBills(bundle, today).filter((o) => !o.dueOn && inFy(o.cost.occurred_on));
@@ -388,21 +388,22 @@ export function yearEndPack(bundle: FarmBundle, today: ISODate, offset = 0) {
 const csvRow = (r: (string | number | null)[]) => r.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',');
 
 export function yearEndCsv(pack: ReturnType<typeof yearEndPack>, farmName: string): string {
+  const c = cur();
   const rows: (string | number)[][] = [
     ['Agri-It management summary (not statutory accounts or a tax computation)'],
-    ['Farm', farmName], ['Financial year', `${pack.fy.start} to ${pack.fy.end}`], [],
-    ['Income', 'Total €'], ...pack.incomeByType.map((r) => [r.label, r.total.toFixed(2)]),
+    ['Farm', farmName], ['Financial year', `${pack.fy.start} to ${pack.fy.end}`], ['Currency', getCurrency()], [],
+    ['Income', `Total ${c}`], ...pack.incomeByType.map((r) => [r.label, r.total.toFixed(2)]),
     ['Total income', pack.totalIncome.toFixed(2)], [],
-    ['Running costs (by date incurred)', 'Total €'], ...pack.costsByCategory.map((r) => [r.label, r.total.toFixed(2)]),
+    ['Running costs (by date incurred)', `Total ${c}`], ...pack.costsByCategory.map((r) => [r.label, r.total.toFixed(2)]),
     ['Total running costs', pack.totalCosts.toFixed(2)], [],
     ['Income less running costs', pack.net.toFixed(2)], [],
-    ...(pack.nonOperatingByCategory.length ? [['Loans and capital (not running costs)', 'Total €'], ...pack.nonOperatingByCategory.map((r) => [r.label, r.total.toFixed(2)]), []] : []),
+    ...(pack.nonOperatingByCategory.length ? [['Loans and capital (not running costs)', `Total ${c}`], ...pack.nonOperatingByCategory.map((r) => [r.label, r.total.toFixed(2)]), []] : []),
     ['Paid out in the year (cash)', pack.paidOut.toFixed(2)],
     ['Still owed at the end of the year', pack.owedAtEndTotal.toFixed(2)],
     ['VAT on recorded invoices', pack.totalVat.toFixed(2)], [],
-    ['Month', 'In €', 'Paid out €', 'Net €'], ...pack.flows.map((f) => [f.month, f.inflow.toFixed(2), f.outflow.toFixed(2), f.net.toFixed(2)]), [],
-    ['Supplier', 'Total €'], ...pack.supplierTotals.map((s) => [s.name, s.total.toFixed(2)]), [],
-    ...(pack.enterprises.length ? [['Enterprise', 'Income €', 'Running costs €', 'Margin €'], ...pack.enterprises.map((e) => [e.key, e.income.toFixed(2), e.costs.toFixed(2), e.margin.toFixed(2)]), []] : []),
+    ['Month', `In ${c}`, `Paid out ${c}`, `Net ${c}`], ...pack.flows.map((f) => [f.month, f.inflow.toFixed(2), f.outflow.toFixed(2), f.net.toFixed(2)]), [],
+    ['Supplier', `Total ${c}`], ...pack.supplierTotals.map((s) => [s.name, s.total.toFixed(2)]), [],
+    ...(pack.enterprises.length ? [['Enterprise', `Income ${c}`, `Running costs ${c}`, `Margin ${c}`], ...pack.enterprises.map((e) => [e.key, e.income.toFixed(2), e.costs.toFixed(2), e.margin.toFixed(2)]), []] : []),
     ['Missing data'], ...pack.missing.map((m) => [m.text])
   ];
   return rows.map(csvRow).join('\n');
@@ -410,7 +411,8 @@ export function yearEndCsv(pack: ReturnType<typeof yearEndPack>, farmName: strin
 
 /** Every income and cost in the year, one line each, with its paperwork. Sums match the summary. */
 export function ledgerCsv(pack: ReturnType<typeof yearEndPack>): string {
-  const head = ['Date', 'In or out', 'Category', 'Description', 'Paid to / received from', 'Amount €', 'VAT €', 'Invoice no.', 'Paid on', 'Due on', 'Status', 'Enterprise', 'Attachment', 'Agri-It id'];
+  const c = cur();
+  const head = ['Date', 'In or out', 'Category', 'Description', 'Paid to / received from', `Amount ${c}`, `VAT ${c}`, 'Invoice no.', 'Paid on', 'Due on', 'Status', 'Enterprise', 'Attachment', 'Agri-It id'];
   const lines = pack.ledger.map((r) => [
     r.date, r.kind === 'income' ? 'In' : 'Out', r.category, r.description, r.counterparty, r.amount.toFixed(2), r.vat === null ? '' : r.vat.toFixed(2),
     r.invoiceRef ?? '', r.paidOn ?? '', r.dueOn ?? '', r.kind === 'income' ? 'Received' : r.paidOn ? 'Paid' : 'Owed',

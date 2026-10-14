@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useFarmData, useFarmCtx, useSave } from '../lib/data/farm';
 import { resolveLeadTime } from '../lib/forecast/feed';
 import type { FeedTransaction } from '../lib/types';
-import { addDays, eur, todayISO, uuid } from '../lib/format';
+import { addDays, eur, todayISO, uuid, cur } from '../lib/format';
 import { Button, Card, DateChips, Empty, LinkButton, NumberInput, SaveBar, Screen } from '../components/ui';
 import { FeedPicker, QuantityInput, SupplierPicker } from '../components/pickers';
 
@@ -56,7 +56,7 @@ export default function OrderForm() {
         <QuantityInput label="How much did you order?" kg={kg} onKg={setKg} unit={unit} onUnit={setUnit} />
         <SupplierPicker b={b} value={supplierId} onChange={setSupplierId} />
         <DateChips label="Expected delivery" value={expected} onChange={setExpected} allowFuture />
-        {money && <NumberInput label="Agreed price per tonne (optional)" value={price} onChange={setPrice} unit="€"
+        {money && <NumberInput label="Agreed price per tonne (optional)" value={price} onChange={setPrice} unit={cur()}
           hint={price && kg ? `About ${eur(Number(price) * Number(kg) / 1000)} committed. Filled in from the last price you paid: change it to what was agreed.` : 'Shows as money committed, kept apart from bills owed and paid.'} />}
         <p className="hint">Not counted as stock, a cost or cash until it arrives. Agri-It will ask you on the day.</p>
       </Card>

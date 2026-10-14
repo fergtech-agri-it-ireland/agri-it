@@ -8,7 +8,7 @@ import { extractedRecord, keepEvidence } from '../lib/docket/flow';
 import { dropToRead } from '../lib/docket/photoStore';
 import { ReadSummary } from '../components/PhotoRead';
 import { useToast } from '../components/Toast';
-import { eur, fmtDay, fmtKg, todayISO, uuid } from '../lib/format';
+import { eur, fmtDay, fmtKg, todayISO, uuid, cur } from '../lib/format';
 import type { Op } from '../lib/offline/outbox';
 import { Button, Card, Chips, DateChips, Field, LinkButton, NumberInput, SaveBar, Screen, TextInput } from '../components/ui';
 import { PhotoInput, SupplierPicker } from '../components/pickers';
@@ -105,9 +105,9 @@ export default function InvoiceForm() {
         <SupplierPicker b={b} value={supplierId} onChange={(id) => { setSupplierId(id); setPicked(null); }} label="From" />
         <div className="grid grid-cols-2 gap-2">
           <TextInput label="Invoice no." value={ref} onChange={setRef} />
-          <NumberInput label="Total, VAT in" value={total} onChange={setTotal} unit="€" />
+          <NumberInput label="Total, VAT in" value={total} onChange={setTotal} unit={cur()} />
         </div>
-        <NumberInput label="VAT in it (optional)" value={vat} onChange={setVat} unit="€" />
+        <NumberInput label="VAT in it (optional)" value={vat} onChange={setVat} unit={cur()} />
         <DateChips label="Invoice date" value={date} onChange={(d) => { setDate(d); setPicked(null); }} />
         {dupe && <p role="alert" className="rounded-xl bg-warn-bg p-3 font-semibold text-warn">Invoice {ref} is already recorded ({eur(Number(dupe.amount_eur), true)}, {fmtDay(dupe.occurred_on)}).</p>}
       </Card>

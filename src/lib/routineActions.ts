@@ -112,9 +112,10 @@ export function completeRoutine(item: ChecklistItem, b: FarmBundle, amount: numb
     recordTable = 'feed_transactions';
     const product = b.products.find((p) => p.id === r.feed_product_id);
     const supplierId = r.supplier_id ?? product?.supplier_id ?? null;
-    const lead = product?.lead_time_days ?? b.supplierSettings.find((s) => s.supplier_id === supplierId)?.lead_time_days ?? b.farm.default_lead_time_days ?? 0;
-    const expected = addDays(item.date, lead);
-    const row = { id: recordId, farm_id: farmId, feed_product_id: r.feed_product_id, txn_type: 'order' as const, quantity_kg: amount, order_date: item.date, expected_delivery_date: expected, effective_on: expected, order_status: 'open' as const, supplier_id: supplierId, evidence: 'unconfirmed' as const };
+    const lead = product?.lead_time_days ?? b.supplierSettings.find((s) => s.supplier_id === supplierId)?.lead_time_days ?? b.farm.default_lead_time_days ?? null;
+    // No delivery time known: no expected date (never guessed, spec 10)
+    const expected = lead === null ? null : addDays(item.date, lead);
+    const row = { id: recordId, farm_id: farmId, feed_product_id: r.feed_product_id, txn_type: 'order' as const, quantity_kg: amount, order_date: item.date, expected_delivery_date: expected, effective_on: expected ?? item.date, order_status: 'open' as const, supplier_id: supplierId, evidence: 'unconfirmed' as const };
     ops.push({ kind: 'insert', table: 'feed_transactions', row });
     undo.push({ kind: 'delete', table: 'feed_transactions', match: { id: recordId } });
     patchRecord = (x) => ({ ...x, txns: [...x.txns, { ...row, delivery_date: null, linked_order_id: null, total_price_eur: null, price_per_tonne_eur: null, document_id: null, notes: null, created_at: now() } as FeedTransaction] });

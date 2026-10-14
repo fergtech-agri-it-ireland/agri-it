@@ -113,7 +113,7 @@ export function feedOrderSuggestions(b: FarmBundle, feed: Map<string, FeedForeca
   const out: Suggestion[] = [];
   for (const p of b.products.filter((x) => !x.archived)) {
     const f = feed.get(p.id);
-    if (!f || (f.status !== 'order_now' && f.status !== 'order_soon') || f.openOrders.length) continue;
+    if (!f || (f.status !== 'order_now' && f.status !== 'order_soon') || f.openOrders.length || f.ordersToPlace.length) continue;
     const key = `order:${p.id}:${f.orderByDate ?? f.reorderDate ?? today}`;
     if (hidden(b.decisions ?? [], key, today)) continue;
     const last = b.txns.filter((t) => t.feed_product_id === p.id && (t.txn_type === 'order' || t.txn_type === 'delivery') && Number(t.quantity_kg) > 0)
@@ -133,7 +133,9 @@ export function feedOrderSuggestions(b: FarmBundle, feed: Map<string, FeedForeca
     const row = {
       id: uuid(), farm_id: b.farm.id, feed_product_id: p.id, txn_type: 'order' as const, quantity_kg: kg, order_date: today,
       expected_delivery_date: expected, effective_on: expected ?? today, order_status: 'open' as const, supplier_id: supplierId, evidence: 'unconfirmed' as const,
-      price_per_tonne_eur: null, total_price_eur: null
+      price_per_tonne_eur: null, total_price_eur: null,
+      // Agri-It never sends an order: this is the farmer's order to place (review G03)
+      placed: false, placed_on: null
     };
     out.push({
       key, when, tone: 'warn', canDecline: true,
@@ -141,9 +143,9 @@ export function feedOrderSuggestions(b: FarmBundle, feed: Map<string, FeedForeca
       detail: `${by}. Same amount as your last ${last.txn_type === 'order' ? 'order' : 'delivery'} (${fmtDay(last.effective_on)}).${expected ? ` Expected ${fmtDay(expected)} (your ${f.leadTimeDays}-day delivery time).` : ' Add the delivery date when the supplier tells you.'}`,
       why: `${Math.max(0, Math.floor(f.daysRemaining ?? 0))} days left at your feeding plan`,
       approve: {
-        label: 'Record the order', ops: [{ kind: 'insert', table: 'feed_transactions', row }],
+        label: 'Add to orders to place', ops: [{ kind: 'insert', table: 'feed_transactions', row }],
         patch: (x) => ({ ...x, txns: [...x.txns, { ...row, delivery_date: null, linked_order_id: null, document_id: null, notes: null, created_at: new Date().toISOString() } as unknown as FarmBundle['txns'][number]] }),
-        saved: 'Order recorded. Ring the supplier to place it', then: `/feed/${p.id}`
+        saved: `Added to your orders to place. Agri-It doesn't send orders: ring ${supplier ?? 'the supplier'} to place it`, then: `/feed/${p.id}`
       },
       to: { label: 'Change it', href: `/record/order?feed=${p.id}&kg=${kg}` }
     });

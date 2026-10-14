@@ -145,6 +145,9 @@ export interface FeedTransaction {
   expected_delivery_date: ISODate | null;
   effective_on: ISODate;
   order_status: OrderStatus | null;
+  /** Orders only (14 Oct 2026, review G03): false = drafted, still to place with the supplier. Missing = placed (older records). */
+  placed?: boolean;
+  placed_on?: ISODate | null;
   linked_order_id: string | null;
   supplier_id: string | null;
   total_price_eur: number | null;

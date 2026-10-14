@@ -99,7 +99,13 @@ export function derive(b: FarmBundle, today: ISODate) {
       } else if (f.status === 'no_stock_record') {
         p.push({ id: `feed-${product.id}`, tone: 'info', when: 'later', dismissable: true, title: `How much ${product.name} is in the shed?`, detail: 'Add a stock count to start the forecast', to: `/feed/${product.id}/count` });
       }
-      for (const o of b.txns.filter((t) => t.feed_product_id === product.id && t.txn_type === 'order' && t.order_status === 'open')) {
+      for (const o of b.txns.filter((t) => t.feed_product_id === product.id && t.txn_type === 'order' && t.order_status === 'open' && t.placed === false)) {
+        const who = b.suppliers.find((s) => s.id === o.supplier_id)?.name;
+        const late = f.orderByDate !== null && f.orderByDate < today;
+        p.push({ id: `place-${o.id}`, tone: 'warn', when: late ? 'overdue' : 'today', title: `Place the ${product.name} order`,
+          detail: `${fmtKg(Number(o.quantity_kg))}${who ? ` with ${who}` : ''}. Not placed yet: Agri-It doesn't send orders`, to: `/feed/${product.id}`, action: 'Placed?' });
+      }
+      for (const o of b.txns.filter((t) => t.feed_product_id === product.id && t.txn_type === 'order' && t.order_status === 'open' && t.placed !== false)) {
         const left = f.openOrders.find((x) => x.id === o.id)?.kg ?? 0;
         if (left > 0 && o.expected_delivery_date && o.expected_delivery_date <= today) {
           const part = left < Number(o.quantity_kg);

@@ -8,7 +8,7 @@ import { priceHistory } from '../lib/forecast/prices';
 import { PriceHistoryCard } from '../components/Prices';
 import { supabase } from '../lib/supabase';
 import { EVIDENCE_LABEL } from '../lib/types';
-import { eur, fmtDate, fmtDay, fmtKg, fmtNum } from '../lib/format';
+import { addDays, eur, fmtDate, fmtDay, fmtKg, fmtNum, todayISO } from '../lib/format';
 import { resolveContacts, telHref } from '../lib/suppliers';
 import { Button, CallButton, Card, ConfidenceBadge, Empty, Explain, LinkButton, List, Row, Screen, SectionTitle } from '../components/ui';
 
@@ -140,6 +140,31 @@ export default function FeedDetail() {
         </dl>
       </Explain>
 
+      {f.ordersToPlace.length > 0 && (
+        <Card className="border-2 border-hivis">
+          <p className="font-bold">Order to place</p>
+          <p className="text-sm text-muted">Agri-It doesn't send orders. Ring {supplier?.name ?? 'the supplier'} to place it, then tap I've placed it. Until then it isn't counted as coming.</p>
+          {f.ordersToPlace.map((o) => {
+            const placedPatch = () => {
+              const expected = f.leadTimeDays !== null ? addDays(todayISO(), f.leadTimeDays) : null;
+              return { placed: true, placed_on: todayISO(), order_date: todayISO(), expected_delivery_date: expected, effective_on: expected ?? todayISO() };
+            };
+            return (
+              <div key={o.id} className="mt-3">
+                <p className="font-bold">{fmtKg(o.kg)} of {product.name}</p>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <Button variant="ghost" onClick={() => save([{ kind: 'update', table: 'feed_transactions', match: { id: o.id }, patch: { order_status: 'cancelled' } }],
+                    { label: 'Order dropped', undo: [{ kind: 'update', table: 'feed_transactions', match: { id: o.id }, patch: { order_status: 'open' } }] })}>Don't order</Button>
+                  <Button variant="primary" onClick={() => { const patch = placedPatch(); return save([{ kind: 'update', table: 'feed_transactions', match: { id: o.id }, patch }],
+                    { label: patch.expected_delivery_date ? `Order placed. Expected ${fmtDay(patch.expected_delivery_date)}` : 'Order placed', patch: (x) => ({ ...x, txns: x.txns.map((t) => (t.id === o.id ? { ...t, ...patch } : t)) }),
+                      undo: [{ kind: 'update', table: 'feed_transactions', match: { id: o.id }, patch: { placed: false, placed_on: null } }] }); }}>I've placed it</Button>
+                </div>
+              </div>
+            );
+          })}
+        </Card>
+      )}
+
       {f.openOrders.length > 0 && (
         <List>
           {f.openOrders.map((o) => (
@@ -254,7 +279,7 @@ export default function FeedDetail() {
       <List>
         {txns.filter((t) => t.txn_type !== 'order' || t.order_status !== 'delivered').slice(0, 15).map((t) => (
           <Row key={t.id} title={`${{ opening: 'Opening stock', order: 'Order', delivery: 'Delivery', count: 'Stock count', adjustment: 'Adjustment' }[t.txn_type]}: ${fmtKg(Number(t.quantity_kg))}`}
-            sub={`${fmtDate(t.effective_on)}. ${EVIDENCE_LABEL[t.evidence]}${t.total_price_eur ? `. ${eur(Number(t.total_price_eur))}` : ''}${t.order_status === 'cancelled' ? '. Cancelled' : ''}`}
+            sub={`${fmtDate(t.effective_on)}. ${t.txn_type === 'order' && t.placed === false && t.order_status === 'open' ? 'To place, not placed yet' : EVIDENCE_LABEL[t.evidence]}${t.total_price_eur ? `. ${eur(Number(t.total_price_eur))}` : ''}${t.order_status === 'cancelled' ? '. Cancelled' : ''}`}
             right={t.txn_type === 'order' && t.order_status === 'open'
               ? <Button variant="ghost" onClick={() => save([{ kind: 'update', table: 'feed_transactions', match: { id: t.id }, patch: { order_status: 'cancelled' } }], { label: 'Order cancelled', undo: [{ kind: 'update', table: 'feed_transactions', match: { id: t.id }, patch: { order_status: 'open' } }] })}>Cancel</Button>
               : undefined} />

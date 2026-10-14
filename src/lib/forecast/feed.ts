@@ -77,6 +77,8 @@ export interface FeedForecast {
   leadTimeSource: 'feed' | 'supplier' | 'farm' | null;
   orderByDate: ISODate | null;
   openOrders: { id: string; kg: number; expected: ISODate | null }[];
+  /** Orders Agri-It drafted that the farmer has not placed with the supplier yet: not counted as coming. */
+  ordersToPlace: { id: string; kg: number }[];
   runOutWithOpenOrders: ISODate | null;
   confidence: Confidence;
   reasons: string[];
@@ -344,9 +346,12 @@ export function forecastFeed(input: FeedForecastInput): FeedForecast {
 
   // Part-delivered orders only count what is still to come
   const openOrders = txns
-    .filter((t) => t.txn_type === 'order' && t.order_status === 'open')
+    .filter((t) => t.txn_type === 'order' && t.order_status === 'open' && isPlaced(t))
     .map((t) => ({ id: t.id, kg: orderRemainingKg(t, txns), expected: t.expected_delivery_date }))
     .filter((o) => o.kg > 0);
+  const ordersToPlace = txns
+    .filter((t) => t.txn_type === 'order' && t.order_status === 'open' && !isPlaced(t))
+    .map((t) => ({ id: t.id, kg: Number(t.quantity_kg) }));
 
   let daysRemaining: number | null = null;
   let runOutDate: ISODate | null = null;
@@ -463,6 +468,7 @@ export function forecastFeed(input: FeedForecastInput): FeedForecast {
     leadTimeSource: lead.source,
     orderByDate,
     openOrders,
+    ordersToPlace,
     runOutWithOpenOrders,
     confidence,
     reasons,
@@ -555,4 +561,9 @@ export function runoutSteps(
     }
   }
   return steps;
+}
+
+/** An order counts as on order once it is placed with the supplier. Older records (no field) were all placed. */
+export function isPlaced(t: Pick<FeedTransaction, 'placed'>): boolean {
+  return t.placed !== false;
 }

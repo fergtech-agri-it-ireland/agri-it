@@ -58,7 +58,12 @@ export function FeedGauge({ product, f, phone, compact }: { product: FeedProduct
         <div className={`flex items-center gap-3 px-4 py-3 ${f.status === 'ok' || f.openOrders.length > 0 ? 'border-t border-line bg-card' : 'bg-hivis'}`}>
           <ToneIcon tone={tone} className="h-6 w-6 shrink-0" />
           <div className="min-w-0 flex-1 leading-tight">
-            {f.openOrders.length > 0 ? (
+            {f.openOrders.length === 0 && f.ordersToPlace.length > 0 ? (
+              <p className="font-bold">
+                Order to place: {fmtKg(f.ordersToPlace[0].kg)}
+                <span className="block text-sm font-normal">Not placed with the supplier yet. Ring them, then tap I've placed it</span>
+              </p>
+            ) : f.openOrders.length > 0 ? (
               <p className="font-bold">
                 Ordered {fmtKg(f.openOrders.reduce((s, o) => s + o.kg, 0))}{f.openOrders[0].expected && `, due ${fmtDay(f.openOrders[0].expected)}`}
                 <span className="block text-sm font-normal">Not counted until it arrives{f.runOutWithOpenOrders && `. With it, lasts to ${fmtDay(f.runOutWithOpenOrders)}`}</span>

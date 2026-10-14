@@ -36,7 +36,7 @@ export const DEFAULTS: Record<string, () => Row> = {
   farm_supplier_settings: () => ({ rep_name: null, rep_phone: null, lead_time_days: null, account_number: null, last_used_at: null, updated_at: new Date().toISOString() }),
   documents: () => ({ record_type: 'other', storage_path: null, file_name: null, mime_type: null, extracted: null, state: 'unconfirmed' }),
   feed_products: () => ({ supplier_id: null, storage_location: null, safety_stock_mode: 'days', safety_stock_value: 3, lead_time_days: null, analysis: null, archived: false }),
-  feed_transactions: () => ({ order_date: null, delivery_date: null, expected_delivery_date: null, order_status: null, linked_order_id: null, supplier_id: null, total_price_eur: null, price_per_tonne_eur: null, evidence: 'farmer_estimate', document_id: null, notes: null }),
+  feed_transactions: () => ({ placed: true, placed_on: null, order_date: null, delivery_date: null, expected_delivery_date: null, order_status: null, linked_order_id: null, supplier_id: null, total_price_eur: null, price_per_tonne_eur: null, evidence: 'farmer_estimate', document_id: null, notes: null }),
   feeding_rules: () => ({ head_count_override: null, start_date: todayISO(), end_date: null, is_temporary: false, label: null, confirm_daily: true }),
   routines: () => ({ interval_days: null, weekday: null, day_of_month: null, start_date: todayISO(), end_date: null, amount: null, category: null, counterparty: null, feed_product_id: null, silage_store_id: null, supplier_id: null, active: true }),
   routine_completions: () => ({ amount: null, record_table: null, record_id: null, done_on: todayISO(), moved_to: null }),

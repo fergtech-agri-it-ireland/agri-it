@@ -81,6 +81,28 @@ with sync_playwright() as p:
     t = main_text(pg)
     check('Dashboard cash card no longer asks for a bank check', 'Check bank' not in t and 'Recorded.' in t, t[:1500])
 
+    # --- G03: an order not yet placed is an order to place --------------------------------
+    NUT = '50000000-0000-0000-0000-000000000001'
+    go(pg, f'#/record/order?feed={NUT}')
+    t = main_text(pg)
+    check('Order form asks whether it is placed with the supplier', 'Have you placed it with the supplier?' in t, t[:900])
+    pg.get_by_label('How much did you order?').fill('6')
+    pg.get_by_role('button', name=re.compile('^Not yet')).click(); pg.wait_for_timeout(200)
+    t = main_text(pg)
+    check('Not yet: no delivery date asked, says Agri-It does not send orders', 'Expected delivery' not in t and "doesn't send orders" in t, t[:1200])
+    pg.get_by_role('button', name='Save order').click(); pg.wait_for_timeout(1200)
+    t = main_text(pg)
+    check('Feed screen shows the order to place, not counted as coming', 'Order to place' in t and "isn't counted as coming" in t and 'still to come on an order' not in t, t[:1600])
+    go(pg, '#/')
+    t = main_text(pg)
+    check('Today: place the order, until it is placed', 'Place the Dairy nut 16% order' in t and 'Not placed yet' in t, t[:2500])
+    go(pg, f'#/feed/{NUT}')
+    pg.get_by_role('button', name="I've placed it").click(); pg.wait_for_timeout(1000)
+    t = main_text(pg)
+    check('Placed: now on order and still to come', 'Order to place' not in t and 'still to come on an order' in t, t[:1600])
+    go(pg, '#/')
+    check('Today no longer asks to place it', 'Place the Dairy nut 16% order' not in main_text(pg))
+
     b.close()
 
 for n, ok, d in results:

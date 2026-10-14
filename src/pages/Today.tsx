@@ -129,7 +129,7 @@ function FeedStatus({ f, phone, supplier, productId }: { f: FeedForecast; phone?
     <div className={`mt-3 flex items-center gap-3 rounded-xl px-3 py-2.5 ${urgent ? (f.status === 'order_now' ? 'bg-danger-bg' : 'bg-warn-bg') : 'bg-ok-bg'}`}>
       <div className="min-w-0 flex-1">
         <p className={`text-[0.9375rem] font-bold ${f.status === 'order_now' ? 'text-danger' : urgent ? 'text-warn' : 'text-ok'}`}>
-          {ordered > 0 ? `${fmtKg(ordered)} on order` : f.status === 'order_now' ? 'Order now' : f.orderByDate ? `${urgent ? 'Order' : 'Next order'} by ${fmtDay(f.orderByDate)}` : urgent ? 'Order soon' : 'On track'}
+          {ordered > 0 ? `${fmtKg(ordered)} on order` : f.ordersToPlace.length ? `Order to place: ${fmtKg(f.ordersToPlace[0].kg)}` : f.status === 'order_now' ? 'Order now' : f.orderByDate ? `${urgent ? 'Order' : 'Next order'} by ${fmtDay(f.orderByDate)}` : urgent ? 'Order soon' : 'On track'}
         </p>
         <p className="text-[0.8125rem] text-ink/80">Runs out {fmtDay(f.runOutDate)}{lead ? `. ${lead}` : ''}</p>
       </div>

@@ -103,7 +103,7 @@ export interface Commitment {
 /** Open orders: money promised but not yet a bill. Kept apart from owed and paid. */
 export function commitments(b: Pick<FarmBundle, 'txns'>): { total: number; unpriced: number; rows: Commitment[] } {
   const rows: Commitment[] = b.txns
-    .filter((t) => t.txn_type === 'order' && t.order_status === 'open')
+    .filter((t) => t.txn_type === 'order' && t.order_status === 'open' && t.placed !== false)
     .map((o) => {
       const remainingKg = orderRemainingKg(o, b.txns);
       const last = b.txns

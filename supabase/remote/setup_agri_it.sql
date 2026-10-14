@@ -1189,6 +1189,22 @@ alter table public.animal_groups
   add column if not exists housed_from date;
 commit;
 
+-- 2. 20261014000100_order_to_place.sql
+begin;
+-- Advisory review G03 (14 Oct 2026): an order Agri-It drafts is an order TO PLACE until the
+-- farmer says they have placed it with the supplier. Only placed orders count as on order
+-- (committed money, the "run-out if it arrives" date, "did it arrive?").
+-- Every order already recorded was entered by the farmer as ordered, so it stays placed.
+alter table public.feed_transactions
+  add column if not exists placed boolean not null default true,
+  add column if not exists placed_on date;
+
+comment on column public.feed_transactions.placed is
+  'Orders only: false = drafted in Agri-It, still to be placed with the supplier. Placed orders count as on order.';
+comment on column public.feed_transactions.placed_on is
+  'Orders only: the day the farmer placed it with the supplier (null for older orders: order_date).';
+commit;
+
 -- 3. Reference data from seed.sql (top half only: no demo login, no demo farm)
 begin;
 -- Agri-It local seed. Runs on `supabase db reset` (and first `supabase start`).
@@ -1282,7 +1298,8 @@ insert into supabase_migrations.schema_migrations (version, name) values
   ('20261011000500', 'silage_dm'),
   ('20261013000100', 'automation'),
   ('20261013000200', 'silage_best_guess'),
-  ('20261013000300', 'at_grass');
+  ('20261013000300', 'at_grass'),
+  ('20261014000100', 'order_to_place');
 commit;
 
 -- 5. db_review.sql checks, run against the demo farm inside one transaction and rolled back.
@@ -1469,6 +1486,14 @@ select pg_temp.check((select count(*) = 0 from public.costs where payment_status
 insert into public.feed_transactions (id, farm_id, feed_product_id, txn_type, quantity_kg, order_date, expected_delivery_date, effective_on, order_status, evidence)
 select 'e0000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000001', id, 'order', 10000, current_date, current_date + 2, current_date + 2, 'open', 'unconfirmed'
 from public.feed_products where farm_id = '30000000-0000-0000-0000-000000000001' order by name limit 1;
+select pg_temp.check((select placed and placed_on is null from public.feed_transactions where id = 'e0000000-0000-0000-0000-000000000001'), 'an order saved without the new field counts as placed (advisory G03)');
+-- An order Agri-It drafted is an order to place until the farmer places it
+insert into public.feed_transactions (id, farm_id, feed_product_id, txn_type, quantity_kg, order_date, effective_on, order_status, evidence, placed)
+select 'e0000000-0000-0000-0000-0000000000a1', '30000000-0000-0000-0000-000000000001', id, 'order', 4000, current_date, current_date, 'open', 'unconfirmed', false
+from public.feed_products where farm_id = '30000000-0000-0000-0000-000000000001' order by name limit 1;
+update public.feed_transactions set placed = true, placed_on = current_date where id = 'e0000000-0000-0000-0000-0000000000a1';
+select pg_temp.check((select placed and placed_on = current_date from public.feed_transactions where id = 'e0000000-0000-0000-0000-0000000000a1'), 'a drafted order becomes placed, with the day');
+delete from public.feed_transactions where id = 'e0000000-0000-0000-0000-0000000000a1';
 select public.record_feed_delivery('e0000000-0000-0000-0000-000000000002', '30000000-0000-0000-0000-000000000001',
   (select feed_product_id from public.feed_transactions where id = 'e0000000-0000-0000-0000-000000000001'), 6000, current_date,
   p_total_price_eur => 2400, p_linked_order_id => 'e0000000-0000-0000-0000-000000000001', p_payment => 'account', p_due_on => current_date + 30, p_close_order => false);

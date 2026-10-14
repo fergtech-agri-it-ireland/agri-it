@@ -14,7 +14,7 @@ describe('money in the farm currency (advisory review G05)', () => {
     setCurrency(currencyFor('NI'));
     expect(eur(1234)).toBe('£1,234');
     expect(eur(-80, true)).toBe('-\u2060£80.00'); // word joiner: the minus never wraps away from the amount
-    expect(eurCompact(127_000)).toBe('£127K');
+    expect(eurCompact(127_000)).toMatch(/^£127[kK]$/); // ICU versions differ on the case
     expect(cur()).toBe('£');
   });
   it('names the right department and animal system', () => {

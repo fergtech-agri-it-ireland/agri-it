@@ -12,6 +12,7 @@ import { fmtDay, todayISO, uuid } from '../lib/format';
 import { BreedField, ClassPicker, FarmTypePicker } from '../components/FarmPickers';
 import { Logo } from '../components/Logo';
 import { IS_ONLINE } from '../lib/env';
+import { ReleaseLine } from '../components/ReleaseLine';
 
 type Step = 'farm' | 'types' | 'animals' | 'winter' | 'crops' | 'money';
 interface AnimalRow { key: string; cls: AnimalClass; count: number; breeds: string[] }
@@ -271,6 +272,8 @@ export default function Onboarding() {
         )}
         {error && <p role="alert" className="rounded-xl bg-danger-bg p-3 font-bold text-danger">{error}</p>}
       </div>
+
+      <ReleaseLine className="pb-28" />
 
       <SaveBar>
         {(step === 'types' && types.length === 0) || (step === 'winter' && !housing && !turnout && !firstCalf) ? (

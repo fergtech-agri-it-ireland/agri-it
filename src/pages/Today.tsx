@@ -2,15 +2,13 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronRight, CircleCheck, MessageCircleQuestion, Moon, Phone, Sun, X } from 'lucide-react';
 import { useFarmData } from '../lib/data/farm';
-import { useDerived, WHEN_LABEL, type Priority, type When } from '../lib/data/derived';
-import { addDays } from '../lib/format';
+import { useDerived } from '../lib/data/derived';
 import { cashDial, silageDial } from '../lib/dials';
 import { useTheme } from '../lib/theme';
 import { buildChecklist, checklistProgress } from '../lib/routines';
 import { breedLabel, farmGuide, groupBreeds, farmTypes, grows, keepsAnimals, speciesOf, SPECIES } from '../lib/farmTypes';
 import { ReminderNudge } from '../components/Reminders';
 import { PhotoQueueNudge } from '../components/PhotoQueue';
-import { ToneIcon } from '../components/ui';
 import { eur, fmtDay, fmtKg, fmtMonth, fmtNum, monthKey, todayISO } from '../lib/format';
 import { primaryRoute, telHref } from '../lib/suppliers';
 import type { FarmBundle } from '../lib/types';
@@ -19,6 +17,8 @@ import { IS_LOCAL, NS } from '../lib/env';
 import { ReadyToApprove } from '../components/ReadyToApprove';
 import { BackupNudge } from '../components/PhoneStorage';
 import { CalvingCard } from '../components/CalvingCard';
+import { Attention } from '../components/Attention';
+import { ReleaseLine } from '../components/ReleaseLine';
 
 type Derived = ReturnType<typeof useDerived>;
 const dayFmt = new Intl.DateTimeFormat('en-IE', { weekday: 'short', day: 'numeric', month: 'short' });
@@ -229,6 +229,41 @@ function StockCard({ b }: { b: FarmBundle }) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Fertiliser (14 Oct 2026): stock and fields due. Only once the farm has fields or fertiliser.
+// ---------------------------------------------------------------------------
+function FertiliserCard({ b, d, today }: { b: FarmBundle; d: Derived; today: string }) {
+  const fields = b.fields.filter((x) => !x.archived);
+  const f = d.fertiliser;
+  if (!fields.length && !f.products.length) return null;
+  const due = f.due.filter((x) => x.kind !== 'cut_passed');
+  const overdue = due.filter((x) => x.dueOn < today).length;
+  const s = f.season;
+  const season = s ? (s.open ? `Spreading open until ${fmtDay(s.lastDay)}` : `Closed until ${fmtDay(s.closedTo)}`) : undefined;
+  return (
+    <Tile title="Fertiliser" meta={season} to="/fertiliser" label="Fertiliser">
+      {f.products.length > 0 ? (
+        <ul className="divide-y divide-line">
+          {f.products.slice(0, 3).map((x) => (
+            <li key={x.product.id}>
+              <Link to={`/fertiliser/${x.product.id}`} className="flex min-h-[2.75rem] items-center gap-3 text-[0.9375rem]">
+                <span className="min-w-0 flex-1 font-semibold">{x.product.name}</span>
+                <span className={`font-bold ${x.low ? 'text-warn' : ''}`}>{x.basis === 'nothing' ? 'Not recorded' : fmtKg(x.stockKg)}{x.low ? ', low' : ''}</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <Link to="/fertiliser/new" className="flex min-h-[2.75rem] items-center gap-2 text-[0.9375rem] font-bold text-accent">Add what's in the shed<ChevronRight className="h-4 w-4" aria-hidden /></Link>
+      )}
+      <Link to="/fertiliser" className="mt-2 flex min-h-[2.75rem] items-center gap-2 border-t border-line pt-2 text-[0.9375rem]">
+        <span className="min-w-0 flex-1">{!fields.length ? 'No fields yet' : s && !s.open ? 'No fields due while spreading is closed' : due.length === 0 ? 'No fields due on your rounds' : <><b>{due.length} field{due.length > 1 ? 's' : ''} due</b>{overdue ? `, ${overdue} overdue` : ''}</>}</span>
+        <ChevronRight className="h-4 w-4 shrink-0 text-muted" aria-hidden />
+      </Link>
+    </Tile>
+  );
+}
+
 function CropsCard({ b, today }: { b: FarmBundle; today: string }) {
   const year = Number(today.slice(0, 4));
   const crops = b.crops.filter((c) => !c.archived && c.harvest_year >= year);
@@ -298,16 +333,6 @@ export default function Today() {
   const animals = keepsAnimals(types) || types.length === 0;
   const checklist = useMemo(() => buildChecklist(b, today), [b, today]);
   const progress = checklistProgress(checklist, today);
-  const [allNext, setAllNext] = useState(false);
-  // Information can be hidden for a week; anything owed or overdue cannot
-  const hideKey = `${NS}:hidden:${b.farm.id}`;
-  const [hidden, setHidden] = useState<Record<string, string>>(() => { try { return JSON.parse(localStorage.getItem(hideKey) ?? '{}'); } catch { return {}; } });
-  const hide = (id: string) => {
-    const next = { ...Object.fromEntries(Object.entries(hidden).filter(([, until]) => until > today)), [id]: addDays(today, 7) };
-    setHidden(next);
-    try { localStorage.setItem(hideKey, JSON.stringify(next)); } catch { /* ignore */ }
-  };
-
   const silage = silageDial(d.forage);
   const cash = cashDial(d.cash, d.cash90.lowest);
   const toneOf = (t: string) => (t === 'urgent' ? 'danger' : t === 'warn' ? 'warn' : t === 'ok' ? 'field' : 'muted') as 'danger' | 'warn' | 'field' | 'muted';
@@ -317,13 +342,7 @@ export default function Today() {
   // The feed card already says when to order the feed that runs out first
   const live = b.products.filter((p) => !p.archived);
   const firstFeed = [...live].sort((a, c) => (d.feed.get(a.id)?.daysRemaining ?? 9999) - (d.feed.get(c.id)?.daysRemaining ?? 9999))[0];
-  const next = d.priorities.filter((p) => !(firstFeed && p.id === `feed-${firstFeed.id}`) && !(p.dismissable && hidden[p.id] && hidden[p.id] > today));
-  // Overdue and today always show in full; the rest is folded after a few
-  const pressing = next.filter((p) => p.when === 'overdue' || p.when === 'today');
-  const rest = next.filter((p) => p.when !== 'overdue' && p.when !== 'today');
-  const shown = [...pressing, ...(allNext ? rest : rest.slice(0, Math.max(0, 3 - pressing.length)))];
-  const folded = next.length - shown.length;
-  const byWhen = (['overdue', 'today', 'soon', 'later'] as When[]).map((w) => ({ w, items: shown.filter((p) => p.when === w) })).filter((g) => g.items.length);
+  const next = d.priorities.filter((p) => !(firstFeed && p.id === `feed-${firstFeed.id}`));
 
   return (
     <div className="pad-bottom mx-auto w-full max-w-xl">
@@ -371,45 +390,17 @@ export default function Today() {
         <PhotoQueueNudge />
         {IS_LOCAL && <BackupNudge />}
 
-        {next.length > 0 && (
-          <section aria-label="Needs your attention" className="overflow-hidden rounded-[1.125rem] bg-card shadow-lift">
-            <h2 className="px-4 pt-4 text-[1.0625rem] font-bold">Needs your attention</h2>
-            {byWhen.map(({ w, items }) => (
-              <div key={w}>
-                <p className={`mt-2 px-4 text-[0.75rem] font-bold uppercase tracking-wide ${w === 'overdue' ? 'text-danger' : 'text-muted'}`}>{WHEN_LABEL[w]}</p>
-                <ul className="divide-y divide-line">
-                  {items.map((p: Priority) => (
-                    <li key={p.id} className="flex items-center hover:bg-pasture">
-                      <Link to={p.to} className="flex min-h-[3.5rem] min-w-0 flex-1 items-center gap-3 px-4 py-2">
-                        <ToneIcon tone={p.tone} className="h-5 w-5 shrink-0" />
-                        <span className="min-w-0 flex-1"><b className="block text-[0.9375rem] font-semibold leading-snug">{p.title}</b><span className="text-[0.8125rem] text-muted">{p.detail}</span></span>
-                        {!p.dismissable && <ChevronRight className="h-4 w-4 shrink-0 text-muted" aria-hidden />}
-                      </Link>
-                      {p.dismissable && (
-                        <button onClick={() => hide(p.id)} aria-label={`Hide for a week: ${p.title}`} className="mr-2 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted hover:bg-card">
-                          <X className="h-4 w-4" aria-hidden />
-                        </button>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-            {(folded > 0 || allNext) && rest.length > 0 && (
-              <button className="mt-1 min-h-[2.75rem] w-full border-t border-line px-4 text-left text-sm font-bold text-accent" onClick={() => setAllNext(!allNext)}>
-                {allNext ? 'Show fewer' : `Show ${folded} more`}
-              </button>
-            )}
-          </section>
-        )}
+        <Attention farmId={b.farm.id} items={next} today={today} alsoShown={d.suggestions.map((x) => `sugg:${x.key}`)} />
 
         {(types.includes('dairy') || types.includes('suckler') || (b.seasons ?? []).length > 0) && <CalvingCard b={b} today={today} />}
         {types.includes('dairy') && <MilkCard b={b} />}
         {grows(types) && <CropsCard b={b} today={today} />}
+        <FertiliserCard b={b} d={d} today={today} />
         <StockCard b={b} />
         {money && <MonthCard b={b} d={d} today={today} />}
         {checklist.length > 0 && <ReminderNudge />}
       </main>
+      <ReleaseLine />
     </div>
   );
 }

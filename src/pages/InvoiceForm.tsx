@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useFarmData, useFarmCtx, useSave } from '../lib/data/farm';
-import { applyInvoice, deliveryCost, planInvoice, similarCost, uninvoicedDeliveries } from '../lib/forecast/bills';
+import { applyInvoice, deliveryCost, planInvoice, similarCost, uninvoicedDeliveries, uninvoicedFertDeliveries } from '../lib/forecast/bills';
 import { clearPendingPhoto, peekPendingPhoto, peekPendingQueueId, peekPendingRead } from '../lib/pendingPhoto';
 import { usable } from '../lib/docket/extract';
 import { extractedRecord, keepEvidence } from '../lib/docket/flow';
@@ -14,9 +14,10 @@ import { Button, Card, Chips, DateChips, Field, LinkButton, NumberInput, SaveBar
 import { PhotoInput, SupplierPicker } from '../components/pickers';
 
 /**
- * A supplier invoice for feed already delivered (review gap P0: order-to-payment).
- * The invoice is put on the deliveries it covers: their costs become the invoice amounts,
- * so the feed is counted once, at the price actually charged. It can be paid now or owed.
+ * A supplier invoice for feed or fertiliser already delivered (review gap P0: order-to-payment;
+ * fertiliser from 14 Oct 2026). The invoice is put on the deliveries it covers: their costs
+ * become the invoice amounts, so each load is counted once, at the price actually charged.
+ * One invoice can cover feed and fertiliser from the same supplier. Paid now or owed.
  */
 export default function InvoiceForm() {
   const [params] = useSearchParams();
@@ -40,11 +41,15 @@ export default function InvoiceForm() {
   const [dueOn, setDueOn] = useState('');
   const [paidOn, setPaidOn] = useState(today);
 
-  const candidates = useMemo(() => uninvoicedDeliveries(b, supplierId, date), [b, supplierId, date]);
+  // Feed and fertiliser deliveries from this supplier with no invoice yet, oldest first
+  const candidates = useMemo(() => [
+    ...uninvoicedDeliveries(b, supplierId, date).map((t) => ({ id: t.id, kind: 'feed' as const, kg: Number(t.quantity_kg), on: t.effective_on, name: b.products.find((p) => p.id === t.feed_product_id)?.name ?? 'Feed' })),
+    ...uninvoicedFertDeliveries(b, supplierId, date).map((r) => ({ id: r.id, kind: 'fertiliser' as const, kg: Number(r.quantity_kg), on: r.on_date, name: b.fertilisers.find((p) => p.id === r.product_id)?.name ?? 'Fertiliser' }))
+  ].sort((x, y) => x.on.localeCompare(y.on)), [b, supplierId, date]);
   const [picked, setPicked] = useState<Set<string> | null>(null);
   // Until the farmer changes it: the delivery matching the photo's quantity, else every candidate
   const readKg = read?.quantity && read.quantity.confidence !== 'low' ? read.quantity.value.kg : null;
-  const sized = readKg === null ? [] : candidates.filter((t) => Math.abs(Number(t.quantity_kg) - readKg) <= readKg * 0.05);
+  const sized = readKg === null ? [] : candidates.filter((t) => Math.abs(t.kg - readKg) <= readKg * 0.05);
   const chosen = picked ?? new Set((sized.length ? sized : candidates).map((t) => t.id));
   const toggle = (id: string) => setPicked(() => { const n = new Set(chosen); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
@@ -66,7 +71,7 @@ export default function InvoiceForm() {
     const documentId = evidence?.documentId ?? null;
     const final = planInvoice(b, {
       supplierId, supplierName, ref: ref.trim() || null, invoiceDate: date, dueOn: dueOn || null, total: Number(total), vat: vat === '' ? null : Number(vat),
-      documentId, paidOn: payState === 'paid' ? paidOn : null, deliveryIds: plan.lines.map((l) => l.delivery.id), newIds
+      documentId, paidOn: payState === 'paid' ? paidOn : null, deliveryIds: plan.lines.map((l) => l.id), newIds
     });
     const ops: Op[] = final.ops.map((o) => (o.kind === 'insert'
       ? { kind: 'insert', table: o.table, row: o.row! }
@@ -74,10 +79,12 @@ export default function InvoiceForm() {
     // Undo puts every cost and delivery back exactly as it was
     const undo: Op[] = final.lines.flatMap((l): Op[] => {
       const t = l.delivery;
-      const back: Op[] = [{ kind: 'update', table: 'feed_transactions', match: { id: t.id }, patch: { total_price_eur: t.total_price_eur, price_per_tonne_eur: t.price_per_tonne_eur } }];
-      if (l.newCost) back.push({ kind: 'delete', table: 'costs', match: { id: l.costId } });
-      else {
-        const c = deliveryCost(b, t.id)!;
+      const back: Op[] = t ? [{ kind: 'update', table: 'feed_transactions', match: { id: t.id }, patch: { total_price_eur: t.total_price_eur, price_per_tonne_eur: t.price_per_tonne_eur } }] : [];
+      if (l.newCost) {
+        if (l.fert) back.push({ kind: 'update', table: 'fertiliser_stock', match: { id: l.id }, patch: { cost_id: null } });
+        back.push({ kind: 'delete', table: 'costs', match: { id: l.costId } });
+      } else {
+        const c = deliveryCost(b, l.id)!;
         back.push({ kind: 'update', table: 'costs', match: { id: c.id }, patch: { amount_eur: c.amount_eur, vat_eur: c.vat_eur ?? null, invoice_ref: c.invoice_ref ?? null, due_on: c.due_on ?? null, payment_status: c.payment_status ?? 'paid', paid_on: c.paid_on ?? null, document_id: c.document_id } });
       }
       return back;
@@ -99,7 +106,7 @@ export default function InvoiceForm() {
   }
 
   return (
-    <Screen title="Feed invoice" back sub="For feed already delivered">
+    <Screen title="Invoice" back sub="For feed or fertiliser already delivered">
       {read && <ReadSummary read={read} photo={photo} onUse={(f, v) => { if (f === 'date') setDate(String(v)); if (f === 'total') setTotal(String(v)); }} />}
       <Card className="space-y-5">
         <SupplierPicker b={b} value={supplierId} onChange={(id) => { setSupplierId(id); setPicked(null); }} label="From" />
@@ -123,15 +130,15 @@ export default function InvoiceForm() {
           <ul className="divide-y divide-line">
             {candidates.map((t) => {
               const c = deliveryCost(b, t.id);
-              const line = plan?.lines.find((l) => l.delivery.id === t.id);
-              const name = b.products.find((p) => p.id === t.feed_product_id)?.name ?? 'Feed';
+              const line = plan?.lines.find((l) => l.id === t.id);
+              const name = t.name;
               return (
                 <li key={t.id}>
                   <label className="flex min-h-[3.5rem] items-center gap-3">
                     <input type="checkbox" className="h-6 w-6 accent-field" checked={chosen.has(t.id)} onChange={() => toggle(t.id)} />
                     <span className="min-w-0 flex-1">
-                      <b className="block">{name}, {fmtKg(Number(t.quantity_kg))}</b>
-                      <span className="text-sm text-muted">Delivered {fmtDay(t.effective_on)}. {c ? `Docket ${eur(Number(c.amount_eur), true)}` : 'No price yet'}</span>
+                      <b className="block">{name}, {fmtKg(t.kg)}</b>
+                      <span className="text-sm text-muted">{t.kind === 'fertiliser' ? 'Fertiliser, delivered' : 'Delivered'} {fmtDay(t.on)}. {c ? `Docket ${eur(Number(c.amount_eur), true)}` : 'No price yet'}</span>
                     </span>
                     {line && <b className="shrink-0">{eur(line.after, true)}</b>}
                   </label>

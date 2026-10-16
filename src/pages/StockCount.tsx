@@ -6,6 +6,8 @@ import type { Evidence, FeedTransaction } from '../lib/types';
 import { fmtKg, todayISO, uuid } from '../lib/format';
 import { Button, Card, Chips, DateChips, Empty, LinkButton, SaveBar, Screen } from '../components/ui';
 import { FeedPicker, QuantityInput } from '../components/pickers';
+import { WhyDifferent } from '../components/WhyDifferent';
+import { worthAsking, type StockReason } from '../lib/stockReasons';
 
 export default function StockCount() {
   const { id } = useParams();
@@ -20,13 +22,17 @@ export default function StockCount() {
   const [unit, setUnit] = useState<'kg' | 't'>('t');
   const [evidence, setEvidence] = useState<Evidence>('measured');
   const [date, setDate] = useState(todayISO());
+  const [reason, setReason] = useState<StockReason | null>(null);
   if (!b.products.some((p) => !p.archived)) return <Screen title="Stock count" back><Empty title="No feeds yet" action={<LinkButton to="/feed/new">Add a feed</LinkButton>} /></Screen>;
   const f = feedId ? d.feed.get(feedId) : undefined;
+  // G11: only today's expected figure is known here, so only a count for today is asked why
+  const expected = f && f.stockKg !== null && date === todayISO() ? f.stockKg : null;
+  const ask = kg !== '' && worthAsking(Number(kg), expected);
 
   async function submit() {
     const row = {
       id: uuid(), farm_id: farmId!, feed_product_id: feedId!, txn_type: 'count' as const, quantity_kg: Number(kg), effective_on: date, evidence,
-      notes: evidence === 'measured' ? 'Counted on farm' : 'Estimated'
+      notes: evidence === 'measured' ? 'Counted on farm' : 'Estimated', reason: ask ? reason : null
     };
     // Opened from a "count the bin" routine on Today: tick that off with the count
     const routineId = params.get('routine');
@@ -60,6 +66,7 @@ export default function StockCount() {
           { value: 'farmer_estimate', label: 'Rough guess', sub: 'Lowers confidence' }
         ]} />
         <DateChips label="When" value={date} onChange={setDate} />
+        {ask && expected !== null && <WhyDifferent what="feed" countedKg={Number(kg)} expectedKg={expected} value={reason} onChange={setReason} />}
       </Card>
       <SaveBar><Button block disabled={!feedId || kg === ''} onClick={submit}>Save count</Button></SaveBar>
     </Screen>

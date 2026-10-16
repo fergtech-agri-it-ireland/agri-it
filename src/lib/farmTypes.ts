@@ -200,10 +200,12 @@ export function addOptions(types: FarmType[]): AddOption[] {
     { id: 'grain', label: 'Grain or straw sale', sub: 'Crop income', to: '/record/income?type=crop', relevant: has('tillage') },
     { id: 'spread', label: 'Spread fertiliser', sub: 'On one field or several; comes off the stock', to: '/record/spread', relevant: true },
     { id: 'fertiliser', label: 'Fertiliser delivery', sub: 'CAN, compounds, urea, lime arrived', to: '/record/fertiliser', relevant: true },
+    { id: 'fertiliser-order', label: 'Fertiliser order', sub: 'Ordered, not here yet', to: '/record/fertiliser-order', relevant: true },
     { id: 'inputs', label: 'Seed or spray', sub: 'Crop inputs', to: '/record/cost?category=seed_sprays', relevant: has('tillage') },
     { id: 'cost', label: 'Bill', sub: 'Paid or still to pay: vet, contractor, ESB, anything', to: '/record/cost', relevant: true },
-    { id: 'invoice', label: 'Feed invoice', sub: 'Match it to deliveries already recorded', to: '/record/invoice', relevant: animals },
+    { id: 'invoice', label: 'Invoice for feed or fertiliser', sub: 'Match it to deliveries already recorded', to: '/record/invoice', relevant: true },
     { id: 'count', label: 'Stock count', sub: 'Dipped the bin or counted bags', to: '/record/count', relevant: animals },
+    { id: 'adjust', label: 'Wasted, used elsewhere or sold', sub: 'Feed or fertiliser off the stock, with why', to: '/record/adjust', relevant: true },
     { id: 'income', label: 'Other income', sub: 'Grants, schemes, contracting', to: '/record/income', relevant: true },
     { id: 'record', label: 'Farm record', sub: 'Medicine, movement, spreading', to: '/records/new', relevant: true }
   ];

@@ -14,6 +14,32 @@ export interface ContactRoute {
   sourceUrl: string | null;
 }
 
+/**
+ * Directory upkeep (advisory board G08, 14 Oct 2026): every directory supplier and branch is
+ * rechecked against its own website six months after it was checked. Worked out from
+ * `verified_on`, so there is one date to keep right. The build fails 30 days after a recheck
+ * date (releaseGates.test.ts), so a number can't quietly go stale.
+ */
+export const RECHECK_MONTHS = 6;
+export const RECHECK_GRACE_DAYS = 30;
+
+/** Six calendar months on (31 Aug + 6 months = 28 Feb). Null when it was never verified. */
+export function recheckBy(verifiedOn: string | null): string | null {
+  if (!verifiedOn || !/^\d{4}-\d{2}-\d{2}$/.test(verifiedOn)) return null;
+  const [y, m, d] = verifiedOn.split('-').map(Number);
+  const months = (m - 1) + RECHECK_MONTHS;
+  const year = y + Math.floor(months / 12);
+  const month = months % 12;
+  const last = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  return `${year}-${String(month + 1).padStart(2, '0')}-${String(Math.min(d, last)).padStart(2, '0')}`;
+}
+
+/** Due a recheck: past its recheck date. Never verified counts as not verified, not overdue. */
+export function dueRecheck(verifiedOn: string | null, today: string): boolean {
+  const by = recheckBy(verifiedOn);
+  return by !== null && today > by;
+}
+
 export function telHref(phone: string) {
   return 'tel:' + phone.replace(/[^\d+]/g, '');
 }

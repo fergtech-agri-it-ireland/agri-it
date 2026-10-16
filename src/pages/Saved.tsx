@@ -10,6 +10,7 @@ import type { SavedSummary } from '../lib/saved';
 import { fmtNum } from '../lib/format';
 import { useToast } from '../components/Toast';
 import { Card } from '../components/ui';
+import { ReleaseLine } from '../components/ReleaseLine';
 
 /** What just changed, then a clear next step: done, add the docket, record another, or undo. */
 export default function Saved() {
@@ -126,6 +127,7 @@ export default function Saved() {
           )}
         </div>
       </div>
+      <ReleaseLine />
     </main>
   );
 }

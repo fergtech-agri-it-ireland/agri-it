@@ -7,6 +7,7 @@
  *   G3 orders to place (review G03): a drafted order is not "on order" until placed
  *   G5 no false authority: no delivery date guessed when no delivery time is known
  *   G7 finance explainability: month-end and export totals reconcile with a reference ledger
+ *   G08 supplier directory: every checked contact is rechecked within six months (30 days' grace)
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createDemoClient, _testDb, _testReset } from './demo/client';
@@ -184,6 +185,26 @@ describe('Gate G5 / review G06: statutory deadlines are jurisdictional, dated an
       expect(ruleFor('calf_register', 'ROI', 'dairy', D(10))!.days).toBe(20);
     } finally {
       STATUTORY_RULES.pop();
+    }
+  });
+});
+
+describe('G08 supplier directory upkeep', () => {
+  it('no directory supplier or branch is more than 30 days past its recheck date', async () => {
+    const { buildReference } = await import('./demo/seed');
+    const { recheckBy, RECHECK_GRACE_DAYS } = await import('./suppliers');
+    const ref = buildReference();
+    const rows = [
+      ...ref.suppliers.map((s) => ({ what: `supplier ${s.name}`, on: (s.verified_on as string | null) ?? null })),
+      ...ref.supplier_branches.map((x) => ({ what: `branch ${x.name}`, on: (x.verified_on as string | null) ?? null }))
+    ];
+    expect(rows.length).toBeGreaterThan(10);
+    for (const r of rows) {
+      const by = recheckBy(r.on);
+      if (!by) continue; // never verified: shown as not verified, with no number to go stale
+      // To fix: check the number on the supplier's own contact page, then update verified_on in
+      // a new migration, seed.sql and buildReference() (src/lib/demo/seed.ts).
+      expect(addDays(by, RECHECK_GRACE_DAYS) >= today, `${r.what} is overdue a recheck (recheck by ${by})`).toBe(true);
     }
   });
 });

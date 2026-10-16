@@ -14,7 +14,7 @@
  * Cash uses the date it was paid (`paid_on`). Records from before this change have no
  * `paid_on` field and are read as paid on the day they happened (how they were entered).
  */
-import type { Cost, FarmBundle, FeedTransaction, ISODate } from '../types';
+import type { Cost, FarmBundle, FeedTransaction, FertiliserStock, ISODate } from '../types';
 import { addDays, daysBetween } from '../format';
 
 export const BILLS_RULE_VERSION = 'bills@1.0';
@@ -91,6 +91,8 @@ export function orderRemainingKg(order: FeedTransaction, txns: FeedTransaction[]
 
 export interface Commitment {
   orderId: string;
+  /** Feed or fertiliser (14 Oct 2026); missing = feed */
+  kind?: 'feed' | 'fertiliser';
   productId: string;
   remainingKg: number;
   /** Agreed €/t on the order, else the last price paid for this feed. Null = no price known. */
@@ -100,9 +102,24 @@ export interface Commitment {
   expected: ISODate | null;
 }
 
-/** Open orders: money promised but not yet a bill. Kept apart from owed and paid. */
-export function commitments(b: Pick<FarmBundle, 'txns'>): { total: number; unpriced: number; rows: Commitment[] } {
-  const rows: Commitment[] = b.txns
+/** Kg still to come on a fertiliser order: ordered less everything delivered against it. */
+export function fertOrderRemainingKg(order: FertiliserStock, rows: FertiliserStock[]): number {
+  const delivered = rows.filter((r) => r.kind === 'delivery' && r.linked_order_id === order.id).reduce((s, r) => s + Number(r.quantity_kg), 0);
+  return Math.max(0, Number(order.quantity_kg) - delivered);
+}
+
+/** Open fertiliser orders with something still to come. */
+export function openFertOrders(rows: FertiliserStock[], productId?: string): (FertiliserStock & { remainingKg: number })[] {
+  return rows
+    .filter((r) => r.kind === 'order' && r.order_status === 'open' && (!productId || r.product_id === productId))
+    .map((r) => ({ ...r, remainingKg: fertOrderRemainingKg(r, rows) }))
+    .filter((r) => r.remainingKg > 0)
+    .sort((a, c) => (a.expected_on ?? a.on_date).localeCompare(c.expected_on ?? c.on_date));
+}
+
+/** Open orders: money promised but not yet a bill. Kept apart from owed and paid. Feed and fertiliser. */
+export function commitments(b: Pick<FarmBundle, 'txns'> & Partial<Pick<FarmBundle, 'fertStock' | 'costs'>>): { total: number; unpriced: number; rows: Commitment[] } {
+  const feed: Commitment[] = b.txns
     .filter((t) => t.txn_type === 'order' && t.order_status === 'open' && t.placed !== false)
     .map((o) => {
       const remainingKg = orderRemainingKg(o, b.txns);
@@ -111,22 +128,40 @@ export function commitments(b: Pick<FarmBundle, 'txns'>): { total: number; unpri
         .sort((a, c) => c.effective_on.localeCompare(a.effective_on))[0];
       const ppt = o.price_per_tonne_eur !== null ? Number(o.price_per_tonne_eur) : last ? Number(last.price_per_tonne_eur) : null;
       return {
-        orderId: o.id, productId: o.feed_product_id, remainingKg,
+        orderId: o.id, kind: 'feed' as const, productId: o.feed_product_id, remainingKg,
         pricePerTonne: ppt, priceSource: (o.price_per_tonne_eur !== null ? 'order' : last ? 'last_paid' : null) as Commitment['priceSource'],
         value: ppt === null ? null : Math.round(ppt * remainingKg / 10) / 100,
         expected: o.expected_delivery_date
       };
-    })
-    .filter((r) => r.remainingKg > 0);
+    });
+  const rows = b.fertStock ?? [];
+  const fert: Commitment[] = openFertOrders(rows).map((o) => {
+    // Agreed price on the order, else the last fertiliser delivery of this product with a bill
+    const last = rows
+      .filter((r) => r.kind === 'delivery' && r.product_id === o.product_id && r.cost_id && Number(r.quantity_kg) > 0)
+      .map((r) => ({ r, c: (b.costs ?? []).find((c) => c.id === r.cost_id) }))
+      .filter((x) => x.c && Number(x.c.amount_eur) > 0)
+      .sort((x, y) => y.r.on_date.localeCompare(x.r.on_date))[0];
+    const lastPpt = last ? Number(last.c!.amount_eur) / (Number(last.r.quantity_kg) / 1000) : null;
+    const agreed = o.price_per_tonne_eur !== null && o.price_per_tonne_eur !== undefined ? Number(o.price_per_tonne_eur) : null;
+    const ppt = agreed ?? lastPpt;
+    return {
+      orderId: o.id, kind: 'fertiliser' as const, productId: o.product_id, remainingKg: o.remainingKg,
+      pricePerTonne: ppt, priceSource: (agreed !== null ? 'order' : lastPpt !== null ? 'last_paid' : null) as Commitment['priceSource'],
+      value: ppt === null ? null : Math.round(ppt * o.remainingKg / 10) / 100,
+      expected: o.expected_on ?? null
+    };
+  });
+  const all = [...feed, ...fert].filter((r) => r.remainingKg > 0);
   return {
-    total: rows.reduce((s, r) => s + (r.value ?? 0), 0),
-    unpriced: rows.filter((r) => r.value === null).length,
-    rows
+    total: all.reduce((s, r) => s + (r.value ?? 0), 0),
+    unpriced: all.filter((r) => r.value === null).length,
+    rows: all
   };
 }
 
 /** Paid, owed and committed: the three numbers the review asks to keep apart. */
-export function moneyStates(b: Pick<FarmBundle, 'costs' | 'suppliers' | 'txns'>, today: ISODate) {
+export function moneyStates(b: Pick<FarmBundle, 'costs' | 'suppliers' | 'txns'> & Partial<Pick<FarmBundle, 'fertStock'>>, today: ISODate) {
   const owed = owedBills(b, today);
   const committed = commitments(b);
   const dueSoon = (days: number) => owed.filter((o) => o.state === 'owed' && o.daysToDue !== null && o.daysToDue <= days);
@@ -147,10 +182,17 @@ export function moneyStates(b: Pick<FarmBundle, 'costs' | 'suppliers' | 'txns'>,
 // Invoices: match a supplier invoice to the deliveries it covers
 // ---------------------------------------------------------------------------
 
-/** The cost row that a delivery created (if it had a price). */
-export function deliveryCost(b: Pick<FarmBundle, 'costs'>, deliveryId: string): Cost | undefined {
-  return b.costs.find((c) => c.feed_transaction_id === deliveryId);
+type InvoiceBundle = Pick<FarmBundle, 'txns' | 'costs' | 'products'> & Partial<Pick<FarmBundle, 'fertStock' | 'fertilisers'>>;
+
+/** The cost row that a delivery created (if it had a price): feed by its link, fertiliser by the row's cost_id. */
+export function deliveryCost(b: Pick<FarmBundle, 'costs'> & Partial<Pick<FarmBundle, 'fertStock'>>, deliveryId: string): Cost | undefined {
+  const feed = b.costs.find((c) => c.feed_transaction_id === deliveryId);
+  if (feed) return feed;
+  const f = (b.fertStock ?? []).find((r) => r.id === deliveryId && r.kind === 'delivery');
+  return f?.cost_id ? b.costs.find((c) => c.id === f.cost_id) : undefined;
 }
+
+const inWindow = (on: ISODate, invoiceDate: ISODate) => on <= addDays(invoiceDate, 7) && on >= addDays(invoiceDate, -120);
 
 /**
  * Deliveries an invoice from this supplier could cover: not yet on an invoice, and
@@ -161,9 +203,19 @@ export function uninvoicedDeliveries(b: Pick<FarmBundle, 'txns' | 'costs'>, supp
   return b.txns
     .filter((t) => t.txn_type === 'delivery')
     .filter((t) => supplierId === null || t.supplier_id === supplierId)
-    .filter((t) => t.effective_on <= addDays(invoiceDate, 7) && t.effective_on >= addDays(invoiceDate, -120))
+    .filter((t) => inWindow(t.effective_on, invoiceDate))
     .filter((t) => !deliveryCost(b, t.id)?.invoice_ref)
     .sort((a, c) => a.effective_on.localeCompare(c.effective_on));
+}
+
+/** The same for fertiliser deliveries (14 Oct 2026). */
+export function uninvoicedFertDeliveries(b: Pick<FarmBundle, 'costs'> & Partial<Pick<FarmBundle, 'fertStock'>>, supplierId: string | null, invoiceDate: ISODate): FertiliserStock[] {
+  return (b.fertStock ?? [])
+    .filter((r) => r.kind === 'delivery' && Number(r.quantity_kg) > 0)
+    .filter((r) => supplierId === null || r.supplier_id === supplierId)
+    .filter((r) => inWindow(r.on_date, invoiceDate))
+    .filter((r) => !deliveryCost(b, r.id)?.invoice_ref)
+    .sort((a, c) => a.on_date.localeCompare(c.on_date));
 }
 
 export interface InvoiceInput {
@@ -178,13 +230,22 @@ export interface InvoiceInput {
   documentId: string | null;
   /** Paid already (date), or null = owed. */
   paidOn: ISODate | null;
+  /** Feed deliveries and fertiliser deliveries (fertiliser_stock ids), in any mix */
   deliveryIds: string[];
   /** Ids for cost rows the invoice has to create (deliveries with no price yet), one per delivery. */
   newIds: Record<string, string>;
 }
 
 export interface InvoicePlanLine {
-  delivery: FeedTransaction;
+  id: string;
+  kind: 'feed' | 'fertiliser';
+  /** The feed delivery (feed lines) */
+  delivery?: FeedTransaction;
+  /** The fertiliser delivery (fertiliser lines) */
+  fert?: FertiliserStock;
+  kg: number;
+  on: ISODate;
+  name: string;
   before: number | null; // docket cost before the invoice (null = no price yet)
   after: number;
   vat: number | null;
@@ -197,67 +258,78 @@ export interface InvoicePlanLine {
  * set to its share of the invoice total: by its docket cost when every delivery had one,
  * otherwise by kg. Shares are rounded to the cent and the last one takes the remainder,
  * so the lines add up to the invoice exactly. No cost row is ever added for a delivery
- * that already has one: that is what stops the double count.
+ * that already has one: that is what stops the double count. One invoice can cover feed
+ * and fertiliser from the same supplier.
  */
-export function planInvoice(b: Pick<FarmBundle, 'txns' | 'costs' | 'products'>, inv: InvoiceInput) {
-  const deliveries = inv.deliveryIds.map((id) => b.txns.find((t) => t.id === id && t.txn_type === 'delivery')).filter((t): t is FeedTransaction => !!t);
-  if (!deliveries.length) throw new Error('Pick at least one delivery this invoice is for.');
+export function planInvoice(b: InvoiceBundle, inv: InvoiceInput) {
+  const items = inv.deliveryIds.map((id) => {
+    const feed = b.txns.find((t) => t.id === id && t.txn_type === 'delivery');
+    if (feed) return { id, kind: 'feed' as const, delivery: feed, kg: Number(feed.quantity_kg), on: feed.effective_on, farmId: feed.farm_id, supplierId: feed.supplier_id, name: b.products.find((p) => p.id === feed.feed_product_id)?.name ?? 'Feed' };
+    const fert = (b.fertStock ?? []).find((r) => r.id === id && r.kind === 'delivery');
+    if (fert) return { id, kind: 'fertiliser' as const, fert, kg: Number(fert.quantity_kg), on: fert.on_date, farmId: fert.farm_id, supplierId: fert.supplier_id, name: (b.fertilisers ?? []).find((p) => p.id === fert.product_id)?.name ?? 'Fertiliser' };
+    return null;
+  }).filter((x): x is NonNullable<typeof x> => !!x);
+  if (!items.length) throw new Error('Pick at least one delivery this invoice is for.');
   if (!(inv.total > 0)) throw new Error('Enter the invoice total.');
-  const existing = deliveries.map((d) => deliveryCost(b, d.id));
+  const existing = items.map((d) => deliveryCost(b, d.id));
   const byCost = existing.every((c) => c && Number(c.amount_eur) > 0);
-  const weights = deliveries.map((d, i) => (byCost ? Number(existing[i]!.amount_eur) : Number(d.quantity_kg)));
+  const weights = items.map((d, i) => (byCost ? Number(existing[i]!.amount_eur) : d.kg));
   const sumW = weights.reduce((s, w) => s + w, 0);
   const cents = Math.round(inv.total * 100);
   const vatCents = inv.vat !== null ? Math.round(inv.vat * 100) : null;
   let usedC = 0;
   let usedV = 0;
-  const lines: InvoicePlanLine[] = deliveries.map((d, i) => {
-    const last = i === deliveries.length - 1;
+  const lines: InvoicePlanLine[] = items.map((d, i) => {
+    const last = i === items.length - 1;
     const c = last ? cents - usedC : Math.round((cents * weights[i]) / sumW);
     const v = vatCents === null ? null : last ? vatCents - usedV : Math.round((vatCents * weights[i]) / sumW);
     usedC += c;
     if (v !== null) usedV += v;
     const cost = existing[i];
     return {
-      delivery: d, before: cost ? Number(cost.amount_eur) : null, after: c / 100, vat: v === null ? null : v / 100,
+      id: d.id, kind: d.kind, delivery: d.kind === 'feed' ? d.delivery : undefined, fert: d.kind === 'fertiliser' ? d.fert : undefined,
+      kg: d.kg, on: d.on, name: d.name,
+      before: cost ? Number(cost.amount_eur) : null, after: c / 100, vat: v === null ? null : v / 100,
       costId: cost?.id ?? inv.newIds[d.id], newCost: !cost
     };
   });
 
   const ops: { kind: 'insert' | 'update'; table: string; row?: Record<string, unknown>; match?: Record<string, unknown>; patch?: Record<string, unknown> }[] = [];
   const stamp = { invoice_ref: inv.ref, due_on: inv.paidOn ? null : inv.dueOn, ...(inv.paidOn ? markPaid(inv.paidOn) : markOwed()) };
-  for (const l of lines) {
-    const t = l.delivery;
-    const perT = Math.round((l.after / (Number(t.quantity_kg) / 1000)) * 100) / 100;
+  lines.forEach((l, i) => {
+    const item = items[i];
+    const perT = Math.round((l.after / (l.kg / 1000)) * 100) / 100;
     if (l.newCost) {
-      const product = b.products.find((p) => p.id === t.feed_product_id)?.name ?? 'Feed';
       ops.push({ kind: 'insert', table: 'costs', row: {
-        id: l.costId, farm_id: t.farm_id, category: 'feed', other_label: null, occurred_on: t.effective_on, amount_eur: l.after,
-        supplier_id: inv.supplierId ?? t.supplier_id, supplier_name: inv.supplierName, feed_transaction_id: t.id,
-        description: `${product} ${Math.round(Number(t.quantity_kg) / 10) / 100} t`, document_id: inv.documentId, vat_eur: l.vat, ...stamp
+        id: l.costId, farm_id: item.farmId, category: l.kind === 'feed' ? 'feed' : 'fertiliser', other_label: null, occurred_on: l.on, amount_eur: l.after,
+        supplier_id: inv.supplierId ?? item.supplierId, supplier_name: inv.supplierName, feed_transaction_id: l.kind === 'feed' ? l.id : null,
+        description: `${l.name} ${Math.round(l.kg / 10) / 100} t`, document_id: inv.documentId, vat_eur: l.vat, ...stamp
       } });
+      if (l.kind === 'fertiliser') ops.push({ kind: 'update', table: 'fertiliser_stock', match: { id: l.id }, patch: { cost_id: l.costId } });
     } else {
-      const c = existing[lines.indexOf(l)]!;
+      const c = existing[i]!;
       ops.push({ kind: 'update', table: 'costs', match: { id: l.costId }, patch: {
         amount_eur: l.after, vat_eur: l.vat, ...stamp, ...(c.document_id ? {} : { document_id: inv.documentId })
       } });
     }
-    ops.push({ kind: 'update', table: 'feed_transactions', match: { id: t.id }, patch: { total_price_eur: l.after, price_per_tonne_eur: perT } });
-  }
+    if (l.kind === 'feed') ops.push({ kind: 'update', table: 'feed_transactions', match: { id: l.id }, patch: { total_price_eur: l.after, price_per_tonne_eur: perT } });
+  });
   const before = lines.reduce((s, l) => s + (l.before ?? 0), 0);
   return { lines, ops, before, after: inv.total, difference: Math.round((inv.total - before) * 100) / 100, priced: lines.filter((l) => l.before !== null).length };
 }
 
 /** Apply a plan to a bundle (the optimistic update, and what tests check). */
-export function applyInvoice<B extends Pick<FarmBundle, 'txns' | 'costs'>>(b: B, plan: ReturnType<typeof planInvoice>): B {
+export function applyInvoice<B extends Pick<FarmBundle, 'txns' | 'costs'> & Partial<Pick<FarmBundle, 'fertStock'>>>(b: B, plan: ReturnType<typeof planInvoice>): B {
   let costs = [...b.costs];
   let txns = [...b.txns];
+  let fertStock = b.fertStock ? [...b.fertStock] : undefined;
   for (const op of plan.ops) {
     if (op.table === 'costs' && op.kind === 'insert') costs = [op.row as unknown as Cost, ...costs];
     if (op.table === 'costs' && op.kind === 'update') costs = costs.map((c) => (c.id === op.match!.id ? { ...c, ...op.patch } as Cost : c));
     if (op.table === 'feed_transactions') txns = txns.map((t) => (t.id === op.match!.id ? { ...t, ...op.patch } as FeedTransaction : t));
+    if (op.table === 'fertiliser_stock' && fertStock) fertStock = fertStock.map((r) => (r.id === op.match!.id ? { ...r, ...op.patch } as FertiliserStock : r));
   }
-  return { ...b, costs, txns };
+  return { ...b, costs, txns, ...(fertStock ? { fertStock } : {}) };
 }
 
 // ---------------------------------------------------------------------------

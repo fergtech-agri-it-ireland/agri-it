@@ -15,6 +15,7 @@ import { IS_LOCAL } from '../env';
 import { farmTypes, legacyEnterprise } from '../farmTypes';
 import type { FarmType } from '../types';
 import { backupCompleteness, packBackup, unpackBackup, type BackupFile } from '../phoneBackup';
+import { APP_VERSION } from '../release';
 
 const DB_KEY = IS_LOCAL ? 'agri-it:phone-db' : 'agri-it:demo-db';
 const SIGNED_OUT_KEY = 'agri-it:demo-signed-out';
@@ -81,7 +82,7 @@ export function resetDemo() {
 
 /** Phone build: the records only, as text (used where files can't be saved, and by Move my phone data). */
 export function backupJson(): string {
-  return JSON.stringify({ app: 'agri-it', kind: 'phone-backup', v: VERSION, saved_at: new Date().toISOString(), db });
+  return JSON.stringify({ app: 'agri-it', kind: 'phone-backup', v: VERSION, app_version: APP_VERSION, saved_at: new Date().toISOString(), db });
 }
 function checkBackup(text: string): DB {
   let p: { app?: string; kind?: string; db?: DB };
@@ -263,6 +264,8 @@ function cascade(t: string, removed: Row[]) {
   if (t === 'fertiliser_spreads') db.fertiliser_spread_fields = table('fertiliser_spread_fields').filter((x) => !ids.has(x.spread_id));
   if (t === 'fields') db.fertiliser_spread_fields = table('fertiliser_spread_fields').filter((x) => !ids.has(x.field_id));
   if (t === 'costs') for (const x of table('fertiliser_stock')) if (ids.has(x.cost_id)) x.cost_id = null;
+  // Fertiliser orders (14 Oct 2026): a delivery outlives the order it was against
+  if (t === 'fertiliser_stock') for (const x of table('fertiliser_stock')) if (ids.has(x.linked_order_id)) x.linked_order_id = null;
   if (t === 'feeding_rules') db.feed_use_logs = table('feed_use_logs').filter((x) => !ids.has(x.feeding_rule_id));
   if (t === 'routines') db.routine_completions = table('routine_completions').filter((x) => !ids.has(x.routine_id));
   if (t === 'silage_stores') {

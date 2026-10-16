@@ -4,7 +4,7 @@
  * Agri-It does the legwork and puts the result in front of the farmer as a suggestion: a feed
  * order drafted from their own last order, a routine for a bill that comes every month, groups
  * to bring in when housing starts, the jobs for drying off and calving. Nothing is recorded
- * until the farmer taps Approve. "Not now" hides a suggestion for a week; "No" for good.
+ * until the farmer taps Approve. "Not now" asks why and for how long (a week unless the farmer picks); "No" hides it for good.
  *
  * Every suggestion is built only from the farm's own records and published timings (season.ts).
  * Nothing is invented: no supplier price, lead time or quantity the farmer hasn't used before.
@@ -56,8 +56,13 @@ export interface Suggestion {
 const whenRank: Record<SuggestionWhen, number> = { overdue: 0, today: 1, soon: 2, later: 3 };
 
 /** The decision row saved when the farmer approves, puts off or turns down a suggestion. */
-export function decisionOp(farmId: string, key: string, decision: SuggestionDecision['decision'], today: ISODate): { op: Op; row: SuggestionDecision } {
-  const row: SuggestionDecision = { id: uuid(), farm_id: farmId, key, decision, until: decision === 'snoozed' ? addDays(today, 7) : null, decided_at: new Date().toISOString() };
+export function decisionOp(farmId: string, key: string, decision: SuggestionDecision['decision'], today: ISODate,
+  opts: { days?: number; reason?: SuggestionDecision['reason'] } = {}): { op: Op; row: SuggestionDecision } {
+  const days = Math.max(1, Math.min(60, Math.round(opts.days ?? 7)));
+  const row: SuggestionDecision = {
+    id: uuid(), farm_id: farmId, key, decision, until: decision === 'snoozed' ? addDays(today, days) : null,
+    decided_at: new Date().toISOString(), ...(opts.reason ? { reason: opts.reason } : {})
+  };
   return { op: { kind: 'insert', table: 'suggestion_decisions', row: row as unknown as Record<string, unknown> }, row };
 }
 

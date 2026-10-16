@@ -1510,6 +1510,127 @@ revoke all on function public.import_phone_backup(uuid, jsonb, jsonb) from publi
 grant execute on function public.import_phone_backup(uuid, jsonb, jsonb) to authenticated;
 commit;
 
+-- 2. 20261014000500_alert_load.sql
+begin;
+-- Alert load (advisory board G12, 14 Oct 2026).
+-- "Not now" on a suggestion now says why (busy, done elsewhere, not relevant) and for how long
+-- (the existing `until` date). Older rows have no reason. No deletes or drops.
+
+alter table public.suggestion_decisions
+  add column if not exists reason text;
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'suggestion_decisions_reason_ok') then
+    alter table public.suggestion_decisions
+      add constraint suggestion_decisions_reason_ok
+      check (reason is null or reason in ('busy', 'elsewhere', 'not_relevant'));
+  end if;
+end $$;
+
+comment on column public.suggestion_decisions.reason is
+  'Why the farmer put off or turned down a suggestion: busy, elsewhere (done elsewhere), not_relevant. Null on older rows.';
+commit;
+
+-- 2. 20261014000600_stock_reasons.sql
+begin;
+-- Forecast exceptions (advisory board G11, 14 Oct 2026).
+-- A stock adjustment (feed or fertiliser) carries a reason, and a stock check that differs from
+-- the forecast can say why. Agri-It never changes a feeding or spreading rate because of it.
+--
+-- Contains DROP CONSTRAINT (to let fertiliser_stock hold signed adjustments), so it goes to the
+-- hosted project through the SQL editor paste (supabase/remote/setup_agri_it.sql), not the connector.
+
+-- Feed: counts and adjustments already exist; they gain a reason.
+alter table public.feed_transactions add column if not exists reason text;
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'feed_transactions_reason_ok') then
+    alter table public.feed_transactions add constraint feed_transactions_reason_ok check (
+      reason is null or (
+        txn_type in ('count', 'adjustment')
+        and reason in ('wasted', 'fed_other_group', 'used_elsewhere', 'sold_returned', 'count_error', 'delivery_missing', 'not_known')
+      )
+    );
+  end if;
+end $$;
+
+-- Fertiliser: a new kind 'adjustment' with a signed quantity, and a reason on checks and adjustments.
+alter table public.fertiliser_stock add column if not exists reason text;
+alter table public.fertiliser_stock drop constraint if exists fertiliser_stock_kind_check;
+alter table public.fertiliser_stock drop constraint if exists fertiliser_stock_quantity_kg_check;
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'fertiliser_stock_kind_ok') then
+    alter table public.fertiliser_stock add constraint fertiliser_stock_kind_ok
+      check (kind in ('opening', 'delivery', 'count', 'adjustment', 'order'));
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'fertiliser_stock_qty_ok') then
+    alter table public.fertiliser_stock add constraint fertiliser_stock_qty_ok
+      check ((kind = 'adjustment' and quantity_kg <> 0) or (kind <> 'adjustment' and quantity_kg >= 0));
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'fertiliser_stock_reason_ok') then
+    alter table public.fertiliser_stock add constraint fertiliser_stock_reason_ok check (
+      reason is null or (
+        kind in ('count', 'adjustment')
+        and reason in ('wasted', 'fed_other_group', 'used_elsewhere', 'sold_returned', 'count_error', 'delivery_missing', 'not_known')
+      )
+    );
+  end if;
+end $$;
+
+comment on column public.feed_transactions.reason is 'Counts and adjustments: why stock differed from the forecast (G11). Null on older rows.';
+comment on column public.fertiliser_stock.reason is 'Checks and adjustments: why stock differed from the records (G11). Null on older rows.';
+commit;
+
+-- 2. 20261014000700_supplier_recheck.sql
+begin;
+-- Supplier directory upkeep (advisory board G08, 14 Oct 2026).
+-- Every directory supplier and branch is rechecked six months after verified_on; the app works
+-- that date out (lib/suppliers.ts recheckBy) and the build fails 30 days after it. No new column:
+-- verified_on stays the one date to keep right.
+-- Lakeland was tried again on 14 Oct 2026; its website still blocks automated checks, so its
+-- numbers stay not verified. Star Fuels' website still showed "account suspended": no number.
+-- No deletes or drops.
+
+update public.suppliers
+   set local_contact_method = 'These numbers come from the September 2026 product document and could not be re-checked on 11 or 14 Oct 2026 (its website blocks automated checks). Check them on the Lakeland contact page before relying on them.'
+ where id = '10000000-0000-0000-0000-000000000003' and verified_on is null;
+commit;
+
+-- 2. 20261014000800_fertiliser_orders.sql
+begin;
+-- Fertiliser orders (14 Oct 2026, like feed): order, part delivery, invoice, paid or on account.
+-- An order is a row of kind 'order' in fertiliser_stock (the kind check in 20261014000600 allows it).
+-- It is a commitment only: never stock, a cost or cash until a delivery is recorded against it.
+-- No deletes or drops.
+
+alter table public.fertiliser_stock add column if not exists order_status text;
+alter table public.fertiliser_stock add column if not exists expected_on date;
+alter table public.fertiliser_stock add column if not exists price_per_tonne_eur numeric(10,2);
+alter table public.fertiliser_stock add column if not exists linked_order_id uuid references public.fertiliser_stock(id) on delete set null;
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'fertiliser_stock_order_ok') then
+    alter table public.fertiliser_stock add constraint fertiliser_stock_order_ok check (
+      (kind = 'order') = (order_status is not null)
+      and (order_status is null or order_status in ('open', 'delivered', 'cancelled'))
+      and (kind = 'order' or (expected_on is null and price_per_tonne_eur is null))
+      and (linked_order_id is null or kind = 'delivery')
+      and (price_per_tonne_eur is null or price_per_tonne_eur >= 0)
+    );
+  end if;
+end $$;
+
+create index if not exists fertiliser_stock_linked_order on public.fertiliser_stock (linked_order_id) where linked_order_id is not null;
+
+comment on column public.fertiliser_stock.order_status is 'Orders only: open, delivered (in full, or closed with less) or cancelled.';
+comment on column public.fertiliser_stock.expected_on is 'Orders only: when the supplier said it would come. Never guessed.';
+comment on column public.fertiliser_stock.price_per_tonne_eur is 'Orders only: the agreed price, in the farm''s currency. A commitment, never a cost.';
+comment on column public.fertiliser_stock.linked_order_id is 'Deliveries only: the order this load was against.';
+commit;
+
 -- 3. Reference data from seed.sql (top half only: no demo login, no demo farm)
 begin;
 -- Agri-It local seed. Runs on `supabase db reset` (and first `supabase start`).
@@ -1555,7 +1676,7 @@ insert into public.suppliers (id, name, network, coverage, central_phone, centra
   'https://www.dairygoldagri.ie/contact-us/our-team/','2026-10-11',false),
 ('10000000-0000-0000-0000-000000000003','Lakeland Dairies Agribusiness',null,'{ROI,NI}','0818 474720','ROI agribusiness',
   '+44 28 3026 2311','NI agribusiness','https://lakelanddairies.com',
-  'These numbers come from the September 2026 product document and could not be re-checked on 11 Oct 2026. Check them on the Lakeland contact page before relying on them.',
+  'These numbers come from the September 2026 product document and could not be re-checked on 11 or 14 Oct 2026 (its website blocks automated checks). Check them on the Lakeland contact page before relying on them.',
   'https://lakelanddairies.com/contact-us',null,false),
 ('10000000-0000-0000-0000-000000000004','Aurivo Agribusiness','Nutrias','{ROI}','071 9186500','Agribusiness',
   null,null,'https://www.aurivo.ie',
@@ -1651,7 +1772,11 @@ insert into supabase_migrations.schema_migrations (version, name) values
   ('20261014000100', 'order_to_place'),
   ('20261014000200', 'breeds_list'),
   ('20261014000300', 'supplier_directory_more'),
-  ('20261014000400', 'fields_fertiliser');
+  ('20261014000400', 'fields_fertiliser'),
+  ('20261014000500', 'alert_load'),
+  ('20261014000600', 'stock_reasons'),
+  ('20261014000700', 'supplier_recheck'),
+  ('20261014000800', 'fertiliser_orders');
 commit;
 
 -- 5. db_review.sql checks, run against the demo farm inside one transaction and rolled back.
@@ -1965,6 +2090,54 @@ do $$ begin
   insert into public.fertiliser_spreads (farm_id, product_id, spread_on, total_kg) values ('30000000-0000-0000-0000-000000000001', 'f2000000-0000-0000-0000-0000000000a1', current_date, 0);
   raise exception 'FAILED: spreading nothing allowed';
 exception when check_violation then raise notice 'ok: spreading must be more than 0 kg'; end $$;
+-- G11 (14 Oct 2026): adjustments with a reason, and why a check differed
+insert into public.fertiliser_stock (farm_id, product_id, kind, quantity_kg, on_date, reason) values
+  ('30000000-0000-0000-0000-000000000001', 'f2000000-0000-0000-0000-0000000000a1', 'adjustment', -100, current_date - 1, 'wasted'),
+  ('30000000-0000-0000-0000-000000000001', 'f2000000-0000-0000-0000-0000000000a1', 'count', 1500, current_date, 'count_error');
+select pg_temp.check((select count(*) = 2 from public.fertiliser_stock where reason is not null), 'a worker records a fertiliser adjustment and a check with reasons');
+do $$ begin
+  insert into public.fertiliser_stock (farm_id, product_id, kind, quantity_kg, on_date) values ('30000000-0000-0000-0000-000000000001', 'f2000000-0000-0000-0000-0000000000a1', 'delivery', -5, current_date);
+  raise exception 'FAILED: a negative delivery allowed';
+exception when check_violation then raise notice 'ok: only an adjustment can take stock off'; end $$;
+do $$ begin
+  insert into public.fertiliser_stock (farm_id, product_id, kind, quantity_kg, on_date, reason) values ('30000000-0000-0000-0000-000000000001', 'f2000000-0000-0000-0000-0000000000a1', 'delivery', 500, current_date, 'wasted');
+  raise exception 'FAILED: a reason on a delivery allowed';
+exception when check_violation then raise notice 'ok: reasons only on checks and adjustments'; end $$;
+do $$ begin
+  insert into public.fertiliser_stock (farm_id, product_id, kind, quantity_kg, on_date, reason) values ('30000000-0000-0000-0000-000000000001', 'f2000000-0000-0000-0000-0000000000a1', 'adjustment', -5, current_date, 'eaten by goats');
+  raise exception 'FAILED: an unknown reason allowed';
+exception when check_violation then raise notice 'ok: only the listed reasons'; end $$;
+insert into public.feed_transactions (farm_id, feed_product_id, txn_type, quantity_kg, effective_on, reason)
+  select '30000000-0000-0000-0000-000000000001', id, 'adjustment', -200, current_date, 'fed_other_group' from public.feed_products where farm_id = '30000000-0000-0000-0000-000000000001' order by name limit 1;
+select pg_temp.check((select count(*) = 1 from public.feed_transactions where reason = 'fed_other_group' and quantity_kg = -200), 'a worker takes feed off the stock with a reason');
+do $$ begin
+  insert into public.feed_transactions (farm_id, feed_product_id, txn_type, quantity_kg, effective_on, reason)
+    select '30000000-0000-0000-0000-000000000001', id, 'delivery', 1000, current_date, 'wasted' from public.feed_products where farm_id = '30000000-0000-0000-0000-000000000001' order by name limit 1;
+  raise exception 'FAILED: a reason on a feed delivery allowed';
+exception when check_violation then raise notice 'ok: feed reasons only on counts and adjustments'; end $$;
+-- Fertiliser orders (14 Oct 2026): an order is open until delivered; a delivery points at it
+insert into public.fertiliser_stock (id, farm_id, product_id, kind, quantity_kg, on_date, order_status, expected_on, price_per_tonne_eur) values
+  ('f4000000-0000-0000-0000-0000000000a1', '30000000-0000-0000-0000-000000000001', 'f2000000-0000-0000-0000-0000000000a1', 'order', 4000, current_date, 'open', current_date + 3, 400);
+insert into public.fertiliser_stock (farm_id, product_id, kind, quantity_kg, on_date, linked_order_id) values
+  ('30000000-0000-0000-0000-000000000001', 'f2000000-0000-0000-0000-0000000000a1', 'delivery', 2000, current_date, 'f4000000-0000-0000-0000-0000000000a1');
+select pg_temp.check((select count(*) = 1 from public.fertiliser_stock where linked_order_id = 'f4000000-0000-0000-0000-0000000000a1'), 'a part delivery is recorded against a fertiliser order');
+do $$ begin
+  insert into public.fertiliser_stock (farm_id, product_id, kind, quantity_kg, on_date) values ('30000000-0000-0000-0000-000000000001', 'f2000000-0000-0000-0000-0000000000a1', 'order', 1000, current_date);
+  raise exception 'FAILED: an order with no status allowed';
+exception when check_violation then raise notice 'ok: an order has a status'; end $$;
+do $$ begin
+  insert into public.fertiliser_stock (farm_id, product_id, kind, quantity_kg, on_date, price_per_tonne_eur) values ('30000000-0000-0000-0000-000000000001', 'f2000000-0000-0000-0000-0000000000a1', 'delivery', 1000, current_date, 400);
+  raise exception 'FAILED: an order price on a delivery allowed';
+exception when check_violation then raise notice 'ok: agreed prices only on orders (a delivery''s price is its bill)'; end $$;
+update public.fertiliser_stock set order_status = 'delivered' where id = 'f4000000-0000-0000-0000-0000000000a1';
+select pg_temp.check((select order_status = 'delivered' from public.fertiliser_stock where id = 'f4000000-0000-0000-0000-0000000000a1'), 'a worker closes a fertiliser order');
+-- G12: why a suggestion was put off
+insert into public.suggestion_decisions (farm_id, key, decision, until, reason) values ('30000000-0000-0000-0000-000000000001', 'heads:test', 'snoozed', current_date + 3, 'elsewhere');
+select pg_temp.check((select reason = 'elsewhere' from public.suggestion_decisions where key = 'heads:test'), 'Not now keeps why it was put off');
+do $$ begin
+  insert into public.suggestion_decisions (farm_id, key, decision, until, reason) values ('30000000-0000-0000-0000-000000000001', 'heads:test2', 'snoozed', current_date + 3, 'lazy');
+  raise exception 'FAILED: an unknown Not now reason allowed';
+exception when check_violation then raise notice 'ok: Not now reasons are busy, done elsewhere or not relevant'; end $$;
 -- Taking a spreading back takes its fields with it; another farm sees none of it
 delete from public.fertiliser_spreads where id = 'f3000000-0000-0000-0000-0000000000a1';
 select pg_temp.check((select count(*) = 0 from public.fertiliser_spread_fields where spread_id = 'f3000000-0000-0000-0000-0000000000a1'), 'undoing a spreading removes it from every field');

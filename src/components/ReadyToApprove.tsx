@@ -6,12 +6,16 @@ import { decisionOp, type Suggestion } from '../lib/suggestions';
 import { SEASON_SOURCES } from '../lib/season';
 import { todayISO } from '../lib/format';
 import type { FarmBundle } from '../lib/types';
+import { noteAction } from '../lib/alertStore';
+import type { SnoozeReason } from '../lib/alerts';
+import { NotNowSheet } from './Attention';
 
 const WHEN: Record<Suggestion['when'], string> = { overdue: 'Overdue', today: 'Today', soon: 'This week', later: 'When you get a minute' };
 
 /**
  * Things Agri-It has worked out and drafted. One tap approves; nothing is recorded before that.
- * Not now = a week; No = gone for good. Legal deadlines (calf tags) can't be turned down.
+ * Not now asks why and for how long; No = gone for good. Legal deadlines (calf tags) can't be
+ * turned down. What the farmer does is counted on this phone for the pilot (alerts.ts).
  */
 export function ReadyToApprove({ items, limit = 3 }: { items: Suggestion[]; limit?: number }) {
   const [all, setAll] = useState(false);
@@ -42,22 +46,26 @@ export function SuggestionCard({ s }: { s: Suggestion }) {
   const nav = useNavigate();
   const { farmId } = useFarmCtx();
   const [busy, setBusy] = useState(false);
+  const [asking, setAsking] = useState(false);
   const today = todayISO();
+  const statId = `sugg:${s.key}`;
 
   async function approve() {
     if (!s.approve) return;
     setBusy(true);
     const ok = await save(s.approve.ops, { label: s.approve.saved, patch: s.approve.patch });
     setBusy(false);
+    if (ok && farmId) noteAction(farmId, statId, { kind: 'acted' }, today);
     if (ok && s.approve.then) nav(s.approve.then);
   }
-  async function decide(decision: 'snoozed' | 'dismissed') {
-    const { op, row } = decisionOp(farmId!, s.key, decision, today);
-    await save([op], {
-      label: decision === 'snoozed' ? 'Hidden for a week' : 'Got it, it won\'t come up again',
+  async function decide(decision: 'snoozed' | 'dismissed', reason?: SnoozeReason, days = 7) {
+    const { op, row } = decisionOp(farmId!, s.key, decision, today, { reason: reason ?? null, days });
+    const ok = await save([op], {
+      label: decision === 'snoozed' ? (days === 1 ? 'Put off till tomorrow' : `Put off for ${days === 7 ? 'a week' : `${days} days`}`) : 'Got it, it won\'t come up again',
       patch: (x: FarmBundle) => ({ ...x, decisions: [...(x.decisions ?? []), row] }),
       undo: [{ kind: 'delete', table: 'suggestion_decisions', match: { id: row.id } }]
     });
+    if (ok) noteAction(farmId!, statId, decision === 'snoozed' ? { kind: 'put_off', reason: reason ?? 'busy' } : { kind: 'turned_down' }, today);
   }
 
   return (
@@ -80,17 +88,18 @@ export function SuggestionCard({ s }: { s: Suggestion }) {
           </button>
         )}
         {s.to && (
-          <Link to={s.to.href} className={`inline-flex min-h-[3rem] items-center gap-1 rounded-full px-4 font-bold ${s.approve ? 'text-accent' : 'bg-field text-white'}`}>
+          <Link to={s.to.href} onClick={() => farmId && noteAction(farmId, statId, { kind: 'acted' }, today)} className={`inline-flex min-h-[3rem] items-center gap-1 rounded-full px-4 font-bold ${s.approve ? 'text-accent' : 'bg-field text-white'}`}>
             {s.to.label}<ChevronRight className="h-4 w-4" aria-hidden />
           </Link>
         )}
         {s.canDecline && (
           <span className="ml-auto flex gap-1">
-            <button onClick={() => decide('snoozed')} className="min-h-[3rem] rounded-full px-3 text-sm font-semibold text-muted">Not now</button>
+            <button onClick={() => setAsking(true)} className="min-h-[3rem] rounded-full px-3 text-sm font-semibold text-muted">Not now</button>
             <button onClick={() => decide('dismissed')} className="min-h-[3rem] rounded-full px-3 text-sm font-semibold text-muted" aria-label={`No: ${s.title}`}>No</button>
           </span>
         )}
       </div>
+      <NotNowSheet item={asking ? s : null} onClose={() => setAsking(false)} onSave={(reason, days) => { setAsking(false); void decide('snoozed', reason, days); }} />
     </li>
   );
 }

@@ -93,3 +93,15 @@ describe('phone reference refresh', () => {
     expect(twice.evidence_sources).toEqual(once.evidence_sources);
   });
 });
+
+describe('directory upkeep (G08)', () => {
+  it('recheck by is six calendar months after the check, clamped to the month end', async () => {
+    const { recheckBy, dueRecheck } = await import('./suppliers');
+    expect(recheckBy('2026-10-14')).toBe('2027-04-14');
+    expect(recheckBy('2026-08-31')).toBe('2027-02-28');
+    expect(recheckBy(null)).toBeNull();
+    expect(dueRecheck('2026-10-14', '2027-04-14')).toBe(false);
+    expect(dueRecheck('2026-10-14', '2027-04-15')).toBe(true);
+    expect(dueRecheck(null, '2030-01-01')).toBe(false); // not verified is shown as not verified, never as overdue
+  });
+});

@@ -72,7 +72,7 @@ describe('add options', () => {
   it('puts the farmer’s own kinds first and hides nothing', () => {
     const all = addOptions(['tillage']);
     expect(all.length).toBe(addOptions(['dairy']).length);
-    expect(all.slice(0, 4).map((o) => o.id)).toEqual(['grain', 'spread', 'fertiliser', 'inputs']);
+    expect(all.slice(0, 5).map((o) => o.id)).toEqual(['grain', 'spread', 'fertiliser', 'fertiliser-order', 'inputs']);
     expect(all.find((o) => o.id === 'milk')!.relevant).toBe(false);
   });
   it('treats every option as relevant before farm types are picked', () => {

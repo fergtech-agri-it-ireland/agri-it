@@ -4,6 +4,16 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import { viteSingleFile } from 'vite-plugin-singlefile';
 import { fileURLToPath, URL } from 'node:url';
+import { readFileSync } from 'node:fs';
+import { execSync } from 'node:child_process';
+
+// Release line on every screen: version from package.json, the commit and the day it was built
+const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string };
+const sha = (() => {
+  if (process.env.GITHUB_SHA) return process.env.GITHUB_SHA.slice(0, 7);
+  try { return execSync('git rev-parse --short=7 HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(); } catch { return ''; }
+})();
+const builtOn = new Date().toISOString().slice(0, 10);
 
 // Normal build: installable, offline-capable PWA (farmers record in the yard with poor signal).
 // `--mode demo`: one self-contained HTML file with in-browser sample data, for sharing a preview.
@@ -26,6 +36,11 @@ export default defineConfig(({ mode }) => {
   const ns = online ? 'agri-it-online' : 'agri-it';
   return {
     base,
+    define: {
+      __APP_VERSION__: JSON.stringify(pkg.version),
+      __BUILD_SHA__: JSON.stringify(sha),
+      __BUILD_DATE__: JSON.stringify(builtOn)
+    },
     resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
     plugins: [
       react(),

@@ -57,7 +57,7 @@ export const TABLE_LABEL: Record<ImportTable, string> = {
   silage_stores: 'silage and bales', routines: 'routines', income: 'income', costs: 'bills and costs', routine_completions: 'ticked-off routines',
   budget_lines: 'budget lines', farm_records: 'records', jobs: 'jobs',
   calving_seasons: 'calving seasons', calf_births: 'calves born', suggestion_decisions: 'answers to suggestions',
-  fields: 'fields', fertiliser_products: 'fertilisers', fertiliser_stock: 'fertiliser deliveries and stock checks',
+  fields: 'fields', fertiliser_products: 'fertilisers', fertiliser_stock: 'fertiliser orders, deliveries and stock checks',
   fertiliser_spreads: 'spreading', fertiliser_spread_fields: 'spreading by field'
 };
 
@@ -138,6 +138,7 @@ export function planPhoneImport(b: PhoneBackup, farmId: string, phoneFarmId?: st
     });
     // Orders before the deliveries that point at them
     if (t === 'feed_transactions') out = [...out.filter((r) => r.txn_type === 'order'), ...out.filter((r) => r.txn_type !== 'order')];
+    if (t === 'fertiliser_stock') out = [...out.filter((r) => r.kind === 'order'), ...out.filter((r) => r.kind !== 'order')];
     rows[t] = out;
     if (out.length) counts[t] = out.length;
   }

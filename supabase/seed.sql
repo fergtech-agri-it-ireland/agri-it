@@ -41,7 +41,7 @@ insert into public.suppliers (id, name, network, coverage, central_phone, centra
   'https://www.dairygoldagri.ie/contact-us/our-team/','2026-10-11',false),
 ('10000000-0000-0000-0000-000000000003','Lakeland Dairies Agribusiness',null,'{ROI,NI}','0818 474720','ROI agribusiness',
   '+44 28 3026 2311','NI agribusiness','https://lakelanddairies.com',
-  'These numbers come from the September 2026 product document and could not be re-checked on 11 Oct 2026. Check them on the Lakeland contact page before relying on them.',
+  'These numbers come from the September 2026 product document and could not be re-checked on 11 or 14 Oct 2026 (its website blocks automated checks). Check them on the Lakeland contact page before relying on them.',
   'https://lakelanddairies.com/contact-us',null,false),
 ('10000000-0000-0000-0000-000000000004','Aurivo Agribusiness','Nutrias','{ROI}','071 9186500','Agribusiness',
   null,null,'https://www.aurivo.ie',

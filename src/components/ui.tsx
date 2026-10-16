@@ -4,6 +4,7 @@ import { AlertOctagon, AlertTriangle, Check, CheckCircle2, ChevronDown, ChevronL
 import type { Confidence, ISODate } from '../lib/types';
 import { addDays, fmtDate, todayISO } from '../lib/format';
 import { telHref } from '../lib/suppliers';
+import { ReleaseLine } from './ReleaseLine';
 
 // ---------------------------------------------------------------------------
 // Page chrome
@@ -26,6 +27,7 @@ export function Screen({ title, back, right, children, sub }: { title: string; b
         {right}
       </header>
       <main className="space-y-3 px-3 pt-1">{children}</main>
+      <ReleaseLine />
     </div>
   );
 }

@@ -50,7 +50,9 @@ export interface DayDigest {
   feeding: number; // feeding ticks due that day
   other: number; // bills, income, jobs, counts, orders, silage
   earlier: number; // not ticked on earlier days (mentioned, never the headline)
-  lines: string[]; // first few items, for the notification body
+  lines: string[]; // first few lines, for the notification body (related items come as one line)
+  /** How many due items those lines cover (a bundled line covers several); defaults to lines.length */
+  covers?: number;
   urgent: string[]; // e.g. "Order Dairy nut 16% now" (only for today: priorities can change)
   /** Ready-made words, so the service worker needs no logic of its own. */
   messages: Record<SlotId, ReminderMessage | null>;
@@ -85,12 +87,29 @@ export function buildDigest(
       earlier: i === 0 ? buildChecklist(b, day).filter((x) => x.date < day && x.status === 'pending').length : 0,
       feeding: items.filter((x) => x.kind === 'feeding').length,
       other: items.filter((x) => x.kind !== 'feeding').length,
-      lines: items.slice(0, 3).map((x) => x.title),
+      ...bundledLines(items, 3),
       urgent: i === 0 ? urgentToday.slice(0, 2) : []
     };
     days.push({ ...d, messages: { morning: reminderMessage(d, 'morning'), evening: reminderMessage(d, 'evening') } });
   }
   return { generatedAt: now.toISOString(), farmName: b.farm.name, prefs, days };
+}
+
+const KIND_WORDS: Record<string, string> = {
+  feeding: 'feeding ticks', silage: 'silage feed-outs', count: 'stock counts', order: 'orders to place',
+  job: 'jobs', expense: 'bills to pay', income: 'payments to record'
+};
+
+/**
+ * One line per kind of item (G12): "Dairy nut: cows" when there is one, "3 bills to pay" when
+ * there are several. Returns the first `max` lines and how many items they cover.
+ */
+export function bundledLines(items: ChecklistItem[], max: number): { lines: string[]; covers: number } {
+  const byKind = new Map<string, ChecklistItem[]>();
+  for (const x of items) byKind.set(x.kind, [...(byKind.get(x.kind) ?? []), x]);
+  const all = [...byKind.entries()].map(([k, xs]) => ({ n: xs.length, line: xs.length === 1 ? xs[0].title : `${xs.length} ${KIND_WORDS[k] ?? 'things to tick'}` }));
+  const shown = all.slice(0, max);
+  return { lines: shown.map((x) => x.line), covers: shown.reduce((t, x) => t + x.n, 0) };
 }
 
 export interface ReminderMessage {
@@ -106,7 +125,7 @@ export function reminderMessage(day: Omit<DayDigest, 'messages'>, slot: SlotId):
   if (total === 0 && day.urgent.length === 0) return null;
   const parts = [day.feeding ? plural(day.feeding, 'feeding tick') : '', day.other ? plural(day.other, 'job') : ''].filter(Boolean);
   const title = total === 0 ? day.urgent[0] : `${slot === 'morning' ? 'Today' : 'Still to tick off'}: ${parts.join(' and ')}`;
-  const more = total - day.lines.length;
+  const more = total - (day.covers ?? day.lines.length);
   const body = [
     ...(total ? [day.lines.join(', ') + (more > 0 ? `, and ${more} more` : '')] : []),
     ...(total ? day.urgent : day.urgent.slice(1)),

@@ -10,6 +10,7 @@ import { useTheme, type DawnPref } from '../lib/theme';
 import { reminderHeadlines, useDerived } from '../lib/data/derived';
 import { RemindersCard } from '../components/Reminders';
 import { PhoneStorageCard } from '../components/PhoneStorage';
+import { AlertStatsCard } from '../components/AlertStatsCard';
 import { IS_LOCAL, IS_ONLINE, key } from '../lib/env';
 
 export default function Settings() {
@@ -68,8 +69,11 @@ export default function Settings() {
       <SectionTitle>Alerts on Today</SectionTitle>
       <Card className="space-y-4">
         <Stepper label="Warn before a bill is due" value={billDays} min={0} onChange={setBillDays} unit="days" hint="Overdue bills always stay on Today until they are paid." />
-        <Stepper label="Warn before the order-by date" value={orderDays} min={0} onChange={setOrderDays} unit="days" hint="Safety stock is set on each feed. Missed jobs and routines stay until ticked, moved or skipped." />
+        <Stepper label="Warn before the order-by date" value={orderDays} min={0} onChange={setOrderDays} unit="days" hint="Safety stock is set on each feed. Missed jobs and routines stay until ticked, moved or skipped. Related alerts show as one line; only information has Not now." />
       </Card>
+
+      <SectionTitle>Alert counts for the pilot</SectionTitle>
+      <AlertStatsCard farmId={f.id} />
 
       <SectionTitle>Farm</SectionTitle>
       <Card className="space-y-4">

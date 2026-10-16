@@ -5,13 +5,14 @@ import { forecastFeed, type FeedForecast } from '../forecast/feed';
 import { forecastForage, silageSummary } from '../forecast/forage';
 import { budgetAlerts, budgetVsActual, cashCompleteness, cashForecast90, cashPosition, yearEndPack } from '../forecast/money';
 import { pricePoints } from '../forecast/prices';
-import { moneyStates, possibleDuplicateDeliveries } from '../forecast/bills';
+import { moneyStates, openFertOrders, possibleDuplicateDeliveries } from '../forecast/bills';
 import { buildChecklist } from '../routines';
 import { forecastFertiliser } from '../forecast/fertiliser';
 import { ruleSourceLine } from '../spreading';
 import { suggestions as buildSuggestions } from '../suggestions';
 import { addDays, daysBetween, fmtDay, fmtKg, todayISO, eur } from '../format';
 import { supabase } from '../supabase';
+import { bundleAlerts, type AlertItem, type Tone, type When } from '../alerts';
 
 export function feedForecasts(b: FarmBundle, today: ISODate): Map<string, FeedForecast> {
   const out = new Map<string, FeedForecast>();
@@ -46,23 +47,14 @@ export function silageWithFedOut(b: Pick<FarmBundle, 'silage' | 'routines' | 'co
   });
 }
 
-export type Tone = 'urgent' | 'warn' | 'info' | 'ok';
 /**
  * When something needs doing. Overdue items stay on Today until they are done, moved,
  * skipped or (for jobs) taken off the list: they never drop off because time passed.
+ * Only information can be put off (`dismissable`); anything owed or overdue has to be dealt with.
+ * Related items carry a `group` and are shown as one line (alerts.ts, G12).
  */
-export type When = 'overdue' | 'today' | 'soon' | 'later';
-export interface Priority {
-  id: string;
-  tone: Tone;
-  title: string;
-  detail: string;
-  to: string;
-  action?: string;
-  when: When;
-  /** Only information can be hidden for a while; anything owed or overdue has to be dealt with. */
-  dismissable?: boolean;
-}
+export type { Tone, When } from '../alerts';
+export type Priority = AlertItem;
 
 const toneRank: Record<Tone, number> = { urgent: 0, warn: 1, info: 2, ok: 3 };
 const whenRank: Record<When, number> = { overdue: 0, today: 1, soon: 2, later: 3 };
@@ -87,31 +79,31 @@ export function derive(b: FarmBundle, today: ISODate) {
       const nextDue = f.openOrders.map((o) => o.expected).filter(Boolean).sort()[0] ?? null;
       if ((f.status === 'order_now' || f.status === 'order_soon') && ordered > 0 && (!nextDue || !f.runOutDate || nextDue < f.runOutDate)) {
         // Already ordered and it should land before running out: inform, don't nag
-        p.push({ id: `feed-${product.id}`, tone: 'info', when: 'soon', title: `${product.name}: ${fmtKg(ordered)} on order`,
+        p.push({ id: `feed-${product.id}`, group: 'feed-on-order', name: product.name, tone: 'info', when: 'soon', title: `${product.name}: ${fmtKg(ordered)} on order`,
           detail: `${nextDue ? `Due ${fmtDay(nextDue)}. ` : ''}Without it, runs out ${fmtDay(f.runOutDate)}`, to: `/feed/${product.id}` });
       } else if (f.status === 'order_now') {
         const late = f.orderByDate && f.orderByDate < today;
-        p.push({ id: `feed-${product.id}`, tone: 'urgent', when: late ? 'overdue' : 'today', title: `Order ${product.name} now`,
+        p.push({ id: `feed-${product.id}`, group: 'feed-order', name: `${product.name} now`, tone: 'urgent', when: late ? 'overdue' : 'today', title: `Order ${product.name} now`,
           detail: f.runOutDate ? `Runs out ${fmtDay(f.runOutDate)}.${late ? ` Should have been ordered by ${fmtDay(f.orderByDate)}.` : ''} ${f.openOrders.length ? 'An order is already open.' : ''}`.trim() : 'Below safety stock', to: `/feed/${product.id}`, action: 'Call supplier' });
       } else if (f.status === 'order_soon') {
-        p.push({ id: `feed-${product.id}`, tone: 'warn', when: 'soon', title: `Order ${product.name} by ${fmtDay(f.orderByDate ?? f.reorderDate)}`,
+        p.push({ id: `feed-${product.id}`, group: 'feed-order', name: `${product.name} by ${fmtDay(f.orderByDate ?? f.reorderDate)}`, tone: 'warn', when: 'soon', title: `Order ${product.name} by ${fmtDay(f.orderByDate ?? f.reorderDate)}`,
           detail: `${Math.floor(f.daysRemaining ?? 0)} days left at your feeding plan`, to: `/feed/${product.id}` });
       } else if (f.status === 'no_plan') {
-        p.push({ id: `feed-${product.id}`, tone: 'info', when: 'later', dismissable: true, title: `Add a feeding plan for ${product.name}`, detail: 'So Agri-It can tell you when it runs out', to: `/feed/${product.id}/rule/new` });
+        p.push({ id: `feed-${product.id}`, group: 'feed-setup', name: `${product.name} (plan)`, tone: 'info', when: 'later', dismissable: true, title: `Add a feeding plan for ${product.name}`, detail: 'So Agri-It can tell you when it runs out', to: `/feed/${product.id}/rule/new` });
       } else if (f.status === 'no_stock_record') {
-        p.push({ id: `feed-${product.id}`, tone: 'info', when: 'later', dismissable: true, title: `How much ${product.name} is in the shed?`, detail: 'Add a stock count to start the forecast', to: `/feed/${product.id}/count` });
+        p.push({ id: `feed-${product.id}`, group: 'feed-setup', name: `${product.name} (count)`, tone: 'info', when: 'later', dismissable: true, title: `How much ${product.name} is in the shed?`, detail: 'Add a stock count to start the forecast', to: `/feed/${product.id}/count` });
       }
       for (const o of b.txns.filter((t) => t.feed_product_id === product.id && t.txn_type === 'order' && t.order_status === 'open' && t.placed === false)) {
         const who = b.suppliers.find((s) => s.id === o.supplier_id)?.name;
         const late = f.orderByDate !== null && f.orderByDate < today;
-        p.push({ id: `place-${o.id}`, tone: 'warn', when: late ? 'overdue' : 'today', title: `Place the ${product.name} order`,
+        p.push({ id: `place-${o.id}`, group: 'place-order', name: `${product.name}${who ? ` (${who})` : ''}`, tone: 'warn', when: late ? 'overdue' : 'today', title: `Place the ${product.name} order`,
           detail: `${fmtKg(Number(o.quantity_kg))}${who ? ` with ${who}` : ''}. Not placed yet: Agri-It doesn't send orders`, to: `/feed/${product.id}`, action: 'Placed?' });
       }
       for (const o of b.txns.filter((t) => t.feed_product_id === product.id && t.txn_type === 'order' && t.order_status === 'open' && t.placed !== false)) {
         const left = f.openOrders.find((x) => x.id === o.id)?.kg ?? 0;
         if (left > 0 && o.expected_delivery_date && o.expected_delivery_date <= today) {
           const part = left < Number(o.quantity_kg);
-          p.push({ id: `order-${o.id}`, tone: 'warn', when: o.expected_delivery_date < today ? 'overdue' : 'today',
+          p.push({ id: `order-${o.id}`, group: 'order-arrive', name: product.name, tone: 'warn', when: o.expected_delivery_date < today ? 'overdue' : 'today',
             title: part ? `Rest of the ${product.name} order?` : `Did the ${product.name} arrive?`,
             detail: part ? `${fmtKg(left)} of ${fmtKg(Number(o.quantity_kg))} still to come, due ${fmtDay(o.expected_delivery_date)}` : `${fmtKg(Number(o.quantity_kg))} was due ${fmtDay(o.expected_delivery_date)}`,
             to: `/record/delivery?feed=${product.id}&order=${o.id}`, action: 'Confirm delivery' });
@@ -145,7 +137,7 @@ export function derive(b: FarmBundle, today: ISODate) {
     const dupes = possibleDuplicateDeliveries(b, addDays(today, -30));
     for (const [a, c] of dupes) {
       const name = b.products.find((x) => x.id === a.feed_product_id)?.name ?? 'Feed';
-      p.push({ id: `dupe-${c.id}`, tone: 'warn', when: 'today', title: `${name} delivery recorded twice?`,
+      p.push({ id: `dupe-${c.id}`, group: 'dupe', name: `${name}, ${fmtDay(a.effective_on)}`, tone: 'warn', when: 'today', title: `${name} delivery recorded twice?`,
         detail: `${fmtKg(Number(a.quantity_kg))} on ${fmtDay(a.effective_on)} appears twice (maybe from two phones)`, to: `/feed/${a.feed_product_id}?dupe=${c.id}`, action: 'Check' });
     }
 
@@ -187,45 +179,49 @@ export function derive(b: FarmBundle, today: ISODate) {
     }
     const rounds = fert.due.filter((x) => x.kind === 'round');
     const whenFor = (d: ISODate): When => (d < today ? 'overdue' : d === today ? 'today' : 'soon');
-    if (rounds.length > 2) {
-      const first = rounds[0];
-      p.push({ id: 'fert-rounds', tone: 'warn', when: whenFor(first.dueOn), title: `${rounds.length} fields due another round`,
-        detail: `${rounds.map((x) => x.field.name).slice(0, 4).join(', ')}${rounds.length > 4 ? ` and ${rounds.length - 4} more` : ''}. On your own rounds`, to: '/fertiliser', action: 'Spread' });
-    } else {
-      for (const r of rounds) {
-        p.push({ id: `fert-round-${r.field.id}`, tone: 'warn', when: whenFor(r.dueOn), title: `Spread ${r.field.name}`,
-          detail: `${r.dueOn < today ? `Due since ${fmtDay(r.dueOn)}` : r.dueOn === today ? 'Due today' : `Due ${fmtDay(r.dueOn)}`} on your ${r.field.spread_every_days}-day round.${r.lastSpread ? ` Last spread ${fmtDay(r.lastSpread.on)}` : ' Not spread yet this season'}`,
-          to: `/record/spread?field=${r.field.id}`, action: 'Spread' });
-      }
+    for (const r of rounds) {
+      p.push({ id: `fert-round-${r.field.id}`, group: 'spread', name: r.field.name, tone: 'warn', when: whenFor(r.dueOn), title: `Spread ${r.field.name}`,
+        detail: `${r.dueOn < today ? `Due since ${fmtDay(r.dueOn)}` : r.dueOn === today ? 'Due today' : `Due ${fmtDay(r.dueOn)}`} on your ${r.field.spread_every_days}-day round.${r.lastSpread ? ` Last spread ${fmtDay(r.lastSpread.on)}` : ' Not spread yet this season'}`,
+        to: `/record/spread?field=${r.field.id}`, action: 'Spread' });
     }
     for (const r of fert.due.filter((x) => x.kind === 'silage')) {
-      p.push({ id: `fert-silage-${r.field.id}`, tone: 'warn', when: whenFor(r.dueOn), title: `Spread ${r.field.name} by ${fmtDay(r.dueOn)}`,
+      p.push({ id: `fert-silage-${r.field.id}`, group: 'spread', name: `${r.field.name} (for silage)`, tone: 'warn', when: whenFor(r.dueOn), title: `Spread ${r.field.name} by ${fmtDay(r.dueOn)}`,
         detail: `For cutting about ${fmtDay(r.field.cut_on)}. Teagasc: nitrogen on at least 50 days before cutting`, to: `/record/spread?field=${r.field.id}`, action: 'Spread' });
     }
     for (const r of fert.due.filter((x) => x.kind === 'cut_passed')) {
-      p.push({ id: `fert-cut-${r.field.id}`, tone: 'info', when: 'later', dismissable: true, title: `Did you cut ${r.field.name}?`,
+      p.push({ id: `fert-cut-${r.field.id}`, group: 'cut', name: r.field.name, tone: 'info', when: 'later', dismissable: true, title: `Did you cut ${r.field.name}?`,
         detail: `You planned to cut about ${fmtDay(r.field.cut_on)}. Set the next cutting date so Agri-It can flag the next round`, to: '/farm/fields' });
     }
     for (const x of fert.products) {
-      if (x.low) p.push({ id: `fert-low-${x.product.id}`, tone: 'warn', when: 'soon', title: `Low on ${x.product.name}: ${fmtKg(x.stockKg)} left`,
+      if (x.low) p.push({ id: `fert-low-${x.product.id}`, group: 'fert-low', name: x.product.name, tone: 'warn', when: 'soon', title: `Low on ${x.product.name}: ${fmtKg(x.stockKg)} left`,
         detail: `Your low level is ${fmtKg(Number(x.product.low_stock_kg))}`, to: `/fertiliser/${x.product.id}` });
-      if (x.overspentKg > 0) p.push({ id: `fert-check-${x.product.id}`, tone: 'info', when: 'later', title: `Check your ${x.product.name} stock`,
+      if (x.overspentKg > 0) p.push({ id: `fert-check-${x.product.id}`, group: 'fert-check', name: x.product.name, tone: 'info', when: 'later', dismissable: true, title: `Check your ${x.product.name} stock`,
         detail: `${fmtKg(x.overspentKg)} more spread than recorded. A stock check puts it right`, to: `/fertiliser/${x.product.id}` });
     }
+    // Fertiliser orders that were due and haven't come (14 Oct 2026): same as feed orders
+    for (const o of openFertOrders(b.fertStock)) {
+      if (!o.expected_on || o.expected_on > today) continue;
+      const name = b.fertilisers.find((x) => x.id === o.product_id)?.name ?? 'fertiliser';
+      const part = o.remainingKg < Number(o.quantity_kg);
+      p.push({ id: `fert-order-${o.id}`, group: 'order-arrive', name, tone: 'warn', when: o.expected_on < today ? 'overdue' : 'today',
+        title: part ? `Rest of the ${name} order?` : `Did the ${name} arrive?`,
+        detail: part ? `${fmtKg(o.remainingKg)} of ${fmtKg(Number(o.quantity_kg))} still to come, due ${fmtDay(o.expected_on)}` : `${fmtKg(Number(o.quantity_kg))} was due ${fmtDay(o.expected_on)}`,
+        to: `/record/fertiliser?product=${o.product_id}&order=${o.id}`, action: 'Confirm delivery' });
+    }
     for (const sf of fert.shortfalls) {
-      p.push({ id: `fert-short-${sf.product.id}`, tone: 'warn', when: 'soon', title: `Not enough ${sf.product.name} for the fields due`,
+      p.push({ id: `fert-short-${sf.product.id}`, group: 'fert-short', name: sf.product.name, tone: 'warn', when: 'soon', title: `Not enough ${sf.product.name} for the fields due`,
         detail: `About ${fmtKg(sf.needKg)} at your last rates (${sf.fields.join(', ')}); ${fmtKg(sf.haveKg)} in stock`, to: `/fertiliser/${sf.product.id}` });
     }
-    if (cash && cashGaps.stale) p.push({ id: 'cash-check', tone: 'info', when: 'later', title: 'Check your cash against the bank', detail: `Last checked ${cashGaps.daysSinceCheck} days ago. Recorded cash is not a bank balance`, to: '/forecast?tab=cash' });
+    if (cash && cashGaps.stale) p.push({ id: 'cash-check', tone: 'info', when: 'later', dismissable: true, title: 'Check your cash against the bank', detail: `Last checked ${cashGaps.daysSinceCheck} days ago. Recorded cash is not a bank balance`, to: '/forecast?tab=cash' });
     if (cash90.lowest && cash && cash90.lowest.closing < 0) p.push({ id: 'cash', tone: 'urgent', when: 'soon', title: 'Cash may go overdrawn', detail: `Lowest point about ${eur(cash90.lowest.closing)}, from recorded cash, bills owed, repeats and budget`, to: '/forecast?tab=cash' });
     // Budget variance: only the year-so-far and this-month alerts reach Today; last month's note stays on Money
     const alerts = budgetAlerts(b.farm, b, today);
     for (const a of alerts.filter((x) => x.tone === 'warn')) {
-      p.push({ id: a.id, tone: 'warn', when: 'later', title: a.title, detail: a.detail, to: '/money' });
+      p.push({ id: a.id, group: 'budget', name: a.title, tone: 'warn', when: 'later', title: a.title, detail: a.detail, to: '/money' });
     }
     for (const j of b.jobs.filter((x) => !x.done_at && !x.dismissed_at && x.due_on && daysBetween(today, x.due_on) <= 2)) {
       const when: When = j.due_on! < today ? 'overdue' : j.due_on === today ? 'today' : 'soon';
-      p.push({ id: `job-${j.id}`, tone: when === 'overdue' ? 'warn' : 'info', when, title: j.title, detail: when === 'overdue' ? `Overdue since ${fmtDay(j.due_on)}` : `Due ${fmtDay(j.due_on)}`, to: '/farm/jobs' });
+      p.push({ id: `job-${j.id}`, group: 'job', name: j.title, tone: when === 'overdue' ? 'warn' : 'info', when, title: j.title, detail: when === 'overdue' ? `Overdue since ${fmtDay(j.due_on)}` : `Due ${fmtDay(j.due_on)}`, to: '/farm/jobs' });
     }
     const stale = b.groups.filter((g) => !g.archived && daysBetween(g.head_count_updated_at.slice(0, 10), today) > 30);
     if (stale.length) p.push({ id: 'heads', tone: 'info', when: 'later', dismissable: true, title: 'Check your head counts', detail: `${stale.map((g) => g.name).join(', ')} not updated in a month`, to: '/farm/groups' });
@@ -286,10 +282,18 @@ export function useSnapshotRecorder(b: FarmBundle | undefined, d: ReturnType<typ
 /**
  * What a reminder should lead with: urgent items, then anything overdue or due today that
  * matters (feed to order, an order that didn't arrive, a bill due or overdue), worst first.
+ * Related items come as one line each ("3 fields to spread"), and so do suggestions of one kind.
  */
-export function reminderHeadlines(p: Priority[], s: { title: string; when: string; tone: string }[] = []): string[] {
-  const ready = s.filter((x) => x.when === 'overdue' || x.when === 'today').map((x) => x.title);
-  return [...p.filter((x) => x.tone === 'urgent' || ((x.when === 'overdue' || x.when === 'today') && x.tone === 'warn') || x.id === 'bills-due')
+export function reminderHeadlines(p: Priority[], s: { key?: string; title: string; when: string; tone: string }[] = []): string[] {
+  const ready = s.filter((x) => x.when === 'overdue' || x.when === 'today');
+  const byKind = new Map<string, string[]>();
+  for (const x of ready) {
+    const k = (x.key ?? x.title).split(':')[0];
+    byKind.set(k, [...(byKind.get(k) ?? []), x.title]);
+  }
+  const SUGG: Record<string, string> = { order: 'feed orders', calves: 'calf jobs', season: 'calving season steps', housing: 'housing changes', recurring: 'monthly bills' };
+  const readyLines = [...byKind.entries()].map(([k, titles]) => (titles.length > 1 ? `${titles.length} ${SUGG[k] ?? 'suggestions'} to approve` : titles[0]));
+  return [...bundleAlerts(p).filter((x) => x.tone === 'urgent' || ((x.when === 'overdue' || x.when === 'today') && x.tone === 'warn') || x.id === 'bills-due')
     .sort((a, c) => (a.tone === 'urgent' ? 0 : 1) - (c.tone === 'urgent' ? 0 : 1))
-    .map((x) => x.title), ...ready];
+    .map((x) => x.title), ...readyLines];
 }

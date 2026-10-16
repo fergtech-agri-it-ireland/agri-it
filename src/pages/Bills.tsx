@@ -91,7 +91,7 @@ export default function Bills() {
           <Card className="space-y-2">
             {states.committed.map((c) => (
               <div key={c.orderId} className="flex justify-between gap-2 text-[0.9375rem]">
-                <span>{b.products.find((p) => p.id === c.productId)?.name ?? 'Feed'}, {fmtKg(c.remainingKg)}{c.expected ? `, due ${fmtDay(c.expected)}` : ''}</span>
+                <span>{c.kind === 'fertiliser' ? b.fertilisers.find((p) => p.id === c.productId)?.name ?? 'Fertiliser' : b.products.find((p) => p.id === c.productId)?.name ?? 'Feed'}, {fmtKg(c.remainingKg)}{c.expected ? `, due ${fmtDay(c.expected)}` : ''}</span>
                 <b>{c.value === null ? 'No price' : `${eur(c.value)}${c.priceSource === 'last_paid' ? '*' : ''}`}</b>
               </div>
             ))}

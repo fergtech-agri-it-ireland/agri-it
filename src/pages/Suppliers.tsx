@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { ChevronRight, ShieldCheck } from 'lucide-react';
 import { useFarmData, useFarmCtx, useSave } from '../lib/data/farm';
 import { supplierOptions } from '../components/pickers';
-import { uuid } from '../lib/format';
+import { todayISO, uuid } from '../lib/format';
+import { dueRecheck } from '../lib/suppliers';
 import type { Supplier } from '../lib/types';
 import { Button, List, Row, Screen, Sheet, TextInput } from '../components/ui';
 
@@ -27,11 +28,11 @@ export default function Suppliers() {
 
   return (
     <Screen title="Suppliers" back="/farm" right={<Button variant="hivis" onClick={() => setOpen(true)}>Add</Button>}>
-      <p className="px-1 text-muted">Numbers in the directory show when they were last verified. Set your own rep and it's always first.</p>
+      <p className="px-1 text-muted">Numbers in the directory show when they were last verified and when they're due a recheck (six months on). Set your own rep and it's always first.</p>
       <List>
         {list.map((s) => (
           <Row key={s.id} to={`/suppliers/${s.id}`} title={s.name}
-            sub={s.farm_id ? 'Added by you' : s.verified_on ? <span className="inline-flex items-center gap-1"><ShieldCheck className="h-4 w-4" aria-hidden />Directory, {s.coverage.join(' and ')}</span> : 'Needs a verified number'}
+            sub={s.farm_id ? 'Added by you' : s.verified_on ? <span className="inline-flex items-center gap-1"><ShieldCheck className="h-4 w-4" aria-hidden />Directory, {s.coverage.join(' and ')}{dueRecheck(s.verified_on, todayISO()) ? '. Due a recheck' : ''}</span> : 'Needs a verified number'}
             right={<span className="flex items-center gap-2">{mine.has(s.id) && <span className="rounded bg-field-light px-2 text-sm font-bold text-accent">Yours</span>}<ChevronRight className="h-5 w-5 text-muted" /></span>} />
         ))}
       </List>

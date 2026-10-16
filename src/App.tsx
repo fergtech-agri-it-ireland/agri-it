@@ -9,6 +9,8 @@ import FeedDetail from './pages/FeedDetail';
 import FeedEdit from './pages/FeedEdit';
 import FeedingRuleForm from './pages/FeedingRuleForm';
 import StockCount from './pages/StockCount';
+import FertiliserOrder from './pages/FertiliserOrder';
+import StockAdjust, { AdjustPick } from './pages/StockAdjust';
 import DeliveryForm from './pages/DeliveryForm';
 import OrderForm from './pages/OrderForm';
 import MilkSaleForm from './pages/MilkSaleForm';
@@ -70,6 +72,8 @@ export default function App() {
         <Route path="feed/:id" element={<FeedDetail />} />
         <Route path="feed/:id/edit" element={<FeedEdit />} />
         <Route path="feed/:id/count" element={<StockCount />} />
+        <Route path="feed/:id/adjust" element={<StockAdjust what="feed" />} />
+        <Route path="record/adjust" element={<AdjustPick />} />
         <Route path="feed/:id/rule/new" element={<FeedingRuleForm />} />
         <Route path="feed/:id/rule/:ruleId" element={<FeedingRuleForm />} />
         <Route path="record" element={<Record />} />
@@ -85,10 +89,12 @@ export default function App() {
         <Route path="record/calf" element={<CalfForm />} />
         <Route path="record/spread" element={<SpreadForm />} />
         <Route path="record/fertiliser" element={<FertiliserDelivery />} />
+        <Route path="record/fertiliser-order" element={<FertiliserOrder />} />
         <Route path="fertiliser" element={<Fertiliser />} />
         <Route path="fertiliser/new" element={<FertiliserEdit />} />
         <Route path="fertiliser/:id" element={<FertiliserDetail />} />
         <Route path="fertiliser/:id/edit" element={<FertiliserEdit />} />
+        <Route path="fertiliser/:id/adjust" element={<StockAdjust what="fertiliser" />} />
         <Route path="farm/fields" element={<Fields />} />
         <Route path="calving" element={<Calving />} />
         <Route path="calving/season/new" element={<SeasonForm />} />

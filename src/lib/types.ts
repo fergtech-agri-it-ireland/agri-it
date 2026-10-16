@@ -1,3 +1,4 @@
+import type { StockReason } from './stockReasons';
 // Row types mirroring supabase/migrations. Hand-written to keep the repo
 // dependency-free; regenerate with `supabase gen types typescript --local` if preferred.
 
@@ -167,6 +168,8 @@ export interface FeedTransaction {
   document_id: string | null;
   notes: string | null;
   created_at: string;
+  /** Counts and adjustments (G11, 14 Oct 2026): why stock differed from the forecast. Older rows have none. */
+  reason?: StockReason | null;
 }
 
 export interface FeedingRule {
@@ -471,6 +474,8 @@ export interface SuggestionDecision {
   decision: 'done' | 'snoozed' | 'dismissed';
   until: ISODate | null;
   decided_at: string;
+  /** Why it was put off or turned down (G12, 14 Oct 2026); older rows have none */
+  reason?: 'busy' | 'elsewhere' | 'not_relevant' | null;
 }
 
 /** A field on the farm (14 Oct 2026). Spreading is recorded per field. */
@@ -507,9 +512,20 @@ export interface FertiliserStock {
   id: string;
   farm_id: string;
   product_id: string;
-  kind: 'opening' | 'delivery' | 'count';
+  /** adjustment (G11): signed kg, with a reason. order (14 Oct 2026): a commitment, never stock */
+  kind: 'opening' | 'delivery' | 'count' | 'adjustment' | 'order';
   quantity_kg: number;
   on_date: ISODate;
+  /** Checks and adjustments (G11): why stock differed from what was recorded */
+  reason?: StockReason | null;
+  /** Orders only: open until delivered in full (or closed with less) or cancelled */
+  order_status?: 'open' | 'delivered' | 'cancelled' | null;
+  /** Orders only: when the supplier said it would come. Never guessed. */
+  expected_on?: ISODate | null;
+  /** Orders only: the agreed price per tonne. A commitment, never a cost. */
+  price_per_tonne_eur?: number | null;
+  /** Deliveries only: the order this load was against */
+  linked_order_id?: string | null;
   evidence: 'measured' | 'farmer_estimate' | 'docket';
   supplier_id: string | null;
   /** The bill for a delivery (category fertiliser); the price lives there */

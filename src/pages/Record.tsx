@@ -14,6 +14,7 @@ import { keepToRead } from '../lib/docket/photoStore';
 import { kindLabel, type DocketRead } from '../lib/docket/extract';
 import { PhotoQueueList, readHeadline } from '../components/PhotoQueue';
 import { useToast } from '../components/Toast';
+import { ReleaseLine } from '../components/ReleaseLine';
 
 type Icon = ComponentType<{ className?: string }>;
 
@@ -290,6 +291,7 @@ export default function Record() {
           ))}
         </div>
       </Sheet>
+      <ReleaseLine />
     </main>
   );
 }

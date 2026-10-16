@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { ExternalLink } from 'lucide-react';
 import { useFarmData, useFarmCtx, useSave } from '../lib/data/farm';
-import { resolveContacts } from '../lib/suppliers';
-import { eur, fmtDate, fmtDay } from '../lib/format';
+import { dueRecheck, recheckBy, resolveContacts } from '../lib/suppliers';
+import { eur, fmtDate, fmtDay, todayISO } from '../lib/format';
 import { Button, CallButton, Card, Empty, List, Row, Screen, SectionTitle, Stepper, TextInput } from '../components/ui';
 import { pricePoints, supplierPrices } from '../lib/forecast/prices';
 import { PriceTrend } from '../components/Prices';
@@ -41,7 +41,7 @@ export default function SupplierDetail() {
           <div key={r.kind + r.phone}>
             <p className="mb-1 font-bold">{r.title}</p>
               <CallButton phone={r.phone} label={r.phone} variant={r.kind === 'my_rep' ? 'hivis' : 'secondary'} block />
-            <p className="mt-1 text-sm text-muted">{r.kind === 'my_rep' ? 'Set by you' : r.verifiedOn ? `Verified ${fmtDate(r.verifiedOn)}` : 'Not verified'}</p>
+            <CheckedLine kind={r.kind} verifiedOn={r.verifiedOn} />
           </div>
         ))}
         {c.note && <p className="text-muted">{c.note}</p>}
@@ -56,7 +56,7 @@ export default function SupplierDetail() {
               <p className="font-bold">{near.length >= 2 ? `${near.length} branches in ${b.farm.county}` : 'Branches'}</p>
               {list.map((x) => (
                 <div key={x.id} className="flex items-center justify-between gap-2">
-                  <span><b className="block">{x.contact_name ? `${x.contact_name}, ${x.name}` : x.name}</b><span className="text-sm text-muted">{x.contact_name ? x.contact_role ?? 'Area contact' : x.counties.join(', ')}. Verified {fmtDate(x.verified_on)}</span></span>
+                  <span><b className="block">{x.contact_name ? `${x.contact_name}, ${x.name}` : x.name}</b><span className="text-sm text-muted">{x.contact_name ? x.contact_role ?? 'Area contact' : x.counties.join(', ')}. Verified {fmtDate(x.verified_on)}, recheck by {fmtDate(recheckBy(x.verified_on))}{dueRecheck(x.verified_on, todayISO()) ? <b className="text-warn">. Due a recheck</b> : null}</span></span>
                   <Button variant="secondary" onClick={() => { setRepName(x.contact_name ?? x.name); setRepPhone(x.phone!); }}>Use as mine</Button>
                 </div>
               ))}
@@ -94,4 +94,13 @@ export default function SupplierDetail() {
       </Card>
     </Screen>
   );
+}
+
+/** "Verified 11 Oct 2026. Recheck by 11 Apr 2027" (G08), or a warning once it's past that date. */
+function CheckedLine({ kind, verifiedOn }: { kind: string; verifiedOn: string | null }) {
+  if (kind === 'my_rep') return <p className="mt-1 text-sm text-muted">Set by you</p>;
+  if (!verifiedOn) return <p className="mt-1 text-sm font-semibold text-warn">Not verified. Check it on the supplier's own contact page before relying on it.</p>;
+  const by = recheckBy(verifiedOn);
+  if (dueRecheck(verifiedOn, todayISO())) return <p className="mt-1 text-sm font-semibold text-warn" data-recheck="due">Verified {fmtDate(verifiedOn)}. Due a recheck since {fmtDate(by)}: confirm it on their contact page.</p>;
+  return <p className="mt-1 text-sm text-muted" data-recheck="ok">Verified {fmtDate(verifiedOn)}. Recheck by {fmtDate(by)}</p>;
 }

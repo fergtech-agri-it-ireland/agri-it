@@ -5,6 +5,7 @@ import { appLink, IS_DEMO, IS_ONLINE, key } from '../lib/env';
 import { useFarmCtx } from '../lib/data/farm';
 import { Button, Card } from '../components/ui';
 import { Logo } from '../components/Logo';
+import { ReleaseLine } from '../components/ReleaseLine';
 
 export default function Login() {
   const { session } = useFarmCtx();
@@ -69,6 +70,7 @@ export default function Login() {
           Open the demo farm
         </Button>
       )}
+      <ReleaseLine />
     </div>
   );
 }

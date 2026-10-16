@@ -11,6 +11,7 @@ import { Checklist } from '../components/Checklist';
 import { DiaryHistory } from '../components/DiaryHistory';
 import { COST_LABEL, INCOME_LABEL, RECORD_LABEL, type FarmBundle } from '../lib/types';
 import { addDays, eur, fmtDay, fmtKg, fmtNum, todayISO } from '../lib/format';
+import { ReleaseLine } from '../components/ReleaseLine';
 
 const longDay = new Intl.DateTimeFormat('en-IE', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' });
 const dayTitle = (d: string, today: string) => (d === today ? 'Today' : d === addDays(today, -1) ? 'Yesterday' : fmtDay(d));
@@ -191,6 +192,7 @@ export default function Diary() {
           </>
         )}
       </main>
+      <ReleaseLine />
     </div>
   );
 }

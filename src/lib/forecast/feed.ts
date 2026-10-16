@@ -11,6 +11,7 @@
  *   planned use(day) = Σ heads × kg/head/feed × feeds/day over rules active that day.
  *   A temporary rule replaces that group's normal rule(s) for its date window.
  */
+import { isStockReason, type VarianceReasons } from '../stockReasons';
 import type {
   AnimalGroup, Confidence, Evidence, FarmSupplierSetting, FeedProduct, FeedTransaction, FeedUseLog, FeedingRule, HeadCountChange, ISODate
 } from '../types';
@@ -489,13 +490,16 @@ export function forecastFeed(input: FeedForecastInput): FeedForecast {
  */
 export function countVariances(
   txns: FeedTransaction[], rules: FeedingRule[], groups: AnimalGroup[], logs: FeedUseLog[] = [], headHistory: HeadCountChange[] = []
-): { date: ISODate; predictedKg: number; countedKg: number; varianceKg: number; variancePct: number | null }[] {
+): ({ date: ISODate; predictedKg: number; countedKg: number; varianceKg: number; variancePct: number | null } & VarianceReasons)[] {
   const gm = new Map<string, GroupWithHistory>(withHistory(groups, headHistory).map((g) => [g.id, g]));
   const counts = txns.filter((t) => t.txn_type === 'count').sort((a, b) => a.effective_on.localeCompare(b.effective_on));
   const out = [];
+  let prevDate: ISODate | null = null;
   for (const c of counts) {
     const prior = txns.filter((t) => t.id !== c.id && !(t.txn_type === 'count' && t.effective_on >= c.effective_on));
     const { stock } = stockAt(prior, rules, gm, c.effective_on, undefined, logs);
+    const since = prevDate;
+    prevDate = c.effective_on;
     if (stock === null) continue;
     const counted = Number(c.quantity_kg);
     out.push({
@@ -503,7 +507,12 @@ export function countVariances(
       predictedKg: stock,
       countedKg: counted,
       varianceKg: counted - stock,
-      variancePct: stock > 0 ? ((counted - stock) / stock) * 100 : null
+      variancePct: stock > 0 ? ((counted - stock) / stock) * 100 : null,
+      // G11: why it differed, and adjustments taken into account since the last check
+      reason: isStockReason(c.reason) ? c.reason : null,
+      adjustments: txns
+        .filter((t) => t.txn_type === 'adjustment' && t.effective_on <= c.effective_on && (!since || t.effective_on > since))
+        .map((t) => ({ on: t.effective_on, kg: Number(t.quantity_kg), reason: isStockReason(t.reason) ? t.reason : null }))
     });
   }
   return out;

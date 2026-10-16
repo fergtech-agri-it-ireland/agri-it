@@ -73,7 +73,7 @@ describe('an invoice replaces docket prices instead of adding a second cost', ()
   const inv = { supplierId: 'tir', supplierName: 'Tirlán', ref: 'INV-77', invoiceDate: '2026-09-30', dueOn: '2026-10-31', total: 4600.01, vat: 0, documentId: 'doc', paidOn: null, deliveryIds: ['d1', 'd2'], newIds: { d2: 'c2' } };
   it('splits the total by kg when a delivery had no price, exactly to the cent', () => {
     const plan = planInvoice(b, inv);
-    expect(plan.lines.map((l) => [l.delivery.id, l.after, l.newCost])).toEqual([['d1', 3066.67, false], ['d2', 1533.34, true]]);
+    expect(plan.lines.map((l) => [l.id, l.after, l.newCost])).toEqual([['d1', 3066.67, false], ['d2', 1533.34, true]]);
     expect(plan.lines.reduce((s, l) => s + l.after, 0)).toBeCloseTo(4600.01, 2);
     const after = applyInvoice(b, plan);
     // Two cost rows, not three: the docket cost was updated, the unpriced delivery got one

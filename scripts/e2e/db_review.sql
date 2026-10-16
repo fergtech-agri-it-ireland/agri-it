@@ -166,6 +166,54 @@ do $$ begin
   insert into public.fertiliser_spreads (farm_id, product_id, spread_on, total_kg) values ('30000000-0000-0000-0000-000000000001', 'f2000000-0000-0000-0000-0000000000a1', current_date, 0);
   raise exception 'FAILED: spreading nothing allowed';
 exception when check_violation then raise notice 'ok: spreading must be more than 0 kg'; end $$;
+-- G11 (14 Oct 2026): adjustments with a reason, and why a check differed
+insert into public.fertiliser_stock (farm_id, product_id, kind, quantity_kg, on_date, reason) values
+  ('30000000-0000-0000-0000-000000000001', 'f2000000-0000-0000-0000-0000000000a1', 'adjustment', -100, current_date - 1, 'wasted'),
+  ('30000000-0000-0000-0000-000000000001', 'f2000000-0000-0000-0000-0000000000a1', 'count', 1500, current_date, 'count_error');
+select pg_temp.check((select count(*) = 2 from public.fertiliser_stock where reason is not null), 'a worker records a fertiliser adjustment and a check with reasons');
+do $$ begin
+  insert into public.fertiliser_stock (farm_id, product_id, kind, quantity_kg, on_date) values ('30000000-0000-0000-0000-000000000001', 'f2000000-0000-0000-0000-0000000000a1', 'delivery', -5, current_date);
+  raise exception 'FAILED: a negative delivery allowed';
+exception when check_violation then raise notice 'ok: only an adjustment can take stock off'; end $$;
+do $$ begin
+  insert into public.fertiliser_stock (farm_id, product_id, kind, quantity_kg, on_date, reason) values ('30000000-0000-0000-0000-000000000001', 'f2000000-0000-0000-0000-0000000000a1', 'delivery', 500, current_date, 'wasted');
+  raise exception 'FAILED: a reason on a delivery allowed';
+exception when check_violation then raise notice 'ok: reasons only on checks and adjustments'; end $$;
+do $$ begin
+  insert into public.fertiliser_stock (farm_id, product_id, kind, quantity_kg, on_date, reason) values ('30000000-0000-0000-0000-000000000001', 'f2000000-0000-0000-0000-0000000000a1', 'adjustment', -5, current_date, 'eaten by goats');
+  raise exception 'FAILED: an unknown reason allowed';
+exception when check_violation then raise notice 'ok: only the listed reasons'; end $$;
+insert into public.feed_transactions (farm_id, feed_product_id, txn_type, quantity_kg, effective_on, reason)
+  select '30000000-0000-0000-0000-000000000001', id, 'adjustment', -200, current_date, 'fed_other_group' from public.feed_products where farm_id = '30000000-0000-0000-0000-000000000001' order by name limit 1;
+select pg_temp.check((select count(*) = 1 from public.feed_transactions where reason = 'fed_other_group' and quantity_kg = -200), 'a worker takes feed off the stock with a reason');
+do $$ begin
+  insert into public.feed_transactions (farm_id, feed_product_id, txn_type, quantity_kg, effective_on, reason)
+    select '30000000-0000-0000-0000-000000000001', id, 'delivery', 1000, current_date, 'wasted' from public.feed_products where farm_id = '30000000-0000-0000-0000-000000000001' order by name limit 1;
+  raise exception 'FAILED: a reason on a feed delivery allowed';
+exception when check_violation then raise notice 'ok: feed reasons only on counts and adjustments'; end $$;
+-- Fertiliser orders (14 Oct 2026): an order is open until delivered; a delivery points at it
+insert into public.fertiliser_stock (id, farm_id, product_id, kind, quantity_kg, on_date, order_status, expected_on, price_per_tonne_eur) values
+  ('f4000000-0000-0000-0000-0000000000a1', '30000000-0000-0000-0000-000000000001', 'f2000000-0000-0000-0000-0000000000a1', 'order', 4000, current_date, 'open', current_date + 3, 400);
+insert into public.fertiliser_stock (farm_id, product_id, kind, quantity_kg, on_date, linked_order_id) values
+  ('30000000-0000-0000-0000-000000000001', 'f2000000-0000-0000-0000-0000000000a1', 'delivery', 2000, current_date, 'f4000000-0000-0000-0000-0000000000a1');
+select pg_temp.check((select count(*) = 1 from public.fertiliser_stock where linked_order_id = 'f4000000-0000-0000-0000-0000000000a1'), 'a part delivery is recorded against a fertiliser order');
+do $$ begin
+  insert into public.fertiliser_stock (farm_id, product_id, kind, quantity_kg, on_date) values ('30000000-0000-0000-0000-000000000001', 'f2000000-0000-0000-0000-0000000000a1', 'order', 1000, current_date);
+  raise exception 'FAILED: an order with no status allowed';
+exception when check_violation then raise notice 'ok: an order has a status'; end $$;
+do $$ begin
+  insert into public.fertiliser_stock (farm_id, product_id, kind, quantity_kg, on_date, price_per_tonne_eur) values ('30000000-0000-0000-0000-000000000001', 'f2000000-0000-0000-0000-0000000000a1', 'delivery', 1000, current_date, 400);
+  raise exception 'FAILED: an order price on a delivery allowed';
+exception when check_violation then raise notice 'ok: agreed prices only on orders (a delivery''s price is its bill)'; end $$;
+update public.fertiliser_stock set order_status = 'delivered' where id = 'f4000000-0000-0000-0000-0000000000a1';
+select pg_temp.check((select order_status = 'delivered' from public.fertiliser_stock where id = 'f4000000-0000-0000-0000-0000000000a1'), 'a worker closes a fertiliser order');
+-- G12: why a suggestion was put off
+insert into public.suggestion_decisions (farm_id, key, decision, until, reason) values ('30000000-0000-0000-0000-000000000001', 'heads:test', 'snoozed', current_date + 3, 'elsewhere');
+select pg_temp.check((select reason = 'elsewhere' from public.suggestion_decisions where key = 'heads:test'), 'Not now keeps why it was put off');
+do $$ begin
+  insert into public.suggestion_decisions (farm_id, key, decision, until, reason) values ('30000000-0000-0000-0000-000000000001', 'heads:test2', 'snoozed', current_date + 3, 'lazy');
+  raise exception 'FAILED: an unknown Not now reason allowed';
+exception when check_violation then raise notice 'ok: Not now reasons are busy, done elsewhere or not relevant'; end $$;
 commit;
 -- Taking a spreading back takes its fields with it; another farm sees none of it
 delete from public.fertiliser_spreads where id = 'f3000000-0000-0000-0000-0000000000a1';

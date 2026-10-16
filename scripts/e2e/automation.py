@@ -46,10 +46,15 @@ with sync_playwright() as p:
     go(pg, '#/farm/jobs')
     check('Approving added the job', 'Body condition score the cows' in main_text(pg), main_text(pg))
 
-    # B. Not now hides a suggestion for a week
+    # B. Not now asks why and for how long (G12), then hides the suggestion for that time
     go(pg, '#/')
     card = pg.locator('[data-suggestion="season:5e000000-0000-0000-0000-000000000001:dry_thin"]')
-    card.get_by_role('button', name='Not now').click(); pg.wait_for_timeout(600)
+    card.get_by_role('button', name='Not now').click(); pg.wait_for_timeout(300)
+    sheet = pg.get_by_role('dialog', name='Not now')
+    check('Not now asks why first', sheet.count() == 1 and sheet.get_by_role('button', name='Put it off').is_disabled())
+    sheet.get_by_role('button', name='Busy, later').click()
+    sheet.get_by_role('button', name='A week').click()
+    sheet.get_by_role('button', name='Put it off').click(); pg.wait_for_timeout(600)
     check('Not now hides it', pg.locator('[data-suggestion="season:5e000000-0000-0000-0000-000000000001:dry_thin"]').count() == 0)
     go(pg, '#/calving')
     t = main_text(pg)

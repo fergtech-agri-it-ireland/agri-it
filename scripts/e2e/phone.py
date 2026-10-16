@@ -62,6 +62,8 @@ with sync_playwright() as p:
     check('Dashboard steers this farm: milk, sheep sales, crops', 'Getting started' in t and 'Crops' in t and 'Winter wheat' in t, t[:600])
     check('Breeds saved with the animals', 'Holstein Friesian and Jersey cross' in t and 'Aberdeen Angus' in t, t[-600:])
     check('First calf date from sign-up made a calving plan', 'First calf in 110 days' in t, t)
+    check('No fertiliser tile on a farm with no fields or fertiliser yet', pg.get_by_role('region', name='Fertiliser').count() == 0)
+    check('Release line on the phone app', 'FergTech · Built by FergTech' in pg.locator('body').inner_text() and 'Agri-It v' in pg.locator('body').inner_text())
     pg.goto(URL+'#/farm/groups'); pg.wait_for_timeout(800)
     g=pg.locator('main').inner_text()
     check('Bullocks saved out at grass with their date', pg.locator('input[id^="in-"]').count()==1 and pg.locator('input[id^="in-"]').first.input_value()==d(20), g[:1200])

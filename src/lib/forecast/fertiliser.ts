@@ -12,6 +12,7 @@
 import type { FarmBundle, Field, FertiliserProduct, FertiliserStock, ISODate } from '../types';
 import { addDays, daysBetween } from '../format';
 import { catalogueItem } from '../catalogue';
+import { isStockReason, type VarianceReasons } from '../stockReasons';
 import { GUIDANCE, SILAGE_N_DAYS_BEFORE_CUT, seasonOn, zoneFor, type SpreadingSeason } from '../spreading';
 
 export const FERTILISER_RULE = 'fertiliser@1.0';
@@ -27,6 +28,32 @@ export interface FertiliserState {
   /** Last delivery with a price: €/t from its bill */
   lastPrice: { eurPerT: number; on: ISODate } | null;
   exempt: boolean;
+}
+
+/**
+ * Predicted vs counted for fertiliser (G11): at each stock check after the first, what the
+ * records said was there just before it, and why it differed if the farmer said.
+ */
+export function fertiliserVariances(b: Pick<FarmBundle, 'fertStock' | 'spreads' | 'costs'>, product: FertiliserProduct):
+  ({ date: ISODate; predictedKg: number; countedKg: number; varianceKg: number } & VarianceReasons)[] {
+  const checks = b.fertStock.filter((r) => r.product_id === product.id && r.kind === 'count')
+    .sort((x, y) => x.on_date.localeCompare(y.on_date) || (x.created_at ?? '').localeCompare(y.created_at ?? ''));
+  const out: ({ date: ISODate; predictedKg: number; countedKg: number; varianceKg: number } & VarianceReasons)[] = [];
+  for (const c of checks) {
+    // Everything recorded up to this check, without the check itself or any later one
+    const before = { ...b, fertStock: b.fertStock.filter((r) => r.id !== c.id && !(r.kind === 'count' && (r.on_date > c.on_date || (r.on_date === c.on_date && (r.created_at ?? '') >= (c.created_at ?? ''))))) };
+    const prior = stockFor(before, product, c.on_date);
+    if (!prior.lastCheck) continue; // nothing to predict from before the first check or opening stock
+    const predicted = prior.stockKg - prior.overspentKg;
+    const since = prior.lastCheck.on_date;
+    out.push({
+      date: c.on_date, predictedKg: predicted, countedKg: Number(c.quantity_kg), varianceKg: Number(c.quantity_kg) - predicted,
+      reason: isStockReason(c.reason) ? c.reason : null,
+      adjustments: b.fertStock.filter((r) => r.product_id === product.id && r.kind === 'adjustment' && r.on_date <= c.on_date && r.on_date >= since)
+        .map((r) => ({ on: r.on_date, kg: Number(r.quantity_kg), reason: isStockReason(r.reason) ? r.reason : null }))
+    });
+  }
+  return out;
 }
 
 export type FieldDueKind = 'round' | 'silage' | 'cut_passed';
@@ -62,7 +89,8 @@ export function stockFor(b: Pick<FarmBundle, 'fertStock' | 'spreads' | 'costs'>,
   const checks = rows.filter((r) => r.kind === 'count' || r.kind === 'opening');
   const last = checks[checks.length - 1] ?? null;
   const after = <T extends { d: ISODate; created_at?: string }>(x: T) => !last || x.d > last.on_date || (x.d === last.on_date && (x.created_at ?? '') > (last.created_at ?? ''));
-  const delivered = rows.filter((r) => r.kind === 'delivery' && after(r)).reduce((s, r) => s + Number(r.quantity_kg), 0);
+  // Deliveries add; adjustments (G11) carry their own sign (wasted, sold: less; a missed delivery: more)
+  const delivered = rows.filter((r) => (r.kind === 'delivery' || r.kind === 'adjustment') && after(r)).reduce((s, r) => s + Number(r.quantity_kg), 0);
   const spread = spreads.filter(after).reduce((s, r) => s + Number(r.total_kg), 0);
   const raw = (last ? Number(last.quantity_kg) : 0) + delivered - spread;
   const priced = b.fertStock

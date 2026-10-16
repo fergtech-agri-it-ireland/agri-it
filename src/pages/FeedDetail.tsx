@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { CalendarDays, Pencil, Phone } from 'lucide-react';
 import { useFarmData, useSave } from '../lib/data/farm';
 import { useDerived } from '../lib/data/derived';
+import { REASON_SHORT, REASON_TEXT, reasonTally } from '../lib/stockReasons';
 import { countVariances, rulesForDay, runoutSteps } from '../lib/forecast/feed';
 import { priceHistory } from '../lib/forecast/prices';
 import { PriceHistoryCard } from '../components/Prices';
@@ -192,7 +193,8 @@ export default function FeedDetail() {
           {lastDelivery?.price_per_tonne_eur && <span className="text-sm">Last price {eur(Number(lastDelivery.price_per_tonne_eur))}/t</span>}
         </Link>
         <LinkButton to={`/record/delivery?feed=${product.id}`} variant="primary">Feed arrived</LinkButton>
-        {phone ? <LinkButton to={`/feed/${product.id}/count`} variant="secondary">Stock count</LinkButton> : <span />}
+        {phone ? <LinkButton to={`/feed/${product.id}/count`} variant="secondary">Stock count</LinkButton> : <LinkButton to={`/feed/${product.id}/adjust`} variant="secondary">Wasted or used</LinkButton>}
+        {phone && <div className="col-span-2"><LinkButton to={`/feed/${product.id}/adjust`} variant="secondary" block>Wasted, used elsewhere or sold</LinkButton></div>}
       </div>
 
       <SectionTitle action={<Link to={`/feed/${product.id}/rule/new`} className="flex min-h-tap items-center px-2 font-bold text-accent">Add group</Link>}>Who eats it</SectionTitle>
@@ -274,16 +276,21 @@ export default function FeedDetail() {
           <p className="font-bold">Predicted vs counted</p>
           <p className="text-sm text-muted">Agri-It never changes your feeding rate on its own. If counts keep coming in lower, check the rate you entered.</p>
           {variances.slice(-4).reverse().map((v) => (
-            <p key={v.date} className="mt-1">{fmtDay(v.date)}: expected {fmtKg(v.predictedKg)}, counted {fmtKg(v.countedKg)} ({v.varianceKg >= 0 ? '+' : '−'}{fmtKg(Math.abs(v.varianceKg))}{v.variancePct !== null ? `, ${fmtNum(v.variancePct)}%` : ''})</p>
+            <div key={v.date} className="mt-2" data-variance={v.date}>
+              <p>{fmtDay(v.date)}: expected {fmtKg(v.predictedKg)}, counted {fmtKg(v.countedKg)} ({v.varianceKg >= 0 ? '+' : '−'}{fmtKg(Math.abs(v.varianceKg))}{v.variancePct !== null ? `, ${fmtNum(v.variancePct)}%` : ''})</p>
+              {v.reason && <p className="text-sm font-semibold">Why: {REASON_TEXT.feed[v.reason]}</p>}
+              {v.adjustments.length > 0 && <p className="text-sm text-muted">Taken into account: {v.adjustments.map((a) => `${a.kg < 0 ? '−' : '+'}${fmtKg(Math.abs(a.kg))} ${a.reason ? REASON_SHORT[a.reason] : 'adjusted'}`).join(', ')}</p>}
+            </div>
           ))}
+          {reasonTally(variances) && <p className="mt-2 text-sm text-muted">Reasons given: {reasonTally(variances)}</p>}
         </Card>
       )}
 
       <SectionTitle>History</SectionTitle>
       <List>
         {txns.filter((t) => t.txn_type !== 'order' || t.order_status !== 'delivered').slice(0, 15).map((t) => (
-          <Row key={t.id} title={`${{ opening: 'Opening stock', order: 'Order', delivery: 'Delivery', count: 'Stock count', adjustment: 'Adjustment' }[t.txn_type]}: ${fmtKg(Number(t.quantity_kg))}`}
-            sub={`${fmtDate(t.effective_on)}. ${t.txn_type === 'order' && t.placed === false && t.order_status === 'open' ? 'To place, not placed yet' : EVIDENCE_LABEL[t.evidence]}${t.total_price_eur ? `. ${eur(Number(t.total_price_eur))}` : ''}${t.order_status === 'cancelled' ? '. Cancelled' : ''}`}
+          <Row key={t.id} title={`${{ opening: 'Opening stock', order: 'Order', delivery: 'Delivery', count: 'Stock count', adjustment: Number(t.quantity_kg) < 0 ? 'Taken off' : 'Added' }[t.txn_type]}: ${fmtKg(Math.abs(Number(t.quantity_kg)))}`}
+            sub={`${fmtDate(t.effective_on)}. ${t.reason ? `${REASON_TEXT.feed[t.reason]}. ` : ''}${t.txn_type === 'order' && t.placed === false && t.order_status === 'open' ? 'To place, not placed yet' : EVIDENCE_LABEL[t.evidence]}${t.total_price_eur ? `. ${eur(Number(t.total_price_eur))}` : ''}${t.order_status === 'cancelled' ? '. Cancelled' : ''}`}
             right={t.txn_type === 'order' && t.order_status === 'open'
               ? <Button variant="ghost" onClick={() => save([{ kind: 'update', table: 'feed_transactions', match: { id: t.id }, patch: { order_status: 'cancelled' } }], { label: 'Order cancelled', undo: [{ kind: 'update', table: 'feed_transactions', match: { id: t.id }, patch: { order_status: 'open' } }] })}>Cancel</Button>
               : undefined} />

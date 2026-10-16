@@ -467,7 +467,7 @@ Navigation: bottom bar Today / Forecast / **Record (hi-vis centre button)** / Mo
 
 ## 10. Known gaps and risks
 
-1. **Supplier phone numbers** were re-checked on 11 Oct 2026 against each `source_url`. **Lakeland** could not be (its site blocks automated checks) and shows as not verified: check it by hand. Arrabawn Tipperary has no number on purpose (post-merger directory not confirmed).
+1. **Supplier phone numbers** were re-checked on 11 and 14 Oct 2026 against each `source_url`; each is due a recheck six months on (shown in the app; release gate G08). **Lakeland** could not be on either day (its site blocks automated checks) and shows as not verified: check it by hand. Arrabawn Tipperary has no number on purpose (post-merger directory not confirmed).
 2. **`supplier_branches`** holds Drummonds' 8 branches only. Other suppliers fall back to central numbers and "My rep".
 3. **`seed.sql` creates a demo login.** Do not run it in production; load only the reference data from its top half (`setup_agri_it.sql` does exactly that).
 4. Email confirmation is **off** locally and on in the hosted project. The hosted project's built-in email sender is rate limited (a few an hour): set up SMTP before many sign-ups or invites. The Site URL must be the online address (see "To finish").
@@ -484,7 +484,7 @@ Navigation: bottom bar Today / Forecast / **Record (hi-vis centre button)** / Mo
 
 ## 11. Next steps (suggested order)
 
-**From 14 Oct, the advisory board's plan comes first:** run the pilot (`docs/PILOT.md`, 12 to 20 ROI cattle farms, 4 to 6 weeks); then the P1 items marked Next in `docs/ADVISORY-RESPONSE.md` (supplier contact expiry and owner, wastage and unplanned use, alert bundling with snooze reasons); then B2, B8 and A3 once pilot data supports them. The older list below still holds where it doesn't conflict.
+**From 14 Oct, the advisory board's plan comes first:** run the pilot (`docs/PILOT.md`, 12 to 20 ROI cattle farms, 4 to 6 weeks, now with scripts S11 to S17 and the Settings alert counts); G08, G11 and G12 are done (16 Oct). Still Next in `docs/ADVISORY-RESPONSE.md`: G14 imports and exports with partners, and G07 and gate G8 with Agri-It Online. Then B2, B8 and A3 once pilot data supports them. Supplier rechecks fall due from 11 Apr 2027 (the build fails from 11 May 2027 until they're done). The older list below still holds where it doesn't conflict.
 
 
 1. Use the phone-only link for real on the farm; share it from the page's Share menu; note friction points.

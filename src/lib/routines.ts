@@ -29,7 +29,7 @@ export const FEEDING_LOOKBACK_DAYS = 3; // feeding older than this just uses the
 const lastDayOfMonth = (y: number, m0: number) => new Date(Date.UTC(y, m0 + 1, 0)).getUTCDate();
 
 /** Is `routine` due on `day`? Monthly days past the month's end fall on its last day (31st → 30 Sept). */
-export function isDue(r: Pick<Routine, 'frequency' | 'interval_days' | 'weekday' | 'day_of_month' | 'start_date' | 'end_date' | 'active'>, day: ISODate): boolean {
+export function isDue(r: Pick<Routine, 'frequency' | 'interval_days' | 'weekday' | 'day_of_month' | 'start_date' | 'end_date' | 'active'> & { interval_months?: number | null }, day: ISODate): boolean {
   if (!r.active || day < r.start_date || (r.end_date && day > r.end_date)) return false;
   const d = parseISO(day);
   switch (r.frequency) {
@@ -38,6 +38,13 @@ export function isDue(r: Pick<Routine, 'frequency' | 'interval_days' | 'weekday'
     case 'weekly':
       return d.getUTCDay() === r.weekday;
     case 'monthly': {
+      // Every 1, 2, 3, 6 or 12 months, counted from the month it starts (16 Oct 2026; older routines: every month)
+      const every = Math.max(1, r.interval_months ?? 1);
+      if (every > 1) {
+        const s = parseISO(r.start_date);
+        const gap = (d.getUTCFullYear() - s.getUTCFullYear()) * 12 + d.getUTCMonth() - s.getUTCMonth();
+        if (gap % every !== 0) return false;
+      }
       const last = lastDayOfMonth(d.getUTCFullYear(), d.getUTCMonth());
       return d.getUTCDate() === Math.min(r.day_of_month ?? 1, last);
     }
@@ -64,12 +71,13 @@ export function nextDue(r: Parameters<typeof isDue>[0], from: ISODate): ISODate 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const ordinal = (n: number) => `${n}${n % 10 === 1 && n !== 11 ? 'st' : n % 10 === 2 && n !== 12 ? 'nd' : n % 10 === 3 && n !== 13 ? 'rd' : 'th'}`;
 
-/** "Every day", "Every Monday", "Monthly on the 20th", "Every 21 days". */
-export function scheduleLabel(r: Pick<Routine, 'frequency' | 'interval_days' | 'weekday' | 'day_of_month'>): string {
+const EVERY_MONTHS: Record<number, string> = { 2: 'Every 2 months', 3: 'Every 3 months', 6: 'Every 6 months', 12: 'Once a year' };
+/** "Every day", "Every Monday", "Monthly on the 20th", "Every 3 months on the 1st", "Every 21 days". */
+export function scheduleLabel(r: Pick<Routine, 'frequency' | 'interval_days' | 'weekday' | 'day_of_month'> & { interval_months?: number | null }): string {
   switch (r.frequency) {
     case 'daily': return 'Every day';
     case 'weekly': return `Every ${WEEKDAYS[r.weekday ?? 1]}`;
-    case 'monthly': return `Monthly on the ${ordinal(r.day_of_month ?? 1)}`;
+    case 'monthly': return (r.interval_months ?? 1) > 1 ? `${EVERY_MONTHS[r.interval_months!] ?? `Every ${r.interval_months} months`} on the ${ordinal(r.day_of_month ?? 1)}` : `Monthly on the ${ordinal(r.day_of_month ?? 1)}`;
     case 'every_n_days': return r.interval_days === 1 ? 'Every day' : `Every ${r.interval_days} days`;
   }
 }

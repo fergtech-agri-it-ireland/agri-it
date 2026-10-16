@@ -1,3 +1,4 @@
+import { setupPlan, setupProgress } from '../lib/setup';
 import { useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronRight, CircleCheck, MessageCircleQuestion, Moon, Phone, Sun, X } from 'lucide-react';
@@ -6,7 +7,7 @@ import { useDerived } from '../lib/data/derived';
 import { cashDial, silageDial } from '../lib/dials';
 import { useTheme } from '../lib/theme';
 import { buildChecklist, checklistProgress } from '../lib/routines';
-import { breedLabel, farmGuide, groupBreeds, farmTypes, grows, keepsAnimals, speciesOf, SPECIES } from '../lib/farmTypes';
+import { breedLabel, groupBreeds, farmTypes, grows, keepsAnimals, speciesOf, SPECIES } from '../lib/farmTypes';
 import { ReminderNudge } from '../components/Reminders';
 import { PhotoQueueNudge } from '../components/PhotoQueue';
 import { eur, fmtDay, fmtKg, fmtMonth, fmtNum, monthKey, todayISO } from '../lib/format';
@@ -157,37 +158,38 @@ function Mini({ title, value, sub, fraction, tone, to }: { title: string; value:
 }
 
 // ---------------------------------------------------------------------------
-// Getting started: steers each farmer to what matters for their farming
+// Set up your farm (16 Oct 2026): the next stage to do, until every stage is done or skipped
 // ---------------------------------------------------------------------------
 function GuideCard({ b }: { b: FarmBundle }) {
   const key = `${NS}:guide-hidden:${b.farm.id}`;
   const [hidden, setHidden] = useState(() => { try { return localStorage.getItem(key) === '1'; } catch { return false; } });
-  const steps = farmGuide(b);
-  const done = steps.filter((s) => s.done).length;
-  if (hidden || done === steps.length) return null;
-  const next = steps.filter((s) => !s.done).slice(0, 3);
+  const stages = setupPlan(b);
+  const p = setupProgress(stages);
+  if (hidden || p.complete || b.role === 'worker') return null;
+  const next = stages.filter((s) => s.status === 'started' || s.status === 'todo').slice(0, 3);
   return (
-    <section aria-label="Getting started" className="rounded-[1.125rem] bg-card p-4 shadow-lift">
+    <section aria-label="Set up your farm" className="rounded-[1.125rem] bg-card p-4 shadow-lift">
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
-          <h2 className="text-[1.0625rem] font-bold">Getting started</h2>
-          <p className="text-[0.8125rem] text-muted">{done} of {steps.length} done. Picked for the farming you do.</p>
+          <h2 className="text-[1.0625rem] font-bold">Set up your farm</h2>
+          <p className="text-[0.8125rem] text-muted">{p.finished} of {p.total} stages done{p.minutesLeft ? `, about ${p.minutesLeft} minutes left` : ''}. Picked for the farming you do.</p>
         </div>
-        <button aria-label="Hide getting started" onClick={() => { try { localStorage.setItem(key, '1'); } catch { /* ignore */ } setHidden(true); }}
+        <button aria-label="Hide set up your farm" onClick={() => { try { localStorage.setItem(key, '1'); } catch { /* ignore */ } setHidden(true); }}
           className="-mr-2 -mt-1 flex h-10 w-10 items-center justify-center rounded-full text-muted hover:bg-pasture"><X className="h-5 w-5" aria-hidden /></button>
       </div>
-      <div className="mt-2"><Bar fraction={done / steps.length} /></div>
+      <div className="mt-2"><Bar fraction={p.finished / p.total} /></div>
       <ul className="mt-2 divide-y divide-line">
         {next.map((s) => (
-          <li key={s.id}>
-            <Link to={s.to} className="flex min-h-[3.25rem] items-center gap-3">
-              <span className="h-5 w-5 shrink-0 rounded-full border-2 border-line" aria-hidden />
-              <span className="min-w-0 flex-1"><b className="block text-[0.9375rem] font-semibold leading-snug">{s.title}</b><span className="text-[0.8125rem] text-muted">{s.sub}</span></span>
+          <li key={s.key}>
+            <Link to={`/setup/${s.key}`} className="flex min-h-[3.25rem] items-center gap-3">
+              <span className={`h-5 w-5 shrink-0 rounded-full border-2 ${s.status === 'started' ? 'border-hivis bg-hivis/30' : 'border-line'}`} aria-hidden />
+              <span className="min-w-0 flex-1"><b className="block text-[0.9375rem] font-semibold leading-snug">{s.title}</b><span className="text-[0.8125rem] text-muted">{s.why}</span></span>
               <ChevronRight className="h-4 w-4 shrink-0 text-muted" aria-hidden />
             </Link>
           </li>
         ))}
       </ul>
+      <Link to="/setup" className="mt-1 inline-block min-h-tap py-3 font-bold text-accent">See every stage</Link>
     </section>
   );
 }

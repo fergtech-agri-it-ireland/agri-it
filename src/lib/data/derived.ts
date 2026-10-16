@@ -1,3 +1,4 @@
+import { yearPlan } from '../forecast/plan';
 import { useEffect, useMemo } from 'react';
 import { IN_BROWSER, key } from '../env';
 import type { FarmBundle, ISODate } from '../types';
@@ -66,10 +67,11 @@ export function derive(b: FarmBundle, today: ISODate) {
     const feed = feedForecasts(b, today);
     const forage = forecastForage({ farm: b.farm, stores: silageWithFedOut(b), groups: b.groups, benchmarks: b.benchmarks, evidence: b.evidence, today });
     const cash = cashPosition(b.farm, b.income, b.costs, today);
-    const cash90 = cashForecast90(b.farm, b.income, b.costs, b.budget, today, undefined, b.routines);
+    const cash90 = cashForecast90(b.farm, b.income, b.costs, b.budget, today, undefined, b.routines, { loans: b.loans, loanStatements: b.loanStatements, expected: b.expected });
     const cashGaps = cashCompleteness(b.farm, b, today);
     const budget = budgetVsActual(b.farm, b, today);
     const yearEnd = yearEndPack(b, today);
+    const plan = yearPlan(b, today);
 
     const p: Priority[] = [];
     const billDays = b.farm.bill_warning_days ?? 7;
@@ -235,7 +237,7 @@ export function derive(b: FarmBundle, today: ISODate) {
     const drafted = new Set(suggestions.map((x) => x.key.startsWith('order:') ? `feed-${x.key.split(':')[1]}` : x.key.startsWith('heads:') ? 'heads' : ''));
     for (let i = p.length - 1; i >= 0; i--) if (drafted.has(p[i].id)) p.splice(i, 1);
     p.sort((a, c) => whenRank[a.when] - whenRank[c.when] || toneRank[a.tone] - toneRank[c.tone]);
-    return { today, feed, forage, cash, cash90, cashGaps, budget, budgetAlerts: alerts, prices: pricePoints(b), yearEnd, money, priorities: p, suggestions, fertiliser: fert, computedAt: new Date() };
+    return { today, feed, forage, cash, cash90, cashGaps, budget, budgetAlerts: alerts, prices: pricePoints(b), yearEnd, plan, money, priorities: p, suggestions, fertiliser: fert, computedAt: new Date() };
   }
 }
 

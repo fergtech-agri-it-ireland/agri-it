@@ -53,6 +53,10 @@ import Fertiliser, { FertiliserDetail } from './pages/Fertiliser';
 import FertiliserEdit from './pages/FertiliserEdit';
 import FertiliserDelivery from './pages/FertiliserDelivery';
 import SpreadForm from './pages/SpreadForm';
+import Setup, { SetupStageScreen } from './pages/Setup';
+import Loans, { LoanDetail } from './pages/Loans';
+import Payments from './pages/Payments';
+import YearPlan from './pages/YearPlan';
 
 export default function App() {
   if (!supabaseConfigured) return <MissingConfig />;
@@ -65,6 +69,13 @@ export default function App() {
       <Route path="/move-phone-data" element={<MovePhoneData />} />
       <Route element={<RequireFarm />}>
         <Route index element={<Today />} />
+        <Route path="setup" element={<Setup />} />
+        <Route path="setup/:stage" element={<SetupStageScreen />} />
+        <Route path="money/loans" element={<Loans />} />
+        <Route path="money/loans/new" element={<LoanDetail />} />
+        <Route path="money/loans/:id" element={<LoanDetail />} />
+        <Route path="money/payments" element={<Payments />} />
+        <Route path="money/plan" element={<YearPlan />} />
         <Route path="forecast" element={<Forecast />} />
         <Route path="progress" element={<Forecast />} />
         <Route path="more" element={<FarmHub />} />

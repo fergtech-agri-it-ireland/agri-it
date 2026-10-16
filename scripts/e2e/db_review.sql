@@ -267,6 +267,72 @@ select pg_temp.check((select breeds = array['Texel cross'] and breed = 'Texel cr
 update public.animal_groups set breeds = array['Holstein Friesian', 'British Friesian', 'Jersey cross', 'Norwegian Red'] where id = '40000000-0000-0000-0000-000000000001';
 select pg_temp.check((select char_length(breed) <= 60 and breed like '%...' from public.animal_groups where id = '40000000-0000-0000-0000-000000000001'), 'a long list fits the old 60-character breed column');
 
+-- Loans, annual statements and scheme payments (16 Oct 2026): money tables
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = '20000000-0000-0000-0000-000000000001';
+insert into public.loans (id, farm_id, lender, kind, balance_eur, balance_on, rate_percent, repayment_eur, frequency, next_due, skip_months)
+  values ('a1000000-0000-0000-0000-0000000000c1', '30000000-0000-0000-0000-000000000001', 'AIB', 'loan', 100000, current_date, 5, 1000, 'monthly', current_date + 10, '{12,1,2,3}');
+select pg_temp.check((select count(*) = 1 from public.loans where id = 'a1000000-0000-0000-0000-0000000000c1'), 'the owner adds a loan with seasonal months off');
+insert into public.costs (id, farm_id, category, occurred_on, amount_eur, loan_id, interest_eur)
+  values ('c0000000-0000-0000-0000-0000000000c1', '30000000-0000-0000-0000-000000000001', 'loan_repayment', current_date, 1000, 'a1000000-0000-0000-0000-0000000000c1', 410.96);
+insert into public.loan_statements (farm_id, loan_id, period_end, balance_eur, interest_eur) values ('30000000-0000-0000-0000-000000000001', 'a1000000-0000-0000-0000-0000000000c1', current_date, 99000, 410.96);
+insert into public.expected_income (id, farm_id, scheme, label, scheme_year, part, amount_eur, expected_on, rule)
+  values ('e1000000-0000-0000-0000-0000000000c1', '30000000-0000-0000-0000-000000000001', 'biss', 'BISS 2026, balance', 2026, 'balance', 2500, current_date + 50, 'schemes@1.0');
+insert into public.routines (farm_id, kind, title, frequency, day_of_month, interval_months, start_date, amount, category)
+  values ('30000000-0000-0000-0000-000000000001', 'expense', 'Insurance', 'monthly', 1, 12, current_date, 1800, 'insurance');
+update public.farms set herd_number = 'P7654321', acres_owned = 80, vat_status = 'flat_rate', setup = '{"loans":"done"}' where id = '30000000-0000-0000-0000-000000000001';
+commit;
+select pg_temp.check((select count(*) > 0 from public.audit_log where table_name = 'loans'), 'loans are in the change history');
+do $$ begin
+  insert into public.loans (farm_id, lender, balance_eur, balance_on, repayment_eur) values ('30000000-0000-0000-0000-000000000001', 'X', 1, current_date, 100);
+  raise exception 'FAILED: a repayment with no frequency or date allowed';
+exception when check_violation then raise notice 'ok: a repaying loan needs how often and when'; end $$;
+do $$ begin
+  insert into public.loans (farm_id, lender, balance_eur, balance_on, skip_months) values ('30000000-0000-0000-0000-000000000001', 'X', 1, current_date, '{13}');
+  raise exception 'FAILED: month 13 allowed';
+exception when check_violation then raise notice 'ok: skip months are 1 to 12'; end $$;
+do $$ begin
+  insert into public.costs (farm_id, category, occurred_on, amount_eur, interest_eur) values ('30000000-0000-0000-0000-000000000001', 'loan_repayment', current_date, 100, 150);
+  raise exception 'FAILED: interest more than the repayment allowed';
+exception when check_violation then raise notice 'ok: interest is never more than the repayment'; end $$;
+do $$ begin
+  update public.farms set setup = '[]' where id = '30000000-0000-0000-0000-000000000001';
+  raise exception 'FAILED: setup must be an object';
+exception when check_violation then raise notice 'ok: setup marks are an object'; end $$;
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = '20000000-0000-0000-0000-0000000000b1';
+select pg_temp.check((select count(*) = 0 from public.loans) and (select count(*) = 0 from public.loan_statements) and (select count(*) = 0 from public.expected_income), 'a farm worker sees no loans or scheme payments');
+do $$ begin
+  insert into public.loans (farm_id, lender, balance_eur, balance_on) values ('30000000-0000-0000-0000-000000000001', 'Sneaky', 1, current_date);
+  raise exception 'FAILED: a worker could add a loan';
+exception when insufficient_privilege or check_violation or others then if sqlerrm like 'FAILED%' then raise; end if; raise notice 'ok: a worker cannot add a loan'; end $$;
+commit;
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = '20000000-0000-0000-0000-0000000000b2';
+select pg_temp.check((select count(*) >= 1 from public.loans) and (select count(*) >= 1 from public.expected_income), 'an adviser reads loans and scheme payments');
+update public.loans set balance_eur = 1 where id = 'a1000000-0000-0000-0000-0000000000c1';
+select pg_temp.check((select balance_eur = 100000 from public.loans where id = 'a1000000-0000-0000-0000-0000000000c1'), 'an adviser cannot change a loan');
+commit;
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = '20000000-0000-0000-0000-0000000000b9';
+select pg_temp.check((select count(*) = 0 from public.loans) and (select count(*) = 0 from public.expected_income), 'someone outside the farm sees no loans');
+commit;
+-- Removing a loan keeps its repayments (they were real money) and takes its statements
+delete from public.loans where id = 'a1000000-0000-0000-0000-0000000000c1';
+select pg_temp.check((select loan_id is null from public.costs where id = 'c0000000-0000-0000-0000-0000000000c1'), 'a removed loan leaves its repayments as costs');
+select pg_temp.check((select count(*) = 0 from public.loan_statements where loan_id = 'a1000000-0000-0000-0000-0000000000c1'), 'a removed loan takes its statements');
+-- A scheme payment that came in points at its income; removing the income re-opens it
+insert into public.income (id, farm_id, income_type, occurred_on, amount_eur, description) values ('a2000000-0000-0000-0000-0000000000c1', '30000000-0000-0000-0000-000000000001', 'grant', current_date, 2500, 'BISS 2026, balance');
+update public.expected_income set income_id = 'a2000000-0000-0000-0000-0000000000c1' where id = 'e1000000-0000-0000-0000-0000000000c1';
+delete from public.income where id = 'a2000000-0000-0000-0000-0000000000c1';
+select pg_temp.check((select income_id is null from public.expected_income where id = 'e1000000-0000-0000-0000-0000000000c1'), 'removing the income puts the payment back to expected');
+select pg_temp.check((select interval_months = 12 from public.routines where title = 'Insurance'), 'a yearly bill is a routine every 12 months');
+select pg_temp.check((select count(*) = 0 from public.routines where interval_months <> 1 and title <> 'Insurance'), 'older routines are every month');
+
 -- Deleting a farm takes its trail with it (no orphan audit rows, no FK errors)
 delete from public.farms where id = '30000000-0000-0000-0000-000000000001';
 select pg_temp.check((select count(*) = 0 from public.audit_log where farm_id = '30000000-0000-0000-0000-000000000001'), 'deleting a farm removes its audit trail cleanly');

@@ -1,12 +1,13 @@
 import type { ComponentType, ReactNode } from 'react';
 import {
-  Baby, Banknote, BookOpen, Map as MapIcon, ChevronRight, ClipboardList, FileSpreadsheet, ListChecks, MessageCircleQuestion, PiggyBank, Repeat, Settings, Sprout, Tractor, Truck, Users, Warehouse, Wheat
+  Baby, Banknote, BookOpen, CalendarRange, ClipboardCheck, Landmark, Map as MapIcon, ChevronRight, ClipboardList, FileSpreadsheet, ListChecks, MessageCircleQuestion, PiggyBank, Repeat, Settings, Sprout, Tractor, Truck, Users, Warehouse, Wheat
 } from 'lucide-react';
 import { useFarmData } from '../lib/data/farm';
 import { useDerived } from '../lib/data/derived';
 import { FARM_TYPE_LABEL, farmTypes, grows } from '../lib/farmTypes';
 import { fmtNum } from '../lib/format';
 import { List, Row, Screen } from '../components/ui';
+import { setupPlan, setupProgress } from '../lib/setup';
 
 function Group({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -35,6 +36,7 @@ export default function FarmHub() {
   return (
     <Screen title="More" sub={`${b.farm.name}, ${b.farm.county}`}>
       <Group title="Your farm">
+        {b.role !== 'worker' && (() => { const p = setupProgress(setupPlan(b)); return <Row to="/setup" icon={icon(ClipboardCheck)} title="Set up your farm" sub={p.complete ? 'All done. Change anything here' : `${p.finished} of ${p.total} stages done`} right={chev} />; })()}
         <Row to="/farm/types" icon={icon(Tractor)} title="What you farm" sub={types.length ? types.map((t) => FARM_TYPE_LABEL[t]).join(', ') : 'Not picked yet'} right={chev} />
         {(types.includes('dairy') || types.includes('suckler') || (b.seasons ?? []).length > 0) && (
           <Row to="/calving" icon={icon(Baby)} title="Calving and drying off" sub={(b.seasons ?? []).some((s) => !s.archived) ? 'Your season plan and calves to tag' : 'Plan the season from the first calf date'} right={chev} />
@@ -50,7 +52,9 @@ export default function FarmHub() {
       {b.role !== 'worker' && <Group title="Money">
         <Row to="/money" icon={icon(Banknote)} title="Money" sub="In and out, cash, budget" right={chev} />
         <Row to="/money/bills" icon={icon(Banknote)} title="Bills to pay" sub="Owed, due and on order" right={chev} />
+        <Row to="/money/plan" icon={icon(CalendarRange)} title="Year plan" sub="Cash month by month, planned and actual" right={chev} />
         <Row to="/money/budget" icon={icon(PiggyBank)} title="Budget" sub="Plan the year by month" right={chev} />
+        <Row to="/money/loans" icon={icon(Landmark)} title="Loans and overdraft" sub={(b.loans ?? []).filter((l) => !l.archived).length ? `${(b.loans ?? []).filter((l) => !l.archived).length} added` : 'Repayments and interest'} right={chev} />
         <Row to="/money/year-end" icon={icon(FileSpreadsheet)} title="Year-end pack" sub="For your accountant or advisor" right={chev} />
       </Group>}
       <Group title="Records">

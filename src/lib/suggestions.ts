@@ -17,6 +17,9 @@ import type { Op } from './offline/outbox';
 import { addDays, daysBetween, eur, fmtDay, fmtKg, uuid } from './format';
 import { calfDeadlines, calfTodos, decisionFor, seasonSteps, stepDecisionKey, stepWhen, type SeasonStep } from './season';
 import { estimateStore } from './forecast/forage';
+import { dueUnrecorded } from './loans';
+import { stillExpected } from './schemes';
+import type { Income } from './types';
 
 export const SUGGESTIONS_RULE_VERSION = 'suggestions@1.0';
 
@@ -337,6 +340,69 @@ export function calfSuggestions(b: FarmBundle, today: ISODate): Suggestion[] {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Loans: a repayment fell due. Nothing is recorded until the farmer says it came out.
+// ---------------------------------------------------------------------------
+export function loanSuggestions(b: FarmBundle, today: ISODate): Suggestion[] {
+  const out: Suggestion[] = [];
+  for (const loan of b.loans ?? []) {
+    for (const r of dueUnrecorded(loan, b.costs, b.loanStatements ?? [], today)) {
+      const key = `loan:${loan.id}:${r.on}`;
+      if (hidden(b.decisions ?? [], key, today)) continue;
+      const row: Cost = {
+        id: uuid(), farm_id: b.farm.id, category: 'loan_repayment', other_label: null, occurred_on: r.on, amount_eur: r.amount,
+        supplier_id: null, supplier_name: loan.lender, feed_transaction_id: null, description: `${loan.lender} repayment`, document_id: null,
+        payment_status: 'paid', paid_on: r.on, due_on: null, invoice_ref: null, vat_eur: null, enterprise: null, loan_id: loan.id, interest_eur: null
+      };
+      out.push({
+        key, when: r.on === today ? 'today' : 'overdue', tone: 'info', canDecline: true,
+        title: `Did the ${loan.lender} repayment come out?`,
+        detail: `${eur(r.amount)} due ${fmtDay(r.on)}${r.interest !== null ? `, about ${eur(r.interest)} of it interest (estimate)` : ''}.`,
+        why: 'From the repayments you gave for this loan',
+        approve: {
+          label: 'Yes, it came out', ops: [{ kind: 'insert', table: 'costs', row: row as unknown as Record<string, unknown> }],
+          patch: (x) => ({ ...x, costs: [row, ...x.costs] }), saved: `${loan.lender} repayment recorded`
+        },
+        to: { label: 'Different amount', href: `/money/loans/${loan.id}?pay=${r.on}` }
+      });
+    }
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Scheme payments: the published date has come. Recorded only when the farmer says it's in.
+// ---------------------------------------------------------------------------
+export function schemeSuggestions(b: FarmBundle, today: ISODate): Suggestion[] {
+  const out: Suggestion[] = [];
+  for (const e of stillExpected(b.expected ?? [])) {
+    if (e.expected_on > today) continue;
+    const key = `scheme:${e.id}`;
+    if (hidden(b.decisions ?? [], key, today)) continue;
+    const income: Income = {
+      id: uuid(), farm_id: b.farm.id, income_type: 'grant', occurred_on: today, amount_eur: Number(e.amount_eur),
+      counterparty: b.farm.jurisdiction === 'NI' ? 'DAERA' : 'Department of Agriculture', milk_litres: null, fat_kg: null, protein_kg: null,
+      animal_group_id: null, head_count: null, description: e.label, document_id: null, enterprise: null
+    };
+    out.push({
+      key, when: daysBetween(e.expected_on, today) > 14 ? 'overdue' : 'today', tone: 'info', canDecline: true,
+      title: `Has the ${e.label} come in?`,
+      detail: `${eur(Number(e.amount_eur))} expected from ${fmtDay(e.expected_on)}. Payments start then and run for a few weeks; check your bank.`,
+      why: e.rule ? 'Published payment dates, with the total you gave' : 'The date you gave',
+      approve: {
+        label: 'Yes, that amount', ops: [
+          { kind: 'insert', table: 'income', row: income as unknown as Record<string, unknown> },
+          { kind: 'update', table: 'expected_income', match: { id: e.id }, patch: { income_id: income.id } }
+        ],
+        patch: (x) => ({ ...x, income: [income, ...x.income], expected: (x.expected ?? []).map((y) => (y.id === e.id ? { ...y, income_id: income.id } : y)) }),
+        saved: `${e.label} recorded`
+      },
+      to: { label: 'Different amount', href: `/money/payments?id=${e.id}` }
+    });
+  }
+  return out;
+}
+
 /** Everything ready for the farmer, most pressing first. A farm worker sees no money suggestions. */
 export function suggestions(b: FarmBundle, feed: Map<string, FeedForecast>, today: ISODate): Suggestion[] {
   const all = [
@@ -346,7 +412,9 @@ export function suggestions(b: FarmBundle, feed: Map<string, FeedForecast>, toda
     ...housingSuggestions(b, today),
     ...silageSuggestions(b, today),
     ...headCountSuggestions(b, today),
-    ...(b.role === 'worker' ? [] : recurringCostSuggestions(b, today))
+    ...(b.role === 'worker' ? [] : recurringCostSuggestions(b, today)),
+    ...(b.role === 'worker' ? [] : loanSuggestions(b, today)),
+    ...(b.role === 'worker' ? [] : schemeSuggestions(b, today))
   ];
   return all.sort((a, c) => whenRank[a.when] - whenRank[c.when] || (a.tone === 'warn' ? 0 : 1) - (c.tone === 'warn' ? 0 : 1));
 }

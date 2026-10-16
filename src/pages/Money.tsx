@@ -1,5 +1,7 @@
 import { Link } from 'react-router-dom';
-import { ChevronRight, FileText, Target, BookOpen, Receipt } from 'lucide-react';
+import { ChevronRight, FileText, Target, BookOpen, Receipt, CalendarRange, Landmark, Sprout } from 'lucide-react';
+import { balanceOn, upcomingRepayments } from '../lib/loans';
+import { stillExpected } from '../lib/schemes';
 import { FARM_TYPE_LABEL } from '../lib/farmTypes';
 import { paidOn } from '../lib/forecast/bills';
 import type { FarmType } from '../lib/types';
@@ -17,6 +19,10 @@ export default function Money() {
   const months = monthsBetween(monthKey(addDays(d.today, -150)), monthKey(d.today));
   const flows = monthlyFlows(b.income, b.costs, months);
   const max = Math.max(1, ...flows.flatMap((f) => [f.inflow, f.outflow]));
+  const loans = (b.loans ?? []).filter((l) => !l.archived && l.kind !== 'overdraft');
+  const owedOnLoans = loans.reduce((t, l) => t + balanceOn(l, b.costs, b.loanStatements ?? [], d.today), 0);
+  const nextLoan = loans.flatMap((l) => upcomingRepayments(l, b.costs, b.loanStatements ?? [], d.today, d.today, addDays(d.today, 90)).slice(0, 1)).sort((a, c) => a.on.localeCompare(c.on))[0];
+  const expected = stillExpected(b.expected ?? []);
   const recent = [
     ...b.income.map((i) => ({ id: i.id, date: i.occurred_on, title: i.description ?? INCOME_LABEL[i.income_type], who: i.counterparty, amount: Number(i.amount_eur) })),
     ...b.costs.map((c) => ({ id: c.id, date: c.occurred_on, title: c.description ?? (c.category === 'other' ? c.other_label ?? 'Other' : COST_LABEL[c.category]), who: [c.supplier_name, paidOn(c) === null ? 'owed' : null].filter(Boolean).join(', '), amount: -Number(c.amount_eur) }))
@@ -55,6 +61,12 @@ export default function Money() {
       </Card>
 
       <List>
+        <Row to="/money/plan" icon={<CalendarRange className="h-6 w-6 text-accent" />} title="Year plan"
+          sub={d.plan.low && d.plan.low.bank !== null ? `Lowest ${eur(d.plan.low.bank)} in ${fmtMonth(d.plan.low.month)}${d.plan.lowWarning === 'past_limit' ? ': past the overdraft limit' : ''}` : 'Cash month by month, planned and actual'} right={<ChevronRight className="h-5 w-5 text-muted" />} />
+        <Row to="/money/loans" icon={<Landmark className="h-6 w-6 text-accent" />} title="Loans and overdraft"
+          sub={loans.length ? `${eur(owedOnLoans)} owed${nextLoan ? `. Next ${eur(nextLoan.amount)} on ${fmtDay(nextLoan.on)}` : ''}` : 'None added'} right={<ChevronRight className="h-5 w-5 text-muted" />} />
+        <Row to="/money/payments" icon={<Sprout className="h-6 w-6 text-accent" />} title="Scheme payments"
+          sub={expected.length ? `${eur(expected.reduce((t, e) => t + Number(e.amount_eur), 0))} expected, next ${fmtDay(expected[0].expected_on)}` : 'None planned'} right={<ChevronRight className="h-5 w-5 text-muted" />} />
         <Row to="/money/bills" icon={<Receipt className="h-6 w-6 text-accent" />} title="Bills to pay"
           sub={d.money.owed.length ? `${d.money.owed.length} owed, ${eur(d.money.owedTotal)}${d.money.overdueCount ? `. ${d.money.overdueCount} overdue` : ''}` : 'Nothing owed'} right={<ChevronRight className="h-5 w-5 text-muted" />} />
         <Row to="/money/year-end" icon={<FileText className="h-6 w-6 text-accent" />} title="Year-end pack for your accountant"

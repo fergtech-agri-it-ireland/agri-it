@@ -5,14 +5,17 @@ import { eur, fmtDay, fmtKg } from './format';
 
 const THING: Record<string, string> = {
   costs: 'Cost', income: 'Income', feed_transactions: 'Feed', animal_groups: 'Animal group', feeding_rules: 'Feeding plan',
-  documents: 'Document', farm_records: 'Record', budget_lines: 'Budget', jobs: 'Job', feed_products: 'Feed', silage_stores: 'Silage store', calving_seasons: 'Calving season', calf_births: 'Calf born'
+  documents: 'Document', farm_records: 'Record', budget_lines: 'Budget', jobs: 'Job', feed_products: 'Feed', silage_stores: 'Silage store', calving_seasons: 'Calving season', calf_births: 'Calf born',
+  loans: 'Loan', loan_statements: 'Loan statement', expected_income: 'Expected payment'
 };
 const FIELD: Record<string, string> = {
   amount_eur: 'amount', occurred_on: 'date', paid_on: 'paid on', due_on: 'due', payment_status: 'paid or owed', invoice_ref: 'invoice no.',
   vat_eur: 'VAT', quantity_kg: 'quantity', head_count: 'head', kg_per_head_per_feed: 'kg per head', feeds_per_day: 'feeds a day',
   total_price_eur: 'price', price_per_tonne_eur: 'price per tonne', order_status: 'order', evidence: 'checked against', state: 'confirmed', title: 'title',
   done_at: 'done', dismissed_at: 'taken off the list', archived: 'archived', name: 'name', supplier_name: 'paid to', category: 'category',
-  end_date: 'ends', start_date: 'starts', document_id: 'photo', enterprise: 'enterprise', description: 'note'
+  end_date: 'ends', start_date: 'starts', document_id: 'photo', enterprise: 'enterprise', description: 'note',
+  balance_eur: 'owed', rate_percent: 'interest rate', repayment_eur: 'repayment', next_due: 'next repayment', interest_eur: 'interest',
+  lender: 'lender', expected_on: 'expected', credit_limit_eur: 'limit'
 };
 const SKIP = new Set(['id', 'farm_id', 'created_at', 'created_by', 'head_count_updated_at']);
 

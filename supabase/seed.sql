@@ -260,4 +260,18 @@ begin
     (gen_random_uuid(), f, 'silage', 'Feed out silage', 'daily', null, null, make_date(extract(year from d)::int, 11, 1), 6, null, null, null, '70000000-0000-0000-0000-000000000001', now() - interval '60 days');
   insert into public.routine_completions (farm_id, routine_id, due_date, status, done_on)
   values (f, '80000000-0000-0000-0000-000000000002', d - 2, 'done', d - 2);
+
+  -- Set up your farm, loans and scheme payments (16 Oct 2026), as in src/lib/demo/seed.ts.
+  -- The bank loan is the "Loan repayment" routine above; a tractor on HP and an overdraft show the rest.
+  update public.farms set herd_number = 'P1234567', acres_owned = 110, acres_rented = 40, vat_status = 'flat_rate',
+    accountant_name = 'Local accountant', milk_buyer = 'Tirlán',
+    setup = '{"farm":"done","animals":"done","feeding":"done","jobs":"done","income":"done","bills":"done","loans":"done","yearend":"done","year":"done"}'
+  where id = f;
+  insert into public.loans (id, farm_id, lender, kind, purpose, balance_eur, balance_on, rate_percent, rate_type, repayment_eur, frequency, next_due, ends_on, notes) values
+    ('a1000000-0000-0000-0000-000000000001', f, 'Finance company', 'hire_purchase', 'machinery', 38000, d - 20, 6.9, 'fixed', 3150, 'quarterly', d + 40, d + 1100, 'Tractor');
+  insert into public.loans (id, farm_id, lender, kind, purpose, balance_eur, balance_on, rate_percent, credit_limit_eur) values
+    ('a1000000-0000-0000-0000-000000000002', f, 'AIB', 'overdraft', 'working_capital', 0, d - 1, 9.5, 25000);
+  insert into public.expected_income (farm_id, scheme, label, scheme_year, part, amount_eur, expected_on) values
+    (f, 'biss', 'BISS and CRISS ' || extract(year from d)::int || ', advance', extract(year from d)::int, 'advance', 27750, d + 20),
+    (f, 'biss', 'BISS and CRISS ' || extract(year from d)::int || ', balance', extract(year from d)::int, 'balance', 9250, d + 50);
 end $$;

@@ -8,7 +8,32 @@ import { COST_LABEL, INCOME_LABEL, NON_OPERATING } from '../types';
 import { addDays, cur, daysBetween, eur, getCurrency, monthKey, toISO } from '../format';
 import { owedBills, paidOn, payeeOf } from './bills';
 import { dueDates } from '../routines';
-import type { Routine } from '../types';
+import type { ExpectedIncome, Loan, LoanStatement, Routine } from '../types';
+import { loanYear, upcomingRepayments, type LoanYear } from '../loans';
+import { stillExpected } from '../schemes';
+import { headsOn } from '../heads';
+
+/** Plans the cash forecast counts besides routines: loan repayments and scheme payments expected (16 Oct 2026). */
+export interface CashPlans { loans?: Loan[]; loanStatements?: LoanStatement[]; expected?: ExpectedIncome[] }
+
+/** Dated plan items in a window: repeats with an amount, loan repayments not yet recorded, scheme payments not yet in. */
+export function plannedItems(routines: Routine[], costs: Cost[], plans: CashPlans, today: ISODate, from: ISODate, to: ISODate) {
+  const items: { kind: 'income' | 'expense'; category: string; on: ISODate; amount: number; label: string; source: 'repeat' | 'loan' | 'scheme'; ref: string }[] = [];
+  for (const r of routines) {
+    if (!r.active || (r.kind !== 'income' && r.kind !== 'expense') || !(Number(r.amount) > 0)) continue;
+    for (const on of dueDates(r, from, to)) items.push({ kind: r.kind, category: String(r.category ?? 'other'), on, amount: Number(r.amount), label: r.title, source: 'repeat', ref: r.id });
+  }
+  for (const l of plans.loans ?? []) {
+    for (const x of upcomingRepayments(l, costs, plans.loanStatements ?? [], today, from, to)) {
+      items.push({ kind: 'expense', category: 'loan_repayment', on: x.on, amount: x.amount, label: l.lender, source: 'loan', ref: l.id });
+    }
+  }
+  for (const e of stillExpected(plans.expected ?? [])) {
+    if (e.expected_on < from || e.expected_on > to) continue;
+    items.push({ kind: 'income', category: 'grant', on: e.expected_on, amount: Number(e.amount_eur), label: e.label, source: 'scheme', ref: e.id });
+  }
+  return items;
+}
 
 /** 1.1: cash moves when a bill is paid, not when it is incurred; owed bills are known future outflows. */
 export const CASH_RULE_VERSION = 'cash-flow@1.1';
@@ -77,7 +102,7 @@ export interface CashForecastMonth {
  * "Assumed" = the farmer's own budget for months with no known entries of that kind.
  * The two are always reported separately (spec 10).
  */
-export function cashForecast90(farm: Farm, income: Income[], costs: Cost[], budget: BudgetLine[], today: ISODate, scenario?: CashScenario, routines: Routine[] = []) {
+export function cashForecast90(farm: Farm, income: Income[], costs: Cost[], budget: BudgetLine[], today: ISODate, scenario?: CashScenario, routines: Routine[] = [], plans: CashPlans = {}) {
   const pos = cashPosition(farm, income, costs, today);
   const end = addDays(today, 90);
   const months = monthsBetween(monthKey(today), monthKey(end));
@@ -86,9 +111,9 @@ export function cashForecast90(farm: Farm, income: Income[], costs: Cost[], budg
   const owed = costs.filter((c) => paidOn(c) === null);
   const owedWhen = (c: Cost) => (c.due_on && c.due_on > today ? c.due_on : addDays(today, 1));
   const sc = scenario ?? { incomePct: 0, costPct: 0, oneOffEur: 0, oneOffOn: null };
-  // Repeats with an amount: each due day in the window (review G02: a complete forecast needs recurring items)
-  const repeats = routines.filter((r) => r.active && (r.kind === 'income' || r.kind === 'expense') && Number(r.amount) > 0)
-    .flatMap((r) => dueDates(r, addDays(today, 1), end).map((on) => ({ kind: r.kind, category: r.category, on, amount: Number(r.amount) })));
+  // Repeats with an amount, loan repayments and scheme payments expected: each on its day in the window
+  // (review G02: a complete forecast needs recurring items; 16 Oct 2026: loans and schemes too)
+  const repeats = plannedItems(routines, costs, plans, today, addDays(today, 1), end);
   const rows: CashForecastMonth[] = months.map((m) => {
     const inRange = (d: ISODate) => monthKey(d) === m && d > today && d <= end;
     const knownIn = income.filter((i) => inRange(i.occurred_on)).reduce((s, i) => s + Number(i.amount_eur), 0) * (1 + sc.incomePct / 100);
@@ -298,6 +323,8 @@ export interface LedgerRow {
   documentId: string | null;
   documentFile: string | null;
   recordId: string;
+  /** Loan repayments: the interest part, when the farmer gave it */
+  interest: number | null;
 }
 
 /** Management year-end pack (spec 6). Deliberately not statutory accounts or a tax computation. */
@@ -355,13 +382,14 @@ export function yearEndPack(bundle: FarmBundle, today: ISODate, offset = 0) {
     ...income.map((i) => ({
       date: i.occurred_on, kind: 'income' as const, category: INCOME_LABEL[i.income_type] ?? i.income_type, description: i.description ?? '',
       counterparty: i.counterparty ?? '', amount: Number(i.amount_eur), vat: null, invoiceRef: null, paidOn: i.occurred_on, dueOn: null,
-      enterprise: i.enterprise ?? null, documentId: i.document_id, documentFile: docName(i.document_id), recordId: i.id
+      enterprise: i.enterprise ?? null, documentId: i.document_id, documentFile: docName(i.document_id), recordId: i.id, interest: null
     })),
     ...allCosts.map((c) => ({
       date: c.occurred_on, kind: 'cost' as const, category: COST_LABEL[c.category] ?? c.category,
       description: c.category === 'other' && c.other_label ? `${c.other_label}${c.description ? `. ${c.description}` : ''}` : c.description ?? '',
       counterparty: payeeOf(c, bundle), amount: Number(c.amount_eur), vat: c.vat_eur ?? null, invoiceRef: c.invoice_ref ?? null,
-      paidOn: paidOn(c), dueOn: c.due_on ?? null, enterprise: c.enterprise ?? null, documentId: c.document_id, documentFile: docName(c.document_id), recordId: c.id
+      paidOn: paidOn(c), dueOn: c.due_on ?? null, enterprise: c.enterprise ?? null, documentId: c.document_id, documentFile: docName(c.document_id), recordId: c.id,
+      interest: c.interest_eur === null || c.interest_eur === undefined ? null : Number(c.interest_eur)
     }))
   ].sort((a, b) => a.date.localeCompare(b.date) || a.kind.localeCompare(b.kind));
 
@@ -391,13 +419,78 @@ export function yearEndPack(bundle: FarmBundle, today: ISODate, offset = 0) {
     if (!costCats.has(c)) missing.push({ id: `cat-${c}`, text: `No ${COST_LABEL[c].toLowerCase()} costs this year`, fix: 'Add cost', to: `/record/cost?category=${c}` });
   });
 
+  // --- 16 Oct 2026: what the accountant asks for (Irish Farmers Journal Money Mentor, 18 Feb 2026) ---
+  // Loans: owed at the start and end, repaid, and interest (bank statement, else the farmer's, else estimated)
+  const loans: LoanYear[] = (bundle.loans ?? [])
+    .filter((l) => l.kind !== 'overdraft')
+    .map((l) => loanYear(l, bundle.costs, bundle.loanStatements ?? [], fy, today))
+    .filter((y) => !y.loan.archived || y.repaid > 0);
+  const interestKnown = loans.filter((y) => y.interest !== null);
+  const totalInterest = Math.round(interestKnown.reduce((s, y) => s + (y.interest ?? 0), 0) * 100) / 100;
+  const interestEstimated = interestKnown.some((y) => y.interestBasis === 'estimate');
+  // Scheme payments received, by what the farmer called them
+  const schemesReceived = Object.entries(income.filter((i) => i.income_type === 'grant').reduce<Record<string, number>>((a, i) => {
+    const k = i.description || i.counterparty || 'Grants and schemes';
+    return { ...a, [k]: (a[k] ?? 0) + Number(i.amount_eur) };
+  }, {})).map(([label, total]) => ({ label, total })).sort((a, b) => b.total - a.total);
+  // Capital spending: listed one by one (capital allowances are worked out by the accountant)
+  const capital = allCosts.filter((c) => c.category === 'capital').map((c) => ({
+    date: c.occurred_on, description: c.description ?? '', payee: payeeOf(c, bundle), amount: Number(c.amount_eur), documentFile: docName(c.document_id)
+  })).sort((a, b) => a.date.localeCompare(b.date));
+  const household = allCosts.filter((c) => c.category === 'household').reduce((s, c) => s + Number(c.amount_eur), 0);
+  // Livestock numbers at the start and end of the year (the accountant values them)
+  const livestock = (bundle.groups ?? []).filter((g) => !g.archived || (bundle.headHistory ?? []).some((h) => h.animal_group_id === g.id && h.effective_on >= fy.start)).map((g) => {
+    const hist = (bundle.headHistory ?? []).filter((h) => h.animal_group_id === g.id);
+    const created = String((g as unknown as { created_at?: string }).created_at ?? '').slice(0, 10);
+    const addedInYear = !!created && created > fy.start && !hist.some((h) => h.effective_on <= fy.start);
+    return { name: g.name, start: addedInYear ? null : headsOn(g, fy.start, hist), end: headsOn(g, cutoff, hist) };
+  });
+  const f2 = bundle.farm;
+  const details = {
+    herdNumber: f2.herd_number ?? null, vatStatus: f2.vat_status ?? null, acresOwned: f2.acres_owned ?? null, acresRented: f2.acres_rented ?? null,
+    accountant: [f2.accountant_name, f2.accountant_contact].filter(Boolean).join(', ') || null
+  };
+  for (const y of loans) {
+    if (!y.statement) missing.push({ id: `loan-statement-${y.loan.id}`, text: `No annual statement added for ${y.loan.lender}: the accountant needs the interest charged`, fix: 'Add the statement', to: `/money/loans/${y.loan.id}` });
+    else if (y.statement.interest_eur === null) missing.push({ id: `loan-interest-${y.loan.id}`, text: `${y.loan.lender} statement has no interest figure`, fix: 'Add the interest', to: `/money/loans/${y.loan.id}` });
+  }
+  const checklist = accountantChecklist(bundle, fy, { loans, hasLivestockSales: income.some((i) => i.income_type === 'livestock'), hasCapital: capital.length > 0, hasGrants: schemesReceived.length > 0 });
+
   return {
     fy, totalIncome, totalCosts, net: totalIncome - totalCosts, incomeByType, costsByCategory, nonOperatingByCategory, totalNonOperating,
     totalVat, paidOut, owedAtEndTotal, owedAtEndCount: owedAtEnd.length, enterprises,
-    supplierTotals, flows, milkLitres, livestockHead, missing, ledger
+    supplierTotals, flows, milkLitres, livestockHead, missing, ledger,
+    loans, totalInterest, interestEstimated, schemesReceived, capital, household, livestock, details, checklist
   };
 }
 
+export interface ChecklistItem { id: string; text: string; why: string; done: boolean | null }
+
+/**
+ * What to gather for the accountant, from the Irish Farmers Journal's list (Money Mentor,
+ * 18 Feb 2026: bank statements, sales, purchases, grants, machinery, payroll, loan
+ * statements, VAT, capital invoices, stock records). `done` is true when Agri-It can see it,
+ * false when it can see it's missing, null when only the farmer knows.
+ */
+export function accountantChecklist(bundle: FarmBundle, fy: { start: ISODate; end: ISODate; label: string }, x: { loans: LoanYear[]; hasLivestockSales: boolean; hasCapital: boolean; hasGrants: boolean }): ChecklistItem[] {
+  const ni = bundle.farm.jurisdiction === 'NI';
+  const items: ChecklistItem[] = [
+    { id: 'bank', text: `Bank statements for every account, ${fy.label}`, why: 'Shows all money in and out; ideally the account is in the same name as the herd number', done: null },
+    { id: 'sales', text: 'Sales dockets and statements (mart, factory, co-op, grain)', why: 'Missing sales can look like income not declared', done: null },
+    { id: 'invoices', text: 'Invoices and receipts for costs', why: 'Costs only reduce taxable profit when backed by paperwork', done: null },
+    { id: 'schemes', text: ni ? 'DAERA statement of payments for the year' : 'AgFood statement of scheme payments for the year', why: 'Scheme payments are income and are checked against the Department\'s records', done: x.hasGrants ? null : false }
+  ];
+  for (const y of x.loans) {
+    items.push({ id: `loan-${y.loan.id}`, text: `${y.loan.lender}: annual loan statement`, why: 'Gives the interest charged, which can be claimed', done: !!y.statement && y.statement.interest_eur !== null });
+  }
+  if (x.hasCapital) items.push({ id: 'capital', text: 'Invoices for machinery, sheds and land bought', why: 'Capital allowances are claimed over several years', done: null });
+  if (x.hasLivestockSales || (bundle.groups ?? []).some((g) => !g.archived)) items.push({ id: 'stock', text: `Livestock numbers and values on ${fy.end}`, why: 'Opening and closing stock feed the profit figure (and stock relief)', done: null });
+  items.push({ id: 'vat', text: bundle.farm.vat_status === 'registered' ? 'VAT returns for the year' : ni ? 'VAT records (if registered)' : 'VAT 58 refund claims (flat-rate farmers: buildings, fencing, drainage)', why: 'To get VAT returns or refunds right', done: null });
+  items.push({ id: 'wages', text: 'Wages paid, with PAYE and PRSI (or PAYE and NI)', why: 'Errors lead to interest and penalties', done: null });
+  return items;
+}
+
+const INTEREST_BASIS: Record<LoanYear['interestBasis'], string> = { statement: 'bank statement', recorded: 'your repayments', estimate: 'estimated by Agri-It', unknown: 'not known' };
 const csvRow = (r: (string | number | null)[]) => r.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',');
 
 export function yearEndCsv(pack: ReturnType<typeof yearEndPack>, farmName: string): string {
@@ -417,6 +510,17 @@ export function yearEndCsv(pack: ReturnType<typeof yearEndPack>, farmName: strin
     ['Month', `In ${c}`, `Paid out ${c}`, `Net ${c}`], ...pack.flows.map((f) => [f.month, f.inflow.toFixed(2), f.outflow.toFixed(2), f.net.toFixed(2)]), [],
     ['Supplier', `Total ${c}`], ...pack.supplierTotals.map((s) => [s.name, s.total.toFixed(2)]), [],
     ...(pack.enterprises.length ? [['Enterprise', `Income ${c}`, `Running costs ${c}`, `Margin ${c}`], ...pack.enterprises.map((e) => [e.key, e.income.toFixed(2), e.costs.toFixed(2), e.margin.toFixed(2)]), []] : []),
+    ...(pack.loans.length ? [
+      ['Loans', `Owed at start ${c}`, `Owed at end ${c}`, 'End figure from', `Repaid in year ${c}`, `Interest ${c}`, 'Interest from'],
+      ...pack.loans.map((y) => [y.loan.lender, y.balanceStart === null ? 'see statement' : y.balanceStart.toFixed(2), y.balanceEnd.toFixed(2), y.balanceEndBasis === 'statement' ? 'bank statement' : 'worked out by Agri-It', y.repaid.toFixed(2), y.interest === null ? 'not known' : y.interest.toFixed(2), INTEREST_BASIS[y.interestBasis]]),
+      [] ] : []),
+    ...(pack.schemesReceived.length ? [['Scheme payments received', `Total ${c}`], ...pack.schemesReceived.map((r) => [r.label, r.total.toFixed(2)]), []] : []),
+    ...(pack.capital.length ? [['Capital spending', 'Date', 'Paid to', `Amount ${c}`], ...pack.capital.map((r) => [r.description || 'Capital', r.date, r.payee, r.amount.toFixed(2)]), []] : []),
+    ...(pack.household ? [['Household drawings (not a farm cost)', pack.household.toFixed(2)], []] : []),
+    ...(pack.livestock.length ? [['Livestock numbers', `Start (${pack.fy.start})`, 'End'], ...pack.livestock.map((r) => [r.name, r.start === null ? 'added in the year' : r.start, r.end]), []] : []),
+    ['Farm details'], ['Herd number', pack.details.herdNumber ?? 'not given'], ['VAT', pack.details.vatStatus === 'registered' ? 'Registered' : pack.details.vatStatus === 'flat_rate' ? 'Flat-rate farmer (not registered)' : 'not given'],
+    ['Acres owned', pack.details.acresOwned ?? 'not given'], ['Acres rented in', pack.details.acresRented ?? 'not given'], [],
+    ['For the accountant: to gather'], ...pack.checklist.map((i) => [i.text, i.done === true ? 'In Agri-It' : i.done === false ? 'Missing' : 'You have it']), [],
     ['Missing data'], ...pack.missing.map((m) => [m.text])
   ];
   return rows.map(csvRow).join('\n');
@@ -425,11 +529,11 @@ export function yearEndCsv(pack: ReturnType<typeof yearEndPack>, farmName: strin
 /** Every income and cost in the year, one line each, with its paperwork. Sums match the summary. */
 export function ledgerCsv(pack: ReturnType<typeof yearEndPack>): string {
   const c = cur();
-  const head = ['Date', 'In or out', 'Category', 'Description', 'Paid to / received from', `Amount ${c}`, `VAT ${c}`, 'Invoice no.', 'Paid on', 'Due on', 'Status', 'Enterprise', 'Attachment', 'Agri-It id'];
+  const head = ['Date', 'In or out', 'Category', 'Description', 'Paid to / received from', `Amount ${c}`, `VAT ${c}`, 'Invoice no.', 'Paid on', 'Due on', 'Status', 'Enterprise', 'Attachment', 'Agri-It id', `Interest ${c}`];
   const lines = pack.ledger.map((r) => [
     r.date, r.kind === 'income' ? 'In' : 'Out', r.category, r.description, r.counterparty, r.amount.toFixed(2), r.vat === null ? '' : r.vat.toFixed(2),
     r.invoiceRef ?? '', r.paidOn ?? '', r.dueOn ?? '', r.kind === 'income' ? 'Received' : r.paidOn ? 'Paid' : 'Owed',
-    r.enterprise ?? '', r.documentFile ? `attachments/${r.documentFile}` : '', r.recordId
+    r.enterprise ?? '', r.documentFile ? `attachments/${r.documentFile}` : '', r.recordId, r.interest === null ? '' : r.interest.toFixed(2)
   ]);
   const totalIn = pack.ledger.filter((r) => r.kind === 'income').reduce((s, r) => s + r.amount, 0);
   const totalOut = pack.ledger.filter((r) => r.kind === 'cost').reduce((s, r) => s + r.amount, 0);
@@ -454,7 +558,7 @@ export interface CashCompleteness {
 }
 const STALE_DAYS = 30;
 
-export function cashCompleteness(farm: Farm, bundle: Pick<FarmBundle, 'income' | 'costs' | 'budget' | 'routines'>, today: ISODate): CashCompleteness {
+export function cashCompleteness(farm: Farm, bundle: Pick<FarmBundle, 'income' | 'costs' | 'budget' | 'routines'> & Partial<Pick<FarmBundle, 'loans' | 'expected'>>, today: ISODate): CashCompleteness {
   const checkedOn = farm.opening_cash_eur !== null && farm.opening_cash_date ? farm.opening_cash_date : null;
   // A balance taken "now" is stored as the start of tomorrow (see reconcileCash), so it counts as checked today
   const daysSinceCheck = checkedOn ? Math.max(0, daysBetween(checkedOn, today)) : null;
@@ -472,12 +576,14 @@ export function cashCompleteness(farm: Farm, bundle: Pick<FarmBundle, 'income' |
   const expectedIncome = new Set<string>([
     ...bundle.income.filter((i) => i.occurred_on > today && i.occurred_on <= end).map((i) => i.income_type),
     ...bundle.budget.filter((l) => l.kind === 'income' && budgetInWindow(l, today, end)).map((l) => l.category),
-    ...(bundle.routines ?? []).filter((r) => r.active && r.kind === 'income' && r.category).map((r) => String(r.category))
+    ...(bundle.routines ?? []).filter((r) => r.active && r.kind === 'income' && r.category).map((r) => String(r.category)),
+    ...((bundle.expected ?? []).some((e) => !e.income_id && e.expected_on > today && e.expected_on <= end) ? ['grant'] : [])
   ]);
   const expectedCost = new Set<string>([
     ...bundle.costs.filter((c) => { const p = paidOn(c); return (p === null) || (p > today && p <= end); }).map((c) => c.category),
     ...bundle.budget.filter((l) => l.kind === 'cost' && budgetInWindow(l, today, end)).map((l) => l.category),
-    ...(bundle.routines ?? []).filter((r) => r.active && r.kind === 'expense' && r.category).map((r) => String(r.category))
+    ...(bundle.routines ?? []).filter((r) => r.active && r.kind === 'expense' && r.category).map((r) => String(r.category)),
+    ...((bundle.loans ?? []).some((l) => !l.archived && l.kind !== 'overdraft' && l.repayment_eur) ? ['loan_repayment'] : [])
   ]);
   const regular = <T extends string>(rows: { key: T; on: ISODate; amount: number }[]) => {
     const by = new Map<T, { n: number; total: number; months: Set<string> }>();

@@ -38,7 +38,7 @@ export default function YearEnd() {
       { name: 'summary.csv', text: yearEndCsv(pack, b.farm.name) },
       { name: 'transactions.csv', text: ledgerCsv(pack) },
       { name: 'records.csv', text: vaultCsv(records) },
-      { name: 'README.txt', text: `Agri-It management pack for ${b.farm.name}, ${pack.fy.start} to ${pack.fy.end}.\n\nsummary.csv: totals by category, month, supplier and enterprise.\ntransactions.csv: every income and cost, with paid or owed, invoice number, VAT and its attachment. The totals at the foot match summary.csv.\nrecords.csv: farm records and documents.\nattachments/: the photos and invoices.\n\nThis is a management summary built from the farmer's records. It is not a set of statutory accounts and does not calculate taxable profit.\n` }
+      { name: 'README.txt', text: `Agri-It management pack for ${b.farm.name}, ${pack.fy.start} to ${pack.fy.end}.\n\nsummary.csv: totals by category, month, supplier and enterprise.\ntransactions.csv: every income and cost, with paid or owed, invoice number, VAT, loan interest where given, and its attachment. The totals at the foot match summary.csv.\nsummary.csv also lists loans (owed at the start and end, repaid, interest and where each figure came from), scheme payments received, capital spending, livestock numbers at the start and end of the year, and a checklist of what else to gather.\nrecords.csv: farm records and documents.\nattachments/: the photos and invoices.\n\nThis is a management summary built from the farmer's records. It is not a set of statutory accounts and does not calculate taxable profit.\n` }
     ], docs);
     download(blob, `agri-it-accountant-pack-${label}.zip`);
     setPacking(`${pack.ledger.length} transactions and ${attached} attachment${attached === 1 ? '' : 's'}${missing.length ? `. ${missing.length} attachment${missing.length === 1 ? '' : 's'} not on this phone (listed in the zip)` : ''}.`);
@@ -73,7 +73,7 @@ export default function YearEnd() {
         <p className="flex justify-between border-t-2 border-ink pt-2 text-xl"><span className="font-bold">Income less running costs</span><b>{eur(pack.net)}</b></p>
         {pack.nonOperatingByCategory.length > 0 && (
           <div className="pt-2">
-            <p className="text-sm font-bold text-muted">Loans and capital (not running costs)</p>
+            <p className="text-sm font-bold text-muted">Loans, capital and household (not running costs)</p>
             {pack.nonOperatingByCategory.map((r) => <p key={r.key} className="flex justify-between"><span>{r.label}</span><b>{eur(r.total)}</b></p>)}
           </div>
         )}
@@ -85,6 +85,73 @@ export default function YearEnd() {
         {(pack.milkLitres > 0 || pack.livestockHead > 0) && (
           <p className="pt-2 text-muted">{pack.milkLitres > 0 && `${fmtNum(pack.milkLitres)} litres of milk sold. `}{pack.livestockHead > 0 && `${pack.livestockHead} animals sold.`}</p>
         )}
+      </Card>
+
+      {pack.loans.length > 0 && (
+        <>
+          <SectionTitle>Loans</SectionTitle>
+          <Card className="space-y-3">
+            {pack.loans.map((y) => (
+              <div key={y.loan.id} className="text-[0.9375rem]">
+                <p className="flex justify-between gap-2"><Link to={`/money/loans/${y.loan.id}`} className="font-bold underline">{y.loan.lender}</Link><b>{eur(y.balanceEnd)} owed</b></p>
+                <p className="text-muted">
+                  {y.balanceEndBasis === 'statement' ? 'From the bank statement. ' : 'Worked out from your figures. '}
+                  Repaid {eur(y.repaid)} in the year; interest {y.interest === null ? 'not known' : `${eur(y.interest, true)} (${y.interestBasis === 'statement' ? 'bank statement' : y.interestBasis === 'recorded' ? 'from your repayments' : 'estimate'})`}.
+                  {y.balanceStart !== null ? ` Owed at the start: ${eur(y.balanceStart)}.` : ''}
+                </p>
+              </div>
+            ))}
+            <p className="border-t border-line pt-2"><span className="font-bold">Interest in the year: {eur(pack.totalInterest, true)}</span>{pack.interestEstimated && <span className="block text-sm text-muted">Part of this is Agri-It's estimate. Add each bank's annual statement for the real figure.</span>}</p>
+            <p className="text-sm text-muted">Loan repayments are not running costs: only the interest is a farm cost. Your accountant uses the bank's figure.</p>
+          </Card>
+        </>
+      )}
+
+      {pack.schemesReceived.length > 0 && (
+        <>
+          <SectionTitle>Scheme payments received</SectionTitle>
+          <Card className="space-y-1">{pack.schemesReceived.map((r) => <p key={r.label} className="flex justify-between gap-2"><span>{r.label}</span><b>{eur(r.total)}</b></p>)}</Card>
+        </>
+      )}
+
+      {pack.capital.length > 0 && (
+        <>
+          <SectionTitle>Machinery, buildings and land bought</SectionTitle>
+          <Card className="space-y-1">{pack.capital.map((r, i) => <p key={i} className="flex justify-between gap-2"><span>{fmtDate(r.date)}, {r.description || r.payee}</span><b>{eur(r.amount)}</b></p>)}
+            <p className="text-sm text-muted">Your accountant claims these over several years (capital allowances).</p></Card>
+        </>
+      )}
+
+      {pack.livestock.length > 0 && (
+        <>
+          <SectionTitle>Livestock numbers</SectionTitle>
+          <Card>
+            <table className="w-full text-right text-[0.9375rem]">
+              <thead><tr className="text-muted"><th className="text-left font-semibold">Group</th><th className="font-semibold">{fmtDate(pack.fy.start)}</th><th className="font-semibold">{pack.fy.end < todayISO() ? fmtDate(pack.fy.end) : 'Today'}</th></tr></thead>
+              <tbody>{pack.livestock.map((r) => <tr key={r.name} className="border-t border-line"><td className="py-1.5 text-left font-semibold">{r.name}</td><td>{r.start ?? 'added later'}</td><td>{r.end}</td></tr>)}</tbody>
+            </table>
+            <p className="mt-2 text-sm text-muted">Numbers only. Your accountant values them; opening and closing stock feed the profit figure and stock relief.</p>
+          </Card>
+        </>
+      )}
+
+      {pack.household > 0 && <Card><p className="flex justify-between"><span>Household drawings (not a farm cost)</span><b>{eur(pack.household)}</b></p></Card>}
+
+      <SectionTitle>For your accountant: what to gather</SectionTitle>
+      <Card className="space-y-2">
+        {pack.checklist.map((i) => (
+          <div key={i.id} className="flex gap-2">
+            <ToneIcon tone={i.done === true ? 'ok' : i.done === false ? 'warn' : 'info'} className="mt-0.5 h-5 w-5 shrink-0" />
+            <p className="text-[0.9375rem]"><b>{i.text}</b><span className="block text-sm text-muted">{i.done === true ? 'In Agri-It. ' : i.done === false ? 'Missing. ' : ''}{i.why}</span></p>
+          </div>
+        ))}
+        <p className="border-t border-line pt-2 text-sm text-muted">
+          {[pack.details.herdNumber ? `Herd number ${pack.details.herdNumber}` : 'No herd number given',
+            pack.details.vatStatus === 'registered' ? 'VAT registered' : pack.details.vatStatus === 'flat_rate' ? 'flat-rate farmer' : 'VAT not said',
+            pack.details.acresOwned != null || pack.details.acresRented != null ? `${pack.details.acresOwned ?? 0} ac owned, ${pack.details.acresRented ?? 0} ac rented in` : null,
+            pack.details.accountant ? `Accountant: ${pack.details.accountant}` : null].filter(Boolean).join(' · ')}.
+          {' '}From the Irish Farmers Journal's list of what accountants ask for (Money Mentor, 18 Feb 2026).
+        </p>
       </Card>
 
       {pack.enterprises.length > 0 && (

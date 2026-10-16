@@ -123,7 +123,7 @@ function Recorder({ bundle }: { bundle: FarmBundle }) {
 export function AppShell() {
   const { data } = useBundle();
   const loc = useLocation();
-  const hideNav = loc.pathname.startsWith('/record') || /^\/routines\/.+/.test(loc.pathname) || /\/(new|count|edit|adjust)$/.test(loc.pathname) || loc.pathname.includes('/rule/') || loc.pathname === '/farm/types' || loc.pathname === '/money/budget' || loc.pathname.startsWith('/calving/');
+  const hideNav = loc.pathname.startsWith('/record') || /^\/routines\/.+/.test(loc.pathname) || /\/(new|count|edit|adjust)$/.test(loc.pathname) || loc.pathname.includes('/rule/') || loc.pathname === '/farm/types' || loc.pathname === '/money/budget' || loc.pathname.startsWith('/calving/') || loc.pathname.startsWith('/setup/') || /^\/money\/loans\/.+/.test(loc.pathname);
   return (
     <>
       <SyncStatus />

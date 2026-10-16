@@ -34,7 +34,10 @@ export const IMPORT_ORDER = [
   'suppliers', 'farm_supplier_settings',
   'animal_groups', 'head_count_history', 'crops', 'documents',
   'feed_products', 'feed_transactions', 'feeding_rules', 'feed_use_logs',
-  'silage_stores', 'routines', 'income', 'costs', 'routine_completions',
+  'silage_stores', 'routines',
+  // Before costs: a loan repayment points at its loan (16 Oct 2026)
+  'loans', 'loan_statements',
+  'income', 'costs', 'expected_income', 'routine_completions',
   'budget_lines', 'farm_records', 'jobs',
   'calving_seasons', 'calf_births', 'suggestion_decisions',
   // After costs: a fertiliser delivery points at its bill
@@ -46,7 +49,8 @@ export type ImportTable = (typeof IMPORT_ORDER)[number];
 export const FARM_SETTINGS = [
   'enterprises', 'enterprise', 'financial_year_start_month', 'opening_cash_eur', 'opening_cash_date',
   'default_lead_time_days', 'forage_reserve_percent', 'housing_start', 'turnout_date',
-  'feed_target_days', 'bill_warning_days', 'order_warning_days'
+  'feed_target_days', 'bill_warning_days', 'order_warning_days',
+  'herd_number', 'acres_owned', 'acres_rented', 'vat_status', 'accountant_name', 'accountant_contact', 'milk_buyer', 'setup'
 ] as const;
 
 /** Friendly names for the summary before the farmer confirms. */
@@ -58,7 +62,8 @@ export const TABLE_LABEL: Record<ImportTable, string> = {
   budget_lines: 'budget lines', farm_records: 'records', jobs: 'jobs',
   calving_seasons: 'calving seasons', calf_births: 'calves born', suggestion_decisions: 'answers to suggestions',
   fields: 'fields', fertiliser_products: 'fertilisers', fertiliser_stock: 'fertiliser orders, deliveries and stock checks',
-  fertiliser_spreads: 'spreading', fertiliser_spread_fields: 'spreading by field'
+  fertiliser_spreads: 'spreading', fertiliser_spread_fields: 'spreading by field',
+  loans: 'loans, hire purchase and overdrafts', loan_statements: 'loan statements', expected_income: 'scheme payments expected'
 };
 
 export interface ImportPlan {

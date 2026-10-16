@@ -66,7 +66,7 @@ with sync_playwright() as p:
     t = main_text(pg)
     check('Cash is labelled recorded, not a bank balance', 'Recorded cash' in t and 'Not your bank balance' in t, t[:600])
     check('Says when it was last checked, and that it is out of date', re.search(r'Last checked against the bank \d+ days ago', t) and 'Check it again' in t, t[:800])
-    check('Repeats the farmer set up are in the 90-day forecast, apart from budget', 'Repeats: +€27,000' in t and 'Budget: −' in t, t[:1600])
+    check('Repeats the farmer set up are in the 90-day forecast, apart from budget', 'Repeats, loans and schemes: +€27,000' in t and 'Budget: −' in t, t[:1600])
     pg.screenshot(path=f'{OUT}/cash-before.png', full_page=True)
     m = re.search(r'Recorded cash\s*€([\d,]+)', t)
     recorded = int(m.group(1).replace(',', '')) if m else None

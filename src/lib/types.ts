@@ -19,9 +19,14 @@ export type Evidence = 'measured' | 'confirmed_docket' | 'invoice_derived' | 'fa
 export type IncomeType = 'milk' | 'livestock' | 'crop' | 'grant' | 'other';
 export type CostCategory =
   | 'feed' | 'fertiliser' | 'seed_sprays' | 'contractor' | 'vet_medicine' | 'machinery_fuel' | 'utilities' | 'other'
-  | 'loan_repayment' | 'capital';
-/** Costs that are cash going out but not running costs of the farm. */
-export const NON_OPERATING: CostCategory[] = ['loan_repayment', 'capital'];
+  | 'loan_repayment' | 'capital'
+  // 16 Oct 2026: the lines a Teagasc cash flow budget and an accountant keep apart
+  | 'land_rent' | 'labour' | 'insurance' | 'professional_fees' | 'household';
+/**
+ * Cash going out that is not a running cost of the farm: loan repayments (the interest part
+ * is shown separately), machinery, buildings and land, and household drawings.
+ */
+export const NON_OPERATING: CostCategory[] = ['loan_repayment', 'capital', 'household'];
 export type RecordType = 'feed_docket' | 'invoice' | 'fertiliser' | 'medicine' | 'movement' | 'other';
 export type SilageMethod = 'acreage' | 'pit_dimensions' | 'bale_count' | 'measured_tonnes';
 export type Confidence = 'high' | 'medium' | 'low' | 'scenario';
@@ -48,6 +53,21 @@ export interface Farm {
   bill_warning_days?: number;
   /** "Order soon" shows this many days before the order-by date (default 7). */
   order_warning_days?: number;
+  // Set up your farm (16 Oct 2026). All optional; missing on older farms.
+  /** Herd number (ROI, from AgFood) or herd/flock number (NI), as the farmer writes it */
+  herd_number?: string | null;
+  acres_owned?: number | null;
+  /** Rented in: conacre or lease */
+  acres_rented?: number | null;
+  /** VAT: flat-rate farmer (not registered) or registered. Null = not said. */
+  vat_status?: 'flat_rate' | 'registered' | null;
+  accountant_name?: string | null;
+  /** Phone or email, as the farmer gave it */
+  accountant_contact?: string | null;
+  /** Who buys the milk (dairy), in the farmer's words */
+  milk_buyer?: string | null;
+  /** Which setup stages are done or skipped: { animals: 'done', loans: 'skipped' } */
+  setup?: Record<string, 'done' | 'skipped'> | null;
 }
 
 export interface AnimalGroup {
@@ -202,6 +222,8 @@ export interface Routine {
   interval_days: number | null;
   weekday: number | null; // 0 = Sunday
   day_of_month: number | null;
+  /** Monthly routines: every 1, 2, 3, 6 or 12 months from start_date's month (16 Oct 2026; missing = 1) */
+  interval_months?: number | null;
   start_date: ISODate;
   end_date: ISODate | null;
   amount: number | null; // € for money, kg for orders, tonnes for silage
@@ -341,6 +363,72 @@ export interface Cost {
   vat_eur?: number | null;
   /** Which part of the farm it belongs to (null = whole farm). */
   enterprise?: FarmType | null;
+  /** Loan repayments: which loan, and how much of it was interest (16 Oct 2026) */
+  loan_id?: string | null;
+  interest_eur?: number | null;
+  updated_at?: string;
+}
+
+export type LoanKind = 'loan' | 'hire_purchase' | 'lease' | 'overdraft' | 'other';
+export type LoanPurpose = 'land' | 'buildings' | 'machinery' | 'stock' | 'working_capital' | 'other';
+export type LoanFrequency = 'monthly' | 'quarterly' | 'half_yearly' | 'yearly';
+
+/** A loan, hire purchase, lease or overdraft (16 Oct 2026). Everything is the farmer's own figure. */
+export interface Loan {
+  id: string;
+  farm_id: string;
+  lender: string;
+  kind: LoanKind;
+  purpose: LoanPurpose | null;
+  /** What is owed, as on the farmer's latest statement, on `balance_on` */
+  balance_eur: number;
+  balance_on: ISODate;
+  /** Null = the farmer doesn't know (interest is then not estimated) */
+  rate_percent: number | null;
+  rate_type: 'fixed' | 'variable' | null;
+  /** What comes out each time. Null for an overdraft. */
+  repayment_eur: number | null;
+  frequency: LoanFrequency | null;
+  next_due: ISODate | null;
+  /** Months with no repayment (1 to 12), e.g. a milk-linked loan with nothing December to March */
+  skip_months: number[];
+  interest_only_until: ISODate | null;
+  ends_on: ISODate | null;
+  /** Overdrafts: the limit agreed with the bank */
+  credit_limit_eur: number | null;
+  notes: string | null;
+  archived: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+/** The bank's annual statement for a loan: what the accountant needs. */
+export interface LoanStatement {
+  id: string;
+  farm_id: string;
+  loan_id: string;
+  period_end: ISODate;
+  balance_eur: number | null;
+  interest_eur: number | null;
+  document_id: string | null;
+  updated_at?: string;
+}
+
+/** A scheme or other payment the farm expects (16 Oct 2026). Never income until it arrives. */
+export interface ExpectedIncome {
+  id: string;
+  farm_id: string;
+  /** Key from lib/schemes.ts, or 'other' */
+  scheme: string;
+  label: string;
+  scheme_year: number;
+  part: 'advance' | 'balance' | 'full';
+  amount_eur: number;
+  expected_on: ISODate;
+  /** Rule the date and split came from, e.g. schemes@1.0 (null = the farmer's own) */
+  rule: string | null;
+  /** Set when it came in: the income row recorded for it */
+  income_id: string | null;
   updated_at?: string;
 }
 
@@ -588,6 +676,10 @@ export interface FarmBundle {
   fertStock: FertiliserStock[];
   spreads: FertiliserSpread[];
   spreadFields: FertiliserSpreadField[];
+  /** Loans, their annual statements, and scheme payments expected (16 Oct 2026) */
+  loans: Loan[];
+  loanStatements: LoanStatement[];
+  expected: ExpectedIncome[];
   /** This user's role on the farm (owner when not known, e.g. the phone-only build). */
   role?: MemberRole;
 }
@@ -624,7 +716,12 @@ export const COST_LABEL: Record<CostCategory, string> = {
   utilities: 'Utilities',
   other: 'Other',
   loan_repayment: 'Loan repayments',
-  capital: 'Machinery, buildings, land'
+  capital: 'Machinery, buildings, land',
+  land_rent: 'Land rent',
+  labour: 'Wages',
+  insurance: 'Insurance',
+  professional_fees: 'Accountant & advice',
+  household: 'Household (drawings)'
 };
 
 export const INCOME_LABEL: Record<IncomeType, string> = {

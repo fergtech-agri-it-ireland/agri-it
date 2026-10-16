@@ -138,7 +138,7 @@ function CashTab() {
       </Card>
     );
   }
-  const plan = whatIf.incomePct || whatIf.costPct || whatIf.oneOff ? cashForecast90(b.farm, b.income, b.costs, b.budget, d.today, { incomePct: whatIf.incomePct, costPct: whatIf.costPct, oneOffEur: whatIf.oneOff, oneOffOn: whatIf.oneOffOn }, b.routines) : d.cash90;
+  const plan = whatIf.incomePct || whatIf.costPct || whatIf.oneOff ? cashForecast90(b.farm, b.income, b.costs, b.budget, d.today, { incomePct: whatIf.incomePct, costPct: whatIf.costPct, oneOffEur: whatIf.oneOff, oneOffOn: whatIf.oneOffOn }, b.routines, { loans: b.loans, loanStatements: b.loanStatements, expected: b.expected }) : d.cash90;
   const max = Math.max(1, ...plan.rows.map((r) => Math.abs(r.closing)), Math.abs(d.cash.balance));
   return (
     <>
@@ -257,7 +257,7 @@ function flowLine(r: { knownIn: number; knownOut: number; owedOut: number; regul
   const pair = (i: number, o: number) => [i > 0 ? `+${eur(i)}` : '', o > 0 ? `−\u2060${eur(o)}` : ''].filter(Boolean).join(' / ');
   const parts: string[] = [];
   if (r.knownIn > 0 || r.knownOut > 0) parts.push(`Known: ${pair(r.knownIn, r.knownOut)}${r.owedOut > 0 ? ` (bills owed ${eur(r.owedOut)})` : ''}`);
-  if (r.regularIn > 0 || r.regularOut > 0) parts.push(`Repeats: ${pair(r.regularIn, r.regularOut)}`);
+  if (r.regularIn > 0 || r.regularOut > 0) parts.push(`Repeats, loans and schemes: ${pair(r.regularIn, r.regularOut)}`);
   if (r.assumedIn > 0 || r.assumedOut > 0) parts.push(`Budget: ${pair(r.assumedIn, r.assumedOut)}`);
   return parts.join('. ');
 }

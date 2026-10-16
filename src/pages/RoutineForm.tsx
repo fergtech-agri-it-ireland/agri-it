@@ -38,6 +38,7 @@ export default function RoutineForm() {
   const [weekday, setWeekday] = useState(String(existing?.weekday ?? t0.getUTCDay()));
   const [dom, setDom] = useState(existing?.day_of_month ?? t0.getUTCDate());
   const [every, setEvery] = useState(existing?.interval_days ?? 21);
+  const [months, setMonths] = useState(String(existing?.interval_months ?? 1));
   const [start, setStart] = useState(existing?.start_date ?? today);
   const [end, setEnd] = useState(existing?.end_date ?? '');
   const [amount, setAmount] = useState(existing?.amount !== null && existing?.amount !== undefined ? String(existing.amount) : '');
@@ -61,7 +62,7 @@ export default function RoutineForm() {
   const draft: Omit<Routine, 'id' | 'created_at'> = {
     farm_id: farmId!, kind, title: title.trim() || (category ? (kind === 'expense' ? COST_LABEL[category as CostCategory] : INCOME_LABEL[category as IncomeType]) : ROUTINE_KIND_LABEL[kind]),
     frequency, interval_days: frequency === 'every_n_days' ? every : null, weekday: frequency === 'weekly' ? Number(weekday) : null,
-    day_of_month: frequency === 'monthly' ? dom : null, start_date: start, end_date: end || null,
+    day_of_month: frequency === 'monthly' ? dom : null, interval_months: frequency === 'monthly' ? Number(months) : 1, start_date: start, end_date: end || null,
     amount: amount === '' ? null : Number(amount), category: kind === 'expense' || kind === 'income' ? category : null,
     counterparty: kind === 'expense' || kind === 'income' ? counterparty || null : null,
     feed_product_id: kind === 'count' || kind === 'order' ? feedId : null, silage_store_id: kind === 'silage' ? storeId : null,
@@ -144,6 +145,9 @@ export default function RoutineForm() {
         ]} />
         {frequency === 'weekly' && <Chips<string> label="On" columns={undefined} value={weekday} onChange={setWeekday} options={WEEKDAYS} />}
         {frequency === 'monthly' && <Stepper label="Day of the month" value={dom} min={1} onChange={(n) => setDom(Math.min(31, Math.max(1, n)))} hint="31 means the last day in shorter months." />}
+        {frequency === 'monthly' && <Chips label="How many months apart?" columns={3} value={months} onChange={setMonths}
+          hint="Counted from the month it starts. ESB bills often come every 2 months; insurance once a year."
+          options={[{ value: '1', label: 'Every month' }, { value: '2', label: '2 months' }, { value: '3', label: '3 months' }, { value: '6', label: '6 months' }, { value: '12', label: 'Once a year' }]} />}
         {frequency === 'every_n_days' && <Stepper label="Every how many days?" value={every} min={2} onChange={(n) => setEvery(Math.max(2, n))} unit="days" />}
         <div className="grid grid-cols-2 gap-2">
           <Field label="Starts" htmlFor="rs"><input id="rs" type="date" className="input" value={start} onChange={(e) => e.target.value && setStart(e.target.value)} /></Field>

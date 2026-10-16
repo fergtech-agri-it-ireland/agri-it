@@ -8,6 +8,7 @@
  *   G5 no false authority: no delivery date guessed when no delivery time is known
  *   G7 finance explainability: month-end and export totals reconcile with a reference ledger
  *   G08 supplier directory: every checked contact is rechecked within six months (30 days' grace)
+ *   Scheme payment timings (16 Oct 2026): sourced and rechecked within six months (30 days' grace)
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createDemoClient, _testDb, _testReset } from './demo/client';
@@ -205,6 +206,19 @@ describe('G08 supplier directory upkeep', () => {
       // To fix: check the number on the supplier's own contact page, then update verified_on in
       // a new migration, seed.sql and buildReference() (src/lib/demo/seed.ts).
       expect(addDays(by, RECHECK_GRACE_DAYS) >= today, `${r.what} is overdue a recheck (recheck by ${by})`).toBe(true);
+    }
+  });
+});
+
+describe('Scheme payment timings (16 Oct 2026): sourced, dated and rechecked', () => {
+  it('every timing names its source and is not more than 30 days past its recheck', async () => {
+    const { SCHEME_RULES } = await import('./schemes');
+    for (const r of SCHEME_RULES) {
+      expect(r.sources.every((s) => /^https:\/\//.test(s.url)), r.key).toBe(true);
+      expect(r.checkedOn <= today).toBe(true);
+      // To fix: check the Department's (or DAERA's) latest payment announcements, then update the
+      // dates, checkedOn and reviewBy in lib/schemes.ts (and bump SCHEMES_RULE_VERSION if a date moves).
+      expect(addDays(r.reviewBy, 30) >= today, `${r.key} is overdue a recheck (review by ${r.reviewBy})`).toBe(true);
     }
   });
 });

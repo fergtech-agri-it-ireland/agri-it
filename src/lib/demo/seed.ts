@@ -30,7 +30,7 @@ const T_CALF_ORDER = '90000000-0000-0000-0000-000000000002';
 
 /** Column defaults, mirroring the migration, applied to every insert. */
 export const DEFAULTS: Record<string, () => Row> = {
-  farms: () => ({ eircode: null, jurisdiction: 'ROI', enterprise: 'dairy', enterprises: [], financial_year_start_month: 1, opening_cash_eur: null, opening_cash_date: null, default_lead_time_days: null, forage_reserve_percent: 15, feed_target_days: 30, housing_start: null, turnout_date: null, bill_warning_days: 7, order_warning_days: 7 }),
+  farms: () => ({ eircode: null, jurisdiction: 'ROI', enterprise: 'dairy', enterprises: [], financial_year_start_month: 1, opening_cash_eur: null, opening_cash_date: null, default_lead_time_days: null, forage_reserve_percent: 15, feed_target_days: 30, housing_start: null, turnout_date: null, bill_warning_days: 7, order_warning_days: 7, herd_number: null, acres_owned: null, acres_rented: null, vat_status: null, accountant_name: null, accountant_contact: null, milk_buyer: null, setup: {} }),
   animal_groups: () => ({ breed: null, breeds: [], head_count: 0, head_count_updated_at: new Date().toISOString(), forage_t_per_head_month: null, housed: true, at_grass: false, housed_from: null, archived: false, sort_order: 0 }),
   head_count_history: () => ({ effective_on: todayISO(), reason: 'manual', previous_count: null }),
   suppliers: () => ({ farm_id: null, network: null, coverage: ['ROI'], central_phone: null, central_phone_label: null, secondary_phone: null, secondary_phone_label: null, website: null, local_contact_method: null, area_served: null, source_url: null, verified_on: null, needs_live_directory: false }),
@@ -39,12 +39,15 @@ export const DEFAULTS: Record<string, () => Row> = {
   feed_products: () => ({ supplier_id: null, catalogue_key: null, storage_location: null, safety_stock_mode: 'days', safety_stock_value: 3, lead_time_days: null, analysis: null, archived: false }),
   feed_transactions: () => ({ placed: true, placed_on: null, order_date: null, delivery_date: null, expected_delivery_date: null, order_status: null, linked_order_id: null, supplier_id: null, total_price_eur: null, price_per_tonne_eur: null, evidence: 'farmer_estimate', document_id: null, notes: null }),
   feeding_rules: () => ({ head_count_override: null, start_date: todayISO(), end_date: null, is_temporary: false, label: null, confirm_daily: true }),
-  routines: () => ({ interval_days: null, weekday: null, day_of_month: null, start_date: todayISO(), end_date: null, amount: null, category: null, counterparty: null, feed_product_id: null, silage_store_id: null, supplier_id: null, active: true }),
+  routines: () => ({ interval_days: null, weekday: null, day_of_month: null, interval_months: 1, start_date: todayISO(), end_date: null, amount: null, category: null, counterparty: null, feed_product_id: null, silage_store_id: null, supplier_id: null, active: true }),
   routine_completions: () => ({ amount: null, record_table: null, record_id: null, done_on: todayISO(), moved_to: null }),
   feed_use_logs: () => ({}),
   silage_stores: () => ({ acreage: null, yield_t_per_acre: null, length_m: null, width_m: null, avg_height_m: null, density_kg_m3: null, bale_count: null, bale_weight_kg: null, measured_tonnes: null, dm_percent: null, dmd_percent: null, crude_protein_percent: null, ph: null, measured_on: todayISO(), fed_out_tonnes: 0, notes: null }),
   income: () => ({ counterparty: null, milk_litres: null, fat_kg: null, protein_kg: null, animal_group_id: null, head_count: null, description: null, document_id: null, enterprise: null }),
-  costs: () => ({ other_label: null, supplier_id: null, supplier_name: null, feed_transaction_id: null, description: null, document_id: null, payment_status: 'paid', paid_on: null, due_on: null, invoice_ref: null, vat_eur: null, enterprise: null }),
+  costs: () => ({ other_label: null, supplier_id: null, supplier_name: null, feed_transaction_id: null, description: null, document_id: null, payment_status: 'paid', paid_on: null, due_on: null, invoice_ref: null, vat_eur: null, enterprise: null, loan_id: null, interest_eur: null }),
+  loans: () => ({ kind: 'loan', purpose: null, rate_percent: null, rate_type: null, repayment_eur: null, frequency: null, next_due: null, skip_months: [], interest_only_until: null, ends_on: null, credit_limit_eur: null, notes: null, archived: false }),
+  loan_statements: () => ({ balance_eur: null, interest_eur: null, document_id: null }),
+  expected_income: () => ({ part: 'full', rule: null, income_id: null }),
   budget_lines: () => ({ month: null }),
   farm_records: () => ({ details: {}, document_id: null, state: 'confirmed' }),
   jobs: () => ({ due_on: null, done_at: null, dismissed_at: null }),
@@ -179,7 +182,10 @@ export function buildSeed(): DB {
   db.farms = [{
     ...DEFAULTS.farms(), id: F, name: 'Glenview Farm', eircode: 'E91 X000', county: 'Tipperary', jurisdiction: 'ROI', enterprise: 'dairy', enterprises: ['dairy'],
     financial_year_start_month: 1, opening_cash_eur: 38000, opening_cash_date: `${year}-01-01`, default_lead_time_days: 3, forage_reserve_percent: 15,
-    housing_start: `${year}-11-01`, turnout_date: `${year + 1}-02-28`, created_by: DEMO_USER.id, created_at: stamp(), updated_at: stamp()
+    housing_start: `${year}-11-01`, turnout_date: `${year + 1}-02-28`, created_by: DEMO_USER.id, created_at: stamp(), updated_at: stamp(),
+    // Set up your farm (16 Oct 2026): details filled in and every stage done, so the demo opens on the dashboard
+    herd_number: 'P1234567', acres_owned: 110, acres_rented: 40, vat_status: 'flat_rate', accountant_name: 'Local accountant', milk_buyer: 'Tirlán',
+    setup: { farm: 'done', animals: 'done', feeding: 'done', jobs: 'done', income: 'done', bills: 'done', loans: 'done', yearend: 'done', year: 'done' }
   }];
   db.farm_members = [{ farm_id: F, user_id: DEMO_USER.id, role: 'owner', email: DEMO_USER.email, added_at: stamp() }];
 
@@ -325,6 +331,19 @@ export function buildSeed(): DB {
     { farm_id: F, spread_id: SP(1), field_id: FLD(1), acres: 8, kg: 400 }, { farm_id: F, spread_id: SP(1), field_id: FLD(2), acres: 9.5, kg: 475 },
     { farm_id: F, spread_id: SP(1), field_id: FLD(3), acres: 7, kg: 350 },
     { farm_id: F, spread_id: SP(2), field_id: FLD(1), acres: 8, kg: 400 }, { farm_id: F, spread_id: SP(2), field_id: FLD(2), acres: 9.5, kg: 475 }
+  ]);
+  // Loans and scheme payments (16 Oct 2026). The bank loan is the "Loan repayment" routine above, so it
+  // isn't added again here; a tractor on hire purchase and an overdraft show the rest. Scheme payments
+  // are dated ahead, so nothing is waiting for an answer when the demo opens.
+  put('loans', [
+    { id: 'a1000000-0000-0000-0000-000000000001', farm_id: F, lender: 'Finance company', kind: 'hire_purchase', purpose: 'machinery', balance_eur: 38000, balance_on: D(-20),
+      rate_percent: 6.9, rate_type: 'fixed', repayment_eur: 3150, frequency: 'quarterly', next_due: D(40), ends_on: D(1100), notes: 'Tractor' },
+    { id: 'a1000000-0000-0000-0000-000000000002', farm_id: F, lender: 'AIB', kind: 'overdraft', purpose: 'working_capital', balance_eur: 0, balance_on: D(-1), rate_percent: 9.5, credit_limit_eur: 25000 }
+  ]);
+  put('loan_statements', []);
+  put('expected_income', [
+    { farm_id: F, scheme: 'biss', label: `BISS and CRISS ${year}, advance`, scheme_year: year, part: 'advance', amount_eur: 27750, expected_on: D(20), rule: null },
+    { farm_id: F, scheme: 'biss', label: `BISS and CRISS ${year}, balance`, scheme_year: year, part: 'balance', amount_eur: 9250, expected_on: D(50), rule: null }
   ]);
   for (const t of ['documents', 'forecast_snapshots', 'calf_births', 'suggestion_decisions']) db[t] = db[t] ?? [];
   return db;

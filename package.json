@@ -1,7 +1,7 @@
 {
   "name": "agri-it",
   "private": true,
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Agri-It MVP: Irish farm intelligence for feed planning, cash flow and records",
   "type": "module",
   "engines": {

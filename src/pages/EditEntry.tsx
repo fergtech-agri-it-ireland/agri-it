@@ -1,12 +1,14 @@
 import { useState } from 'react';
+import { Trash2 } from 'lucide-react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useFarmData, useSave } from '../lib/data/farm';
 import type { Op } from '../lib/offline/outbox';
 import type { Cost, FarmBundle, FeedTransaction, FertiliserStock, Income, ISODate } from '../lib/types';
 import { COST_LABEL, INCOME_LABEL, type CostCategory } from '../lib/types';
 import { billOwner, editFeedTxn, priceFor, scaleSpread } from '../lib/editEntry';
+import { planDelete, type DeleteKind } from '../lib/deleteEntry';
 import { cur, eur, fmtDay, fmtKg, uuid } from '../lib/format';
-import { Button, Card, Chips, DateChips, Empty, Field, LinkButton, NumberInput, SaveBar, Screen, TextInput } from '../components/ui';
+import { Button, Card, Chips, DateChips, Empty, Field, LinkButton, NumberInput, SaveBar, Screen, Sheet, TextInput } from '../components/ui';
 import { QuantityInput, SupplierPicker } from '../components/pickers';
 
 /**
@@ -37,6 +39,57 @@ export default function EditEntry() {
   if (kind === 'job') { const j = b.jobs.find((x) => x.id === id); return j ? <JobEditor key={j.id} id={j.id} b={b} /> : missing; }
   if (kind === 'record') { const r = b.records.find((x) => x.id === id); return r ? <RecordEditor key={r.id} id={r.id} b={b} /> : missing; }
   return missing;
+}
+
+/**
+ * Delete what was saved. Nothing goes until the farmer has read what will be removed and said yes;
+ * the toast afterwards offers Undo, which puts every row back.
+ */
+function DeleteEntry({ kind, id, b }: { kind: DeleteKind; id: string; b: FarmBundle }) {
+  const save = useSave();
+  const done = useDone();
+  const [open, setOpen] = useState(false);
+  const [putBack, setPutBack] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const plan = planDelete(kind, id, b, { putAnimalsBack: putBack });
+  if (!plan) return null;
+
+  async function confirm() {
+    if (!plan || busy) return;
+    setBusy(true);
+    const ok = await save(plan.ops, { label: 'Deleted. Everything is worked out again without it', patch: plan.patch, undo: plan.undo, undoLabel: 'Put back' });
+    setBusy(false);
+    if (ok) { setOpen(false); done(); }
+  }
+
+  return (
+    <>
+      <Button variant="danger" block onClick={() => setOpen(true)}><Trash2 className="h-5 w-5" aria-hidden /> Delete this</Button>
+      <Sheet open={open} onClose={() => setOpen(false)} title="Delete this?">
+        <div className="max-h-[65vh] space-y-3 overflow-y-auto pb-3">
+          <p>You are about to delete {plan.what}. This is what will be removed:</p>
+          <ul className="list-disc space-y-1 pl-5 font-semibold">{plan.lines.map((l) => <li key={l}>{l}</li>)}</ul>
+          {plan.effects.length > 0 && (
+            <>
+              <p className="text-muted">And this changes:</p>
+              <ul className="list-disc space-y-1 pl-5">{plan.effects.map((l) => <li key={l}>{l}</li>)}</ul>
+            </>
+          )}
+          {plan.animalsBack && (
+            <label className="flex min-h-tap items-center gap-3 rounded-xl bg-pasture p-3">
+              <input type="checkbox" className="h-6 w-6" checked={putBack} onChange={(e) => setPutBack(e.target.checked)} />
+              <span>Put the {plan.animalsBack.head} head back into {plan.animalsBack.group}</span>
+            </label>
+          )}
+          <p className="text-[0.9375rem] text-muted">You can undo it straight after.</p>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <Button variant="secondary" onClick={() => setOpen(false)}>No, keep it</Button>
+          <Button variant="danger" disabled={busy} onClick={confirm}>Yes, delete</Button>
+        </div>
+      </Sheet>
+    </>
+  );
 }
 
 function useDone() {
@@ -124,6 +177,7 @@ function FeedEditor({ t, b }: { t: FeedTransaction; b: FarmBundle }) {
         )}
         <TextInput label="Note (optional)" value={notes} onChange={setNotes} voice />
       </Card>
+      <DeleteEntry kind="feed" id={t.id} b={b} />
       <SaveBar><Button block disabled={!valid} onClick={submit}>Save changes</Button></SaveBar>
     </Screen>
   );
@@ -170,7 +224,7 @@ function CostEditor({ c, b }: { c: Cost; b: FarmBundle }) {
         {owner ? (
           <div className="rounded-xl bg-pasture p-3">
             <p className="font-bold">{eur(Number(c.amount_eur), true)} on {fmtDay(c.occurred_on)}, {COST_LABEL[c.category]}</p>
-            <p className="text-[0.9375rem]">This bill comes from a {owner === 'feed_delivery' ? 'feed' : 'fertiliser'} delivery. To change the amount or the day, change the delivery and the bill follows.</p>
+            <p className="text-[0.9375rem]">This bill comes from a {owner === 'feed_delivery' ? 'feed' : 'fertiliser'} delivery. To change the amount or the day, change the delivery and the bill follows. To remove the bill, delete the delivery.</p>
             {ownerId && <LinkButton to={`/edit/${owner === 'feed_delivery' ? 'feed' : 'fert'}/${ownerId}`} variant="secondary" className="mt-2">Change the delivery</LinkButton>}
           </div>
         ) : (
@@ -192,6 +246,7 @@ function CostEditor({ c, b }: { c: Cost; b: FarmBundle }) {
         </div>
         <TextInput label="Note (optional)" value={note} onChange={setNote} voice />
       </Card>
+      <DeleteEntry kind="cost" id={c.id} b={b} />
       <SaveBar><Button block disabled={(!owner && (!amount || Number(amount) < 0))} onClick={submit}>Save changes</Button></SaveBar>
     </Screen>
   );
@@ -201,6 +256,7 @@ function CostEditor({ c, b }: { c: Cost; b: FarmBundle }) {
 // Income: milk cheques, sales, grants, grain
 // ---------------------------------------------------------------------------
 function IncomeEditor({ i }: { i: Income }) {
+  const b = useFarmData();
   const save = useSave();
   const done = useDone();
   const [amount, setAmount] = useState(String(i.amount_eur));
@@ -247,6 +303,7 @@ function IncomeEditor({ i }: { i: Income }) {
         <TextInput label={i.income_type === 'milk' ? 'Processor' : 'From'} value={from} onChange={setFrom} />
         <TextInput label="What for (optional)" value={desc} onChange={setDesc} voice />
       </Card>
+      <DeleteEntry kind="income" id={i.id} b={b} />
       <SaveBar><Button block disabled={!amount || Number(amount) < 0} onClick={submit}>Save changes</Button></SaveBar>
     </Screen>
   );
@@ -303,6 +360,7 @@ function FertEditor({ s, b }: { s: FertiliserStock; b: FarmBundle }) {
         )}
         <TextInput label="Note (optional)" value={notes} onChange={setNotes} voice />
       </Card>
+      <DeleteEntry kind="fert" id={s.id} b={b} />
       <SaveBar><Button block disabled={kg.trim() === '' || !Number.isFinite(Number(kg))} onClick={submit}>Save changes</Button></SaveBar>
     </Screen>
   );
@@ -353,6 +411,7 @@ function SpreadEditor({ id, b }: { id: string; b: FarmBundle }) {
         <TextInput label="Note (optional)" value={notes} onChange={setNotes} voice />
         <p className="text-[0.9375rem] text-muted">{fmtKg(Number(s.total_kg))} before. Fields are changed on the Fields screen.</p>
       </Card>
+      <DeleteEntry kind="spread" id={s.id} b={b} />
       <SaveBar><Button block disabled={!kg || Number(kg) <= 0} onClick={submit}>Save changes</Button></SaveBar>
     </Screen>
   );
@@ -382,6 +441,7 @@ function JobEditor({ id, b }: { id: string; b: FarmBundle }) {
         <DateChips label="Due" value={due || j.due_on || new Date().toISOString().slice(0, 10)} onChange={setDue} allowFuture />
         {due && <Button variant="ghost" onClick={() => setDue('')}>No due date</Button>}
       </Card>
+      <DeleteEntry kind="job" id={j.id} b={b} />
       <SaveBar><Button block disabled={!title.trim()} onClick={submit}>Save changes</Button></SaveBar>
     </Screen>
   );
@@ -407,6 +467,7 @@ function RecordEditor({ id, b }: { id: string; b: FarmBundle }) {
         <TextInput label="Title" value={title} onChange={setTitle} voice />
         <DateChips label="Date" value={date} onChange={setDate} />
       </Card>
+      <DeleteEntry kind="record" id={r.id} b={b} />
       <SaveBar><Button block disabled={!title.trim()} onClick={submit}>Save changes</Button></SaveBar>
     </Screen>
   );

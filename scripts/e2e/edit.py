@@ -143,7 +143,7 @@ with sync_playwright() as p:
     check('Jobs have a Change pencil', pg.get_by_role('link', name=re.compile('^Change job')).count() >= 1 or 'Nothing to do' in text(pg))
     go(pg, '#/edit/feed/does-not-exist')
     check('A missing record shows a calm message', "isn't here" in text(pg), text(pg))
-    check('No em dashes on screen', '—' not in pg.locator('body').inner_text())
+    check('No em dashes on screen', chr(0x2014) not in pg.locator('body').inner_text())
     pg.screenshot(path=OUT + 'edit.png')
     b.close()
 

@@ -7,7 +7,7 @@ import type { FertiliserStock } from '../lib/types';
 import { eur, fmtDate, fmtDay, fmtKg, todayISO, uuid } from '../lib/format';
 import { GUIDANCE, needsRecheck, ruleSourceLine } from '../lib/spreading';
 import { catalogueItem } from '../lib/catalogue';
-import { Button, Card, Chips, Empty, Explain, LinkButton, List, NumberInput, Row, Screen, SectionTitle, Sheet } from '../components/ui';
+import { Button, Card, ChangeLink, Chips, Empty, Explain, LinkButton, List, NumberInput, Row, Screen, SectionTitle, Sheet } from '../components/ui';
 import { CsoCompare } from '../components/CsoCompare';
 import { WhyDifferent } from '../components/WhyDifferent';
 import { REASON_SHORT, REASON_TEXT, reasonTally, worthAsking, type StockReason } from '../lib/stockReasons';
@@ -110,8 +110,8 @@ export function FertiliserDetail() {
   const p = state.product;
   const supplier = b.suppliers.find((s) => s.id === p.supplier_id);
   const rows = [
-    ...b.fertStock.filter((r) => r.product_id === p.id).map((r) => ({ on: r.on_date, at: r.created_at ?? '', text: r.kind === 'order' ? `Ordered ${fmtKg(Number(r.quantity_kg))}${r.order_status === 'cancelled' ? ' (cancelled)' : r.order_status === 'delivered' ? ' (delivered)' : ''}` : r.kind === 'delivery' ? `Delivered ${fmtKg(Number(r.quantity_kg))}${r.linked_order_id ? ' against an order' : ''}` : r.kind === 'count' ? `Stock check: ${fmtKg(Number(r.quantity_kg))}${r.reason ? `. Why: ${REASON_SHORT[r.reason]}` : ''}` : r.kind === 'adjustment' ? `${Number(r.quantity_kg) < 0 ? 'Taken off' : 'Added'} ${fmtKg(Math.abs(Number(r.quantity_kg)))}${r.reason ? `: ${REASON_TEXT.fertiliser[r.reason]}` : ''}` : `Opening stock: ${fmtKg(Number(r.quantity_kg))}${r.evidence === 'farmer_estimate' ? ' (rough guess)' : ''}`, cost: r.cost_id ? b.costs.find((c) => c.id === r.cost_id) : undefined })),
-    ...b.spreads.filter((r) => r.product_id === p.id).map((r) => ({ on: r.spread_on, at: r.created_at ?? '', text: `Spread ${fmtKg(Number(r.total_kg))} on ${b.spreadFields.filter((x) => x.spread_id === r.id).length} field(s)`, cost: undefined }))
+    ...b.fertStock.filter((r) => r.product_id === p.id).map((r) => ({ edit: `/edit/fert/${r.id}`, on: r.on_date, at: r.created_at ?? '', text: r.kind === 'order' ? `Ordered ${fmtKg(Number(r.quantity_kg))}${r.order_status === 'cancelled' ? ' (cancelled)' : r.order_status === 'delivered' ? ' (delivered)' : ''}` : r.kind === 'delivery' ? `Delivered ${fmtKg(Number(r.quantity_kg))}${r.linked_order_id ? ' against an order' : ''}` : r.kind === 'count' ? `Stock check: ${fmtKg(Number(r.quantity_kg))}${r.reason ? `. Why: ${REASON_SHORT[r.reason]}` : ''}` : r.kind === 'adjustment' ? `${Number(r.quantity_kg) < 0 ? 'Taken off' : 'Added'} ${fmtKg(Math.abs(Number(r.quantity_kg)))}${r.reason ? `: ${REASON_TEXT.fertiliser[r.reason]}` : ''}` : `Opening stock: ${fmtKg(Number(r.quantity_kg))}${r.evidence === 'farmer_estimate' ? ' (rough guess)' : ''}`, cost: r.cost_id ? b.costs.find((c) => c.id === r.cost_id) : undefined })),
+    ...b.spreads.filter((r) => r.product_id === p.id).map((r) => ({ edit: `/edit/spread/${r.id}`, on: r.spread_on, at: r.created_at ?? '', text: `Spread ${fmtKg(Number(r.total_kg))} on ${b.spreadFields.filter((x) => x.spread_id === r.id).length} field(s)`, cost: undefined }))
   ].sort((x, y) => y.on.localeCompare(x.on) || y.at.localeCompare(x.at)).slice(0, 15);
   const factor = unit === 't' ? 1000 : unit === 'bags' ? 500 : 1;
   const countedKg = Math.round(Number(kg) * factor * 10) / 10;
@@ -195,7 +195,7 @@ export function FertiliserDetail() {
       )}
       {catalogueItem(p.catalogue_key)?.exempt && <p className="px-1 text-sm text-muted">{catalogueItem(p.catalogue_key)!.name}: lime and straight potash can be spread all year, so it doesn't count as a round of nitrogen.</p>}
       <SectionTitle action={<LinkButton to={`/fertiliser/${p.id}/edit`} variant="secondary">Edit</LinkButton>}>History</SectionTitle>
-      {rows.length ? <List>{rows.map((r, i) => <Row key={i} title={r.text} sub={`${fmtDay(r.on)}${r.cost && b.role !== 'worker' ? ` · ${eur(Number(r.cost.amount_eur))}${r.cost.payment_status === 'owed' ? ' owed' : ''}` : ''}`} />)}</List> : <p className="px-1 text-muted">Nothing recorded yet.</p>}
+      {rows.length ? <List>{rows.map((r, i) => <Row key={i} title={r.text} sub={`${fmtDay(r.on)}${r.cost && b.role !== 'worker' ? ` · ${eur(Number(r.cost.amount_eur))}${r.cost.payment_status === 'owed' ? ' owed' : ''}` : ''}`} right={<ChangeLink to={r.edit} what={r.text} />} />)}</List> : <p className="px-1 text-muted">Nothing recorded yet.</p>}
       <Sheet open={checking} onClose={() => setChecking(false)} title={`How much ${p.name} is there?`}>
         <div className="space-y-4">
           <Chips columns={3} value={unit} onChange={setUnit} options={[{ value: 't', label: 'Tonnes' }, { value: 'bags', label: '500 kg bags' }, { value: 'kg', label: 'kg' }]} />

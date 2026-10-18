@@ -14,7 +14,7 @@ import { supabase } from '../lib/supabase';
 import { EVIDENCE_LABEL } from '../lib/types';
 import { addDays, eur, fmtDate, fmtDay, fmtKg, fmtNum, todayISO } from '../lib/format';
 import { resolveContacts, telHref } from '../lib/suppliers';
-import { Button, CallButton, Card, ConfidenceBadge, Empty, Explain, LinkButton, List, Row, Screen, SectionTitle } from '../components/ui';
+import { Button, CallButton, Card, ChangeLink, ConfidenceBadge, Empty, Explain, LinkButton, List, Row, Screen, SectionTitle } from '../components/ui';
 
 export default function FeedDetail() {
   const { id } = useParams();
@@ -291,9 +291,10 @@ export default function FeedDetail() {
         {txns.filter((t) => t.txn_type !== 'order' || t.order_status !== 'delivered').slice(0, 15).map((t) => (
           <Row key={t.id} title={`${{ opening: 'Opening stock', order: 'Order', delivery: 'Delivery', count: 'Stock count', adjustment: Number(t.quantity_kg) < 0 ? 'Taken off' : 'Added' }[t.txn_type]}: ${fmtKg(Math.abs(Number(t.quantity_kg)))}`}
             sub={`${fmtDate(t.effective_on)}. ${t.reason ? `${REASON_TEXT.feed[t.reason]}. ` : ''}${t.txn_type === 'order' && t.placed === false && t.order_status === 'open' ? 'To place, not placed yet' : EVIDENCE_LABEL[t.evidence]}${t.total_price_eur ? `. ${eur(Number(t.total_price_eur))}` : ''}${t.order_status === 'cancelled' ? '. Cancelled' : ''}`}
-            right={t.txn_type === 'order' && t.order_status === 'open'
-              ? <Button variant="ghost" onClick={() => save([{ kind: 'update', table: 'feed_transactions', match: { id: t.id }, patch: { order_status: 'cancelled' } }], { label: 'Order cancelled', undo: [{ kind: 'update', table: 'feed_transactions', match: { id: t.id }, patch: { order_status: 'open' } }] })}>Cancel</Button>
-              : undefined} />
+            right={<>
+              {t.txn_type === 'order' && t.order_status === 'open' && <Button variant="ghost" onClick={() => save([{ kind: 'update', table: 'feed_transactions', match: { id: t.id }, patch: { order_status: 'cancelled' } }], { label: 'Order cancelled', undo: [{ kind: 'update', table: 'feed_transactions', match: { id: t.id }, patch: { order_status: 'open' } }] })}>Cancel</Button>}
+              <ChangeLink to={`/edit/feed/${t.id}`} what={`${t.txn_type} of ${fmtKg(Math.abs(Number(t.quantity_kg)))}`} />
+            </>} />
         ))}
       </List>
     </Screen>

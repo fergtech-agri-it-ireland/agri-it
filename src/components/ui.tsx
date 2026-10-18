@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { AlertOctagon, AlertTriangle, Check, CheckCircle2, ChevronDown, ChevronLeft, CircleHelp, Info, Mic, Minus, Phone, Plus, X } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { AlertOctagon, AlertTriangle, Check, CheckCircle2, ChevronDown, ChevronLeft, CircleHelp, Info, Mic, Minus, Pencil, Phone, Plus, X } from 'lucide-react';
 import type { Confidence, ISODate } from '../lib/types';
 import { addDays, fmtDate, todayISO } from '../lib/format';
 import { telHref } from '../lib/suppliers';
@@ -11,11 +11,15 @@ import { ReleaseLine } from './ReleaseLine';
 // ---------------------------------------------------------------------------
 export function Screen({ title, back, right, children, sub }: { title: string; back?: string | true; right?: ReactNode; children: ReactNode; sub?: ReactNode }) {
   const nav = useNavigate();
+  const loc = useLocation();
+  // Back lands on the screen you came from. Only a screen opened directly (a reminder, a link,
+  // a reload: the router gives it the key "default") falls back to its parent.
+  const goBack = () => (loc.key !== 'default' ? nav(-1) : nav(typeof back === 'string' ? back : '/', { replace: true }));
   return (
     <div className="pad-bottom mx-auto w-full max-w-xl">
       <header className="sticky top-0 z-20 flex min-h-[3.75rem] items-center gap-1 bg-pasture/95 px-3 backdrop-blur" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
         {back && (
-          <button aria-label="Back" onClick={() => (back === true ? nav(-1) : nav(back))}
+          <button aria-label="Back" onClick={goBack}
             className="-ml-2 flex min-h-tap min-w-tap items-center justify-center rounded-full hover:bg-card">
             <ChevronLeft className="h-6 w-6" />
           </button>
@@ -287,6 +291,15 @@ export function Row({ to, title, sub, right, icon }: { to?: string; title: React
   );
   const cls = 'flex min-h-[3.5rem] items-center gap-3 px-4 py-2.5';
   return to ? <Link to={to} className={`${cls} hover:bg-pasture`}>{inner}</Link> : <div className={cls}>{inner}</div>;
+}
+
+/** A pencil that opens the edit screen for a saved record: every list of records carries one. */
+export function ChangeLink({ to, what = 'this' }: { to: string; what?: string }) {
+  return (
+    <Link to={to} aria-label={`Change ${what}`} className="flex min-h-tap min-w-tap shrink-0 items-center justify-center rounded-full text-accent hover:bg-field-light">
+      <Pencil className="h-5 w-5" aria-hidden />
+    </Link>
+  );
 }
 
 export function List({ children }: { children: ReactNode }) {

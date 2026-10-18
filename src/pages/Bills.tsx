@@ -4,7 +4,7 @@ import { useFarmData, useSave } from '../lib/data/farm';
 import { markOwed, markPaid, moneyStates, owedBySupplier, paidOn, payeeOf, type OwedBill } from '../lib/forecast/bills';
 import { COST_LABEL, type Cost } from '../lib/types';
 import { addDays, eur, fmtDay, fmtKg, todayISO } from '../lib/format';
-import { Button, Card, DateChips, Empty, LinkButton, Screen, SectionTitle, Sheet, ToneIcon } from '../components/ui';
+import { Button, Card, ChangeLink, DateChips, Empty, LinkButton, Screen, SectionTitle, Sheet, ToneIcon } from '../components/ui';
 
 /**
  * Bills to pay (review gap P0): what is owed, to whom, and when it is due. Paying a bill
@@ -71,6 +71,7 @@ export default function Bills() {
                   </p>
                 </div>
                 <span className="shrink-0 font-bold">{eur(Number(o.cost.amount_eur), true)}</span>
+                <ChangeLink to={`/edit/cost/${o.cost.id}`} what={`bill ${what(o.cost)}`} />
                 <Button variant="secondary" className="shrink-0" onClick={() => { setOn(today); setPaying({ title: `${g.payee}: ${what(o.cost)}`, bills: [o] }); }}>Pay</Button>
               </li>
             ))}

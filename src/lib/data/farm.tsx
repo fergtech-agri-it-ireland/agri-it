@@ -209,7 +209,8 @@ const TABLE_LIST: Record<string, keyof FarmBundle> = {
   costs: 'costs', income: 'income', jobs: 'jobs', animal_groups: 'groups', feed_products: 'products', feeding_rules: 'rules',
   silage_stores: 'silage', farm_records: 'records', routines: 'routines', crops: 'crops', feed_transactions: 'txns',
   documents: 'documents', budget_lines: 'budget', calving_seasons: 'seasons',
-  loans: 'loans', loan_statements: 'loanStatements', expected_income: 'expected'
+  loans: 'loans', loan_statements: 'loanStatements', expected_income: 'expected',
+  fertiliser_stock: 'fertStock', fertiliser_spreads: 'spreads', fields: 'fields'
 };
 
 /**

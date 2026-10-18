@@ -45,24 +45,24 @@ export function DiaryHistory() {
     if (!p) continue;
     const supplier = b.suppliers.find((s) => s.id === t.supplier_id)?.name;
     if (t.txn_type === 'delivery') {
-      entries.push({ id: t.id, date: t.effective_on, title: `${p.name}, ${fmtKg(Number(t.quantity_kg))} arrived`, sub: [supplier, t.price_per_tonne_eur ? `${eur(Number(t.price_per_tonne_eur))}/t` : null].filter(Boolean).join(', ') || 'Delivery', amount: t.total_price_eur !== null ? -Number(t.total_price_eur) : null, Icon: Package, tone: 'feed', to: `/feed/${p.id}` });
+      entries.push({ id: t.id, date: t.effective_on, title: `${p.name}, ${fmtKg(Number(t.quantity_kg))} arrived`, sub: [supplier, t.price_per_tonne_eur ? `${eur(Number(t.price_per_tonne_eur))}/t` : null].filter(Boolean).join(', ') || 'Delivery', amount: t.total_price_eur !== null ? -Number(t.total_price_eur) : null, Icon: Package, tone: 'feed', to: `/edit/feed/${t.id}` });
     } else if (t.txn_type === 'order' && t.order_status !== 'cancelled') {
-      entries.push({ id: t.id, date: t.order_date ?? t.effective_on, title: `Ordered ${fmtKg(Number(t.quantity_kg))} ${p.name}`, sub: t.order_status === 'open' ? `Due ${fmtDay(t.expected_delivery_date ?? t.effective_on)}` : 'Delivered', amount: null, Icon: Truck, tone: 'feed', to: `/feed/${p.id}` });
+      entries.push({ id: t.id, date: t.order_date ?? t.effective_on, title: `Ordered ${fmtKg(Number(t.quantity_kg))} ${p.name}`, sub: t.order_status === 'open' ? `Due ${fmtDay(t.expected_delivery_date ?? t.effective_on)}` : 'Delivered', amount: null, Icon: Truck, tone: 'feed', to: `/edit/feed/${t.id}` });
     } else if (t.txn_type === 'count' || t.txn_type === 'opening') {
-      entries.push({ id: t.id, date: t.effective_on, title: `${p.name} ${t.txn_type === 'count' ? 'counted' : 'opening stock'}: ${fmtKg(Number(t.quantity_kg))}`, sub: t.notes ?? 'Stock check', amount: null, Icon: Ruler, tone: 'record', to: `/feed/${p.id}` });
+      entries.push({ id: t.id, date: t.effective_on, title: `${p.name} ${t.txn_type === 'count' ? 'counted' : 'opening stock'}: ${fmtKg(Number(t.quantity_kg))}`, sub: t.notes ?? 'Stock check', amount: null, Icon: Ruler, tone: 'record', to: `/edit/feed/${t.id}` });
     }
   }
   for (const i of b.income) {
     const cpl = i.milk_litres ? (Number(i.amount_eur) / Number(i.milk_litres)) * 100 : null;
     entries.push({
-      id: i.id, date: i.occurred_on, amount: Number(i.amount_eur), tone: 'in', to: '/money',
+      id: i.id, date: i.occurred_on, amount: Number(i.amount_eur), tone: 'in', to: `/edit/income/${i.id}`,
       Icon: i.income_type === 'milk' ? Milk : i.income_type === 'livestock' ? Beef : Banknote,
       title: i.income_type === 'milk' ? `Milk cheque${i.counterparty ? `, ${i.counterparty}` : ''}` : i.description ?? INCOME_LABEL[i.income_type],
       sub: i.income_type === 'milk' && i.milk_litres ? `${fmtNum(Number(i.milk_litres))} L${cpl ? ` at ${fmtNum(cpl)} c/L` : ''}` : i.counterparty ?? INCOME_LABEL[i.income_type]
     });
   }
   for (const c of b.costs.filter((x) => !x.feed_transaction_id)) {
-    entries.push({ id: c.id, date: c.occurred_on, amount: -Number(c.amount_eur), tone: 'out', to: '/money', Icon: Receipt, title: c.description ?? c.other_label ?? COST_LABEL[c.category], sub: [COST_LABEL[c.category], c.supplier_name].filter(Boolean).join(', ') });
+    entries.push({ id: c.id, date: c.occurred_on, amount: -Number(c.amount_eur), tone: 'out', to: `/edit/cost/${c.id}`, Icon: Receipt, title: c.description ?? c.other_label ?? COST_LABEL[c.category], sub: [COST_LABEL[c.category], c.supplier_name].filter(Boolean).join(', ') });
   }
   // Feeding ticked off on Today: one line per day, what actually went out
   const feedDays = new Map<string, typeof b.feedLogs>();
@@ -92,7 +92,7 @@ export function DiaryHistory() {
     });
   }
   for (const r of b.records) {
-    entries.push({ id: r.id, date: r.occurred_on, amount: null, tone: 'record', to: '/records', Icon: ClipboardList, title: r.title, sub: RECORD_LABEL[r.record_type] });
+    entries.push({ id: r.id, date: r.occurred_on, amount: null, tone: 'record', to: `/edit/record/${r.id}`, Icon: ClipboardList, title: r.title, sub: RECORD_LABEL[r.record_type] });
   }
   const timeline = entries.filter((e) => e.date <= today).sort((x, y) => y.date.localeCompare(x.date)).slice(0, limit);
   const recentCut = addDays(today, -13);

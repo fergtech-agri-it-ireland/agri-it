@@ -171,7 +171,7 @@ export default function Diary() {
                 const p = b.products.find((x) => x.id === t.feed_product_id);
                 const supplier = b.suppliers.find((s) => s.id === t.supplier_id)?.name;
                 const kind = t.txn_type === 'delivery' ? 'Delivered' : t.txn_type === 'order' ? 'Ordered' : 'Counted';
-                return <Line key={t.id} to={p ? `/feed/${p.id}` : undefined} title={p?.name ?? 'Feed'}
+                return <Line key={t.id} to={`/edit/feed/${t.id}`} title={p?.name ?? 'Feed'}
                   sub={[kind, supplier, t.price_per_tonne_eur ? `${eur(Number(t.price_per_tonne_eur))}/t` : null].filter(Boolean).join(', ')}
                   right={fmtKg(Number(t.quantity_kg))} />;
               }) : undefined}
@@ -180,14 +180,14 @@ export default function Diary() {
             <Section title="Money" total={income.length + costs.length ? `${net >= 0 ? '+' : '−'}${eur(Math.abs(net))}` : undefined}
               add={{ to: moneyAdd ? moneyAdd.to : '/record/cost', label: moneyAdd ? `Add ${moneyAdd.label.toLowerCase()} or bill` : 'Add bill or income' }}>
               {income.length + costs.length > 0 ? [
-                ...income.map((i) => <Line key={i.id} to="/money" title={i.income_type === 'milk' ? `Milk cheque${i.counterparty ? `, ${i.counterparty}` : ''}` : i.description ?? INCOME_LABEL[i.income_type]}
+                ...income.map((i) => <Line key={i.id} to={`/edit/income/${i.id}`} title={i.income_type === 'milk' ? `Milk cheque${i.counterparty ? `, ${i.counterparty}` : ''}` : i.description ?? INCOME_LABEL[i.income_type]}
                   sub={i.income_type === 'livestock' && i.head_count ? `${i.head_count} head` : INCOME_LABEL[i.income_type]} right={`+${eur(Number(i.amount_eur))}`} />),
-                ...costs.map((c) => <Line key={c.id} to="/money" title={c.description ?? c.other_label ?? COST_LABEL[c.category]} sub={[COST_LABEL[c.category], c.supplier_name].filter(Boolean).join(', ')} right={`−${eur(Number(c.amount_eur))}`} />)
+                ...costs.map((c) => <Line key={c.id} to={`/edit/cost/${c.id}`} title={c.description ?? c.other_label ?? COST_LABEL[c.category]} sub={[COST_LABEL[c.category], c.supplier_name].filter(Boolean).join(', ')} right={`−${eur(Number(c.amount_eur))}`} />)
               ] : undefined}
             </Section>
 
             <Section title="Records" add={{ to: '/records/new', label: 'Add a record' }}>
-              {records.length > 0 ? records.map((r) => <Line key={r.id} to="/records" title={r.title} sub={RECORD_LABEL[r.record_type]} />) : undefined}
+              {records.length > 0 ? records.map((r) => <Line key={r.id} to={`/edit/record/${r.id}`} title={r.title} sub={RECORD_LABEL[r.record_type]} />) : undefined}
             </Section>
           </>
         )}

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Circle, CheckCircle2 } from 'lucide-react';
 import { useFarmData, useFarmCtx, useSave } from '../lib/data/farm';
 import { addDays, fmtDay, todayISO, uuid } from '../lib/format';
-import { Button, Card, DateChips, List, Row, Screen, Sheet, TextInput } from '../components/ui';
+import { Button, Card, ChangeLink, DateChips, List, Row, Screen, Sheet, TextInput } from '../components/ui';
 import type { Job } from '../lib/types';
 
 export default function Jobs() {
@@ -43,6 +43,7 @@ export default function Jobs() {
             <button className="block min-w-0 flex-1 text-left" onClick={() => toggle(j.id, new Date().toISOString())}>
               <Row icon={<Circle className="h-7 w-7 text-accent" aria-label="Mark done" />} title={j.title} sub={j.due_on ? `${j.due_on < todayISO() ? 'Overdue, stays here until done. ' : ''}Due ${fmtDay(j.due_on)}` : undefined} />
             </button>
+            <ChangeLink to={`/edit/job/${j.id}`} what={`job ${j.title}`} />
             <Button variant="ghost" className="mr-2 shrink-0" aria-label={`Move or take off: ${j.title}`} onClick={() => { setMoveTo(addDays(todayISO(), 1)); setEditing(j); }}>Move</Button>
           </div>
         ))}

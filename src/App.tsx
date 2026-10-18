@@ -4,6 +4,7 @@ import { supabaseConfigured } from './lib/supabase';
 import Login from './pages/Login';
 import Onboarding from './pages/Onboarding';
 import Today from './pages/Today';
+import EditEntry from './pages/EditEntry';
 import Forecast from './pages/Forecast';
 import FeedDetail from './pages/FeedDetail';
 import FeedEdit from './pages/FeedEdit';
@@ -125,6 +126,7 @@ export default function App() {
         <Route path="farm/groups" element={<Groups />} />
         <Route path="farm/types" element={<FarmTypes />} />
         <Route path="farm/crops" element={<Crops />} />
+        <Route path="edit/:kind/:id" element={<EditEntry />} />
         <Route path="farm/silage" element={<Silage />} />
         <Route path="farm/silage/new" element={<SilageForm />} />
         <Route path="farm/silage/:id/edit" element={<SilageForm />} />

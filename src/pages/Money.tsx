@@ -24,8 +24,8 @@ export default function Money() {
   const nextLoan = loans.flatMap((l) => upcomingRepayments(l, b.costs, b.loanStatements ?? [], d.today, d.today, addDays(d.today, 90)).slice(0, 1)).sort((a, c) => a.on.localeCompare(c.on))[0];
   const expected = stillExpected(b.expected ?? []);
   const recent = [
-    ...b.income.map((i) => ({ id: i.id, date: i.occurred_on, title: i.description ?? INCOME_LABEL[i.income_type], who: i.counterparty, amount: Number(i.amount_eur) })),
-    ...b.costs.map((c) => ({ id: c.id, date: c.occurred_on, title: c.description ?? (c.category === 'other' ? c.other_label ?? 'Other' : COST_LABEL[c.category]), who: [c.supplier_name, paidOn(c) === null ? 'owed' : null].filter(Boolean).join(', '), amount: -Number(c.amount_eur) }))
+    ...b.income.map((i) => ({ id: i.id, edit: `/edit/income/${i.id}`, date: i.occurred_on, title: i.description ?? INCOME_LABEL[i.income_type], who: i.counterparty, amount: Number(i.amount_eur) })),
+    ...b.costs.map((c) => ({ id: c.id, edit: `/edit/cost/${c.id}`, date: c.occurred_on, title: c.description ?? (c.category === 'other' ? c.other_label ?? 'Other' : COST_LABEL[c.category]), who: [c.supplier_name, paidOn(c) === null ? 'owed' : null].filter(Boolean).join(', '), amount: -Number(c.amount_eur) }))
   ].filter((r) => r.date <= d.today).sort((a, c) => c.date.localeCompare(a.date)).slice(0, 12);
 
   return (
@@ -140,7 +140,7 @@ export default function Money() {
       {recent.length === 0 ? (
         <Card><p className="text-muted">Nothing recorded yet.</p><div className="mt-3 flex gap-2"><LinkButton to="/record/milk" variant="secondary">Milk cheque</LinkButton><LinkButton to="/record/cost" variant="secondary">Paid a bill</LinkButton></div></Card>
       ) : (
-        <List>{recent.map((r) => <Row key={r.id} title={r.title} sub={[fmtDay(r.date), r.who].filter(Boolean).join(', ')} right={<span className={`font-bold ${r.amount > 0 ? 'text-ok' : ''}`}>{r.amount > 0 ? '+' : '−'}{eur(Math.abs(r.amount))}</span>} />)}</List>
+        <List>{recent.map((r) => <Row key={r.id} to={r.edit} title={r.title} sub={[fmtDay(r.date), r.who].filter(Boolean).join(', ')} right={<span className={`font-bold ${r.amount > 0 ? 'text-ok' : ''}`}>{r.amount > 0 ? '+' : '−'}{eur(Math.abs(r.amount))}</span>} />)}</List>
       )}
     </Screen>
   );

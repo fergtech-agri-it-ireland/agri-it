@@ -7,18 +7,19 @@ import { useDerived } from '../lib/data/derived';
 import { cashDial, silageDial } from '../lib/dials';
 import { useTheme } from '../lib/theme';
 import { buildChecklist, checklistProgress } from '../lib/routines';
-import { breedLabel, groupBreeds, farmTypes, grows, keepsAnimals, speciesOf, SPECIES } from '../lib/farmTypes';
+import { farmTypes, keepsAnimals } from '../lib/farmTypes';
 import { ReminderNudge } from '../components/Reminders';
 import { PhotoQueueNudge } from '../components/PhotoQueue';
-import { eur, fmtDay, fmtKg, fmtMonth, fmtNum, monthKey, todayISO } from '../lib/format';
+import { eur, fmtDay, fmtKg, todayISO } from '../lib/format';
 import { primaryRoute, telHref } from '../lib/suppliers';
 import type { FarmBundle } from '../lib/types';
 import type { FeedForecast } from '../lib/forecast/feed';
 import { IS_LOCAL, NS } from '../lib/env';
-import { ReadyToApprove } from '../components/ReadyToApprove';
+import { TodoCard } from '../components/TodoCard';
+import { ModuleGrid } from '../components/ModuleGrid';
+import { dashboardModules } from '../lib/modules';
 import { BackupNudge } from '../components/PhoneStorage';
 import { CalvingCard } from '../components/CalvingCard';
-import { Attention } from '../components/Attention';
 import { ReleaseLine } from '../components/ReleaseLine';
 
 type Derived = ReturnType<typeof useDerived>;
@@ -146,9 +147,10 @@ function FeedStatus({ f, phone, supplier, productId }: { f: FeedForecast; phone?
 // ---------------------------------------------------------------------------
 // Small cards: silage, cash
 // ---------------------------------------------------------------------------
-function Mini({ title, value, sub, fraction, tone, to }: { title: string; value: string; sub: string; fraction: number; tone: 'field' | 'money' | 'silage' | 'warn' | 'danger' | 'muted'; to: string }) {
+type MiniProps = { title: string; value: string; sub: string; fraction: number; tone: 'field' | 'money' | 'silage' | 'warn' | 'danger' | 'muted'; to: string; className?: string };
+function Mini({ title, value, sub, fraction, tone, to, className = '' }: MiniProps) {
   return (
-    <Link to={to} aria-label={`${title}: ${value}. ${sub}`} className="flex flex-col gap-2 rounded-[1.125rem] bg-card p-3.5 shadow-lift">
+    <Link to={to} aria-label={`${title}: ${value}. ${sub}`} className={`flex flex-col gap-2 rounded-[1.125rem] bg-card p-3.5 shadow-lift ${className}`}>
       <span className="text-[0.9375rem] font-bold">{title}</span>
       <span className="numeral text-[1.375rem] leading-none">{value}</span>
       <Bar fraction={fraction} tone={tone} />
@@ -194,137 +196,6 @@ function GuideCard({ b }: { b: FarmBundle }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Cards for each kind of farming
-// ---------------------------------------------------------------------------
-function MilkCard({ b }: { b: FarmBundle }) {
-  const last = [...b.income].filter((i) => i.income_type === 'milk').sort((x, y) => y.occurred_on.localeCompare(x.occurred_on))[0];
-  if (!last) return null;
-  const cpl = last.milk_litres ? (Number(last.amount_eur) / Number(last.milk_litres)) * 100 : null;
-  return (
-    <Tile title="Milk" meta={`Last cheque ${fmtDay(last.occurred_on)}`} to="/diary?tab=history" label="Milk">
-      <div className="grid grid-cols-3 gap-2">
-        <div><p className="numeral text-xl">{eur(Number(last.amount_eur))}</p><p className="text-xs text-muted">Cheque</p></div>
-        <div><p className="numeral text-xl">{last.milk_litres ? fmtNum(Number(last.milk_litres)) : '?'}</p><p className="text-xs text-muted">Litres</p></div>
-        <div><p className="numeral text-xl">{cpl === null ? '?' : `${cpl.toFixed(1)}c`}</p><p className="text-xs text-muted">Per litre</p></div>
-      </div>
-    </Tile>
-  );
-}
-
-function StockCard({ b }: { b: FarmBundle }) {
-  const groups = b.groups.filter((g) => !g.archived && g.head_count > 0);
-  if (groups.length === 0) return null;
-  const bySpecies = SPECIES.map((s) => ({ s, n: groups.filter((g) => speciesOf(g.animal_class) === s.value).reduce((t, g) => t + g.head_count, 0) })).filter((x) => x.n > 0);
-  return (
-    <Tile title="Your animals" meta={bySpecies.map((x) => `${fmtNum(x.n)} ${x.s.label.toLowerCase()}`).join(', ')} to="/farm/groups" label="Your animals">
-      <ul className="divide-y divide-line">
-        {groups.slice(0, 5).map((g) => (
-          <li key={g.id} className="flex min-h-[2.75rem] items-center gap-3 text-[0.9375rem]">
-            <span className="min-w-0 flex-1"><b className="font-semibold">{g.name}</b>{groupBreeds(g).length > 0 && <span className="text-muted">, {breedLabel(groupBreeds(g))}</span>}</span>
-            <span className="font-bold">{fmtNum(g.head_count)}</span>
-          </li>
-        ))}
-      </ul>
-      {groups.length > 5 && <Link to="/farm/groups" className="mt-1 inline-flex min-h-[2.5rem] items-center text-sm font-bold text-accent">All {groups.length} groups</Link>}
-    </Tile>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Fertiliser (14 Oct 2026): stock and fields due. Only once the farm has fields or fertiliser.
-// ---------------------------------------------------------------------------
-function FertiliserCard({ b, d, today }: { b: FarmBundle; d: Derived; today: string }) {
-  const fields = b.fields.filter((x) => !x.archived);
-  const f = d.fertiliser;
-  if (!fields.length && !f.products.length) return null;
-  const due = f.due.filter((x) => x.kind !== 'cut_passed');
-  const overdue = due.filter((x) => x.dueOn < today).length;
-  const s = f.season;
-  const season = s ? (s.open ? `Spreading open until ${fmtDay(s.lastDay)}` : `Closed until ${fmtDay(s.closedTo)}`) : undefined;
-  return (
-    <Tile title="Fertiliser" meta={season} to="/fertiliser" label="Fertiliser">
-      {f.products.length > 0 ? (
-        <ul className="divide-y divide-line">
-          {f.products.slice(0, 3).map((x) => (
-            <li key={x.product.id}>
-              <Link to={`/fertiliser/${x.product.id}`} className="flex min-h-[2.75rem] items-center gap-3 text-[0.9375rem]">
-                <span className="min-w-0 flex-1 font-semibold">{x.product.name}</span>
-                <span className={`font-bold ${x.low ? 'text-warn' : ''}`}>{x.basis === 'nothing' ? 'Not recorded' : fmtKg(x.stockKg)}{x.low ? ', low' : ''}</span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <Link to="/fertiliser/new" className="flex min-h-[2.75rem] items-center gap-2 text-[0.9375rem] font-bold text-accent">Add what's in the shed<ChevronRight className="h-4 w-4" aria-hidden /></Link>
-      )}
-      <Link to="/fertiliser" className="mt-2 flex min-h-[2.75rem] items-center gap-2 border-t border-line pt-2 text-[0.9375rem]">
-        <span className="min-w-0 flex-1">{!fields.length ? 'No fields yet' : s && !s.open ? 'No fields due while spreading is closed' : due.length === 0 ? 'No fields due on your rounds' : <><b>{due.length} field{due.length > 1 ? 's' : ''} due</b>{overdue ? `, ${overdue} overdue` : ''}</>}</span>
-        <ChevronRight className="h-4 w-4 shrink-0 text-muted" aria-hidden />
-      </Link>
-    </Tile>
-  );
-}
-
-function CropsCard({ b, today }: { b: FarmBundle; today: string }) {
-  const year = Number(today.slice(0, 4));
-  const crops = b.crops.filter((c) => !c.archived && c.harvest_year >= year);
-  const acres = crops.reduce((s, c) => s + Number(c.acres ?? 0), 0);
-  const from = `${year}-01-01`;
-  const inputs = b.costs.filter((c) => (c.category === 'seed_sprays' || c.category === 'fertiliser') && c.occurred_on >= from).reduce((s, c) => s + Number(c.amount_eur), 0);
-  const sales = b.income.filter((i) => i.income_type === 'crop' && i.occurred_on >= from).reduce((s, i) => s + Number(i.amount_eur), 0);
-  return (
-    <Tile title="Crops" meta={crops.length ? `${fmtNum(acres)} acres` : undefined} to="/farm/crops" label="Crops">
-      {crops.length === 0 ? (
-        <Link to="/farm/crops" className="flex min-h-[2.75rem] items-center gap-2 text-[0.9375rem] font-bold text-accent">Add your crops and acres<ChevronRight className="h-4 w-4" aria-hidden /></Link>
-      ) : (
-        <ul className="divide-y divide-line">
-          {crops.slice(0, 4).map((c) => (
-            <li key={c.id} className="flex min-h-[2.75rem] items-center gap-3 text-[0.9375rem]">
-              <span className="min-w-0 flex-1"><b className="font-semibold">{c.name}</b>{c.variety && <span className="text-muted">, {c.variety}</span>}</span>
-              <span className="font-bold">{c.acres ? `${fmtNum(Number(c.acres))} ac` : ''}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-      <div className="mt-3 grid grid-cols-2 gap-2 border-t border-line pt-3">
-        <div><p className="numeral text-lg">{eur(inputs)}</p><p className="text-xs text-muted">Seed, spray, fertiliser this year{acres > 0 && inputs > 0 ? `, ${eur(inputs / acres)}/acre` : ''}</p></div>
-        <div><p className="numeral text-lg">{eur(sales)}</p><p className="text-xs text-muted">Grain and straw sold</p></div>
-      </div>
-    </Tile>
-  );
-}
-
-function MonthCard({ b, d, today }: { b: FarmBundle; d: Derived; today: string }) {
-  const m = monthKey(today);
-  const rows = d.budget.rows.filter((r) => r.thisMonth.budget > 0 || r.thisMonth.actual > 0)
-    .sort((a, c) => (a.kind === c.kind ? c.thisMonth.actual - a.thisMonth.actual : a.kind === 'income' ? -1 : 1)).slice(0, 4);
-  const inflow = b.income.filter((i) => monthKey(i.occurred_on) === m && i.occurred_on <= today).reduce((s, i) => s + Number(i.amount_eur), 0);
-  const outflow = b.costs.filter((c) => monthKey(c.occurred_on) === m && c.occurred_on <= today).reduce((s, c) => s + Number(c.amount_eur), 0);
-  return (
-    <Tile title={`${fmtMonth(m)} so far`} meta={rows.length ? 'against budget' : undefined} to="/money" label="This month">
-      {rows.length ? (
-        <div className="space-y-3">
-          {rows.map((r) => {
-            const frac = r.thisMonth.budget > 0 ? r.thisMonth.actual / r.thisMonth.budget : 0;
-            const over = r.kind === 'cost' && r.thisMonth.budget > 0 && r.thisMonth.actual > r.thisMonth.budget;
-            return (
-              <div key={`${r.kind}${r.category}`}>
-                <div className="flex justify-between text-sm"><span>{r.label}{r.kind === 'income' ? ' in' : ''}</span><b>{eur(r.thisMonth.actual)}{r.thisMonth.budget > 0 && <span className="font-normal text-muted"> of {eur(r.thisMonth.budget)}</span>}</b></div>
-                <div className="mt-1"><Bar fraction={frac} tone={r.kind === 'income' ? 'money' : over ? 'danger' : 'muted'} /></div>
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-2">
-          <div><p className="numeral text-xl">{eur(inflow)}</p><p className="text-xs text-muted">Money in</p></div>
-          <div><p className="numeral text-xl">{eur(outflow)}</p><p className="text-xs text-muted">Money out</p></div>
-        </div>
-      )}
-    </Tile>
-  );
-}
 
 export default function Today() {
   const b = useFarmData();
@@ -340,6 +211,22 @@ export default function Today() {
   const toneOf = (t: string) => (t === 'urgent' ? 'danger' : t === 'warn' ? 'warn' : t === 'ok' ? 'field' : 'muted') as 'danger' | 'warn' | 'field' | 'muted';
   const showSilage = animals || b.silage.length > 0;
   const money = b.role !== 'worker';
+  const modules = dashboardModules(b, d, today);
+
+  // Key numbers: the few figures a farmer wants at a glance. Each opens its module.
+  const keyTiles: MiniProps[] = [];
+  if (showSilage) {
+    keyTiles.push({ title: 'Silage', value: silage.value === '?' ? 'Add details' : silage.value, sub: silage.value === '?' ? 'Is there enough for winter?' : `of winter. ${silage.status}`,
+      fraction: silage.fraction, tone: silage.tone === 'ok' ? 'silage' : toneOf(silage.tone), to: silage.value === '?' ? '/farm/silage' : '/progress?tab=forage' });
+  }
+  if (money) {
+    keyTiles.push({ title: 'Cash', value: d.cash ? eur(d.cash.balance) : 'Add balance', sub: d.cash ? (d.cashGaps.stale ? 'Recorded. Check bank' : `Recorded. ${cash.status}`) : 'Unlocks the cash forecast',
+      fraction: cash.fraction, tone: cash.tone === 'ok' ? 'money' : toneOf(cash.tone), to: d.cash ? '/progress?tab=cash' : '/settings' });
+    const m = d.money;
+    const owedLine = m.overdueCount > 0 ? `${m.overdueCount} overdue` : m.dueSoon(b.farm.bill_warning_days ?? 7).length > 0 ? `${m.dueSoon(b.farm.bill_warning_days ?? 7).length} due soon` : m.owedTotal > 0 ? 'None due yet' : 'Nothing owed';
+    keyTiles.push({ title: 'Bills owed', value: eur(m.owedTotal), sub: owedLine, fraction: m.owedTotal > 0 ? m.overdueTotal / m.owedTotal : 0,
+      tone: m.overdueCount > 0 ? 'danger' : 'muted', to: '/money/bills' });
+  }
 
   // The feed card already says when to order the feed that runs out first
   const live = b.products.filter((p) => !p.archived);
@@ -366,16 +253,13 @@ export default function Today() {
         <GuideCard b={b} />
         {(animals || live.length > 0) && <FeedCard b={b} d={d} />}
 
-        <ReadyToApprove items={d.suggestions} />
+        {keyTiles.length > 0 && (
+          <section aria-label="Key numbers" className="grid grid-cols-2 gap-3">
+            {keyTiles.map((t, i) => <Mini key={t.title} {...t} className={keyTiles.length % 2 === 1 && i === keyTiles.length - 1 ? 'col-span-2' : ''} />)}
+          </section>
+        )}
 
-        <div className={`grid gap-3 ${showSilage && money ? 'grid-cols-2' : 'grid-cols-1'}`}>
-          {showSilage && (
-            <Mini title="Silage" value={silage.value === '?' ? 'Add details' : silage.value} sub={silage.value === '?' ? 'Is there enough for winter?' : `of winter. ${silage.status}`}
-              fraction={silage.fraction} tone={silage.tone === 'ok' ? 'silage' : toneOf(silage.tone)} to={silage.value === '?' ? '/farm/silage' : '/progress?tab=forage'} />
-          )}
-          {money && <Mini title="Cash" value={d.cash ? eur(d.cash.balance) : 'Add balance'} sub={d.cash ? (d.cashGaps.stale ? 'Recorded. Check bank' : `Recorded. ${cash.status}`) : 'Unlocks the cash forecast'}
-            fraction={cash.fraction} tone={cash.tone === 'ok' ? 'money' : toneOf(cash.tone)} to={d.cash ? '/progress?tab=cash' : '/settings'} />}
-        </div>
+        <TodoCard farmId={b.farm.id} today={today} suggestions={d.suggestions} priorities={next} alsoShown={d.suggestions.map((x) => `sugg:${x.key}`)} />
 
         {checklist.length > 0 && (
           <Link to="/diary" aria-label={`Today's diary: ${progress.done} of ${progress.total} ticked off`} className="block rounded-[1.125rem] bg-card p-4 shadow-lift">
@@ -392,14 +276,9 @@ export default function Today() {
         <PhotoQueueNudge />
         {IS_LOCAL && <BackupNudge />}
 
-        <Attention farmId={b.farm.id} items={next} today={today} alsoShown={d.suggestions.map((x) => `sugg:${x.key}`)} />
-
         {(types.includes('dairy') || types.includes('suckler') || (b.seasons ?? []).length > 0) && <CalvingCard b={b} today={today} />}
-        {types.includes('dairy') && <MilkCard b={b} />}
-        {grows(types) && <CropsCard b={b} today={today} />}
-        <FertiliserCard b={b} d={d} today={today} />
-        <StockCard b={b} />
-        {money && <MonthCard b={b} d={d} today={today} />}
+
+        <ModuleGrid tiles={modules} />
         {checklist.length > 0 && <ReminderNudge />}
       </main>
       <ReleaseLine />

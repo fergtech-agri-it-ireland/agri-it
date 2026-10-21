@@ -4,6 +4,7 @@ import { AlertOctagon, AlertTriangle, Check, CheckCircle2, ChevronDown, ChevronL
 import type { Confidence, ISODate } from '../lib/types';
 import { addDays, fmtDate, todayISO } from '../lib/format';
 import { telHref } from '../lib/suppliers';
+import { countFromText, countShown } from '../lib/typedCount';
 import { ReleaseLine } from './ReleaseLine';
 
 // ---------------------------------------------------------------------------
@@ -140,17 +141,21 @@ export function Stepper({ label, value, onChange, step = 1, min = 0, unit, hint,
   label: string; value: number; onChange: (n: number) => void; step?: number; min?: number; unit?: string; hint?: ReactNode; decimals?: number;
 }) {
   const id = useId();
+  // What is typed stays exactly as typed until the farmer leaves the box, so a 0 can be deleted
+  const [typed, setTyped] = useState<string | null>(null);
   const set = (n: number) => onChange(Math.max(min, Number(n.toFixed(decimals))));
+  const tap = (n: number) => { setTyped(null); set(n); };
   return (
     <Field label={label} hint={hint} htmlFor={id}>
       <div className="flex items-stretch gap-2">
-        <button type="button" aria-label={`Decrease ${label}`} onClick={() => set(value - step)} className="flex min-h-tap min-w-tap items-center justify-center rounded-full border border-line bg-card active:bg-pasture"><Minus className="h-5 w-5" /></button>
+        <button type="button" aria-label={`Decrease ${label}`} onClick={() => tap(value - step)} className="flex min-h-tap min-w-tap items-center justify-center rounded-full border border-line bg-card active:bg-pasture"><Minus className="h-5 w-5" /></button>
         <div className="relative flex-1">
-          <input id={id} className="input text-center text-xl font-bold" type="number" inputMode={decimals ? 'decimal' : 'numeric'} value={Number.isFinite(value) ? value : ''}
-            onChange={(e) => set(Number(e.target.value || 0))} />
+          <input id={id} className="input text-center text-xl font-bold" type="number" inputMode={decimals ? 'decimal' : 'numeric'} value={countShown(value, typed)}
+            onFocus={(e) => e.currentTarget.select()} onBlur={() => setTyped(null)}
+            onChange={(e) => { setTyped(e.target.value); const n = countFromText(e.target.value); if (n !== null) set(n); }} />
           {unit && <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-bold text-muted">{unit}</span>}
         </div>
-        <button type="button" aria-label={`Increase ${label}`} onClick={() => set(value + step)} className="flex min-h-tap min-w-tap items-center justify-center rounded-full bg-field text-white active:bg-field-dark"><Plus className="h-5 w-5" /></button>
+        <button type="button" aria-label={`Increase ${label}`} onClick={() => tap(value + step)} className="flex min-h-tap min-w-tap items-center justify-center rounded-full bg-field text-white active:bg-field-dark"><Plus className="h-5 w-5" /></button>
       </div>
     </Field>
   );

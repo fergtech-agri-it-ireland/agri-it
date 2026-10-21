@@ -34,7 +34,7 @@ export default function Setup() {
       {p.complete ? (
         <Card className="bg-field-light">
           <p className="text-lg font-bold">All set up.</p>
-          <p className="mt-1">Everything Agri-It needs is in. Change any of it from here or from More.</p>
+          <p className="mt-1">Everything Agri-It needs is in. Change any of it from here or from Modules.</p>
           <Link to="/" className="mt-3 inline-flex min-h-tap items-center rounded-full bg-field px-5 font-bold text-white">Go to the dashboard</Link>
         </Card>
       ) : p.next && (

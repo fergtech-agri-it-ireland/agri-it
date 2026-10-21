@@ -11,7 +11,7 @@ import { Button, Chips, Sheet, ToneIcon } from './ui';
  * in it. Only information has "Not now", which asks why and for how long. Overdue and today
  * always show in full; the rest folds after a few.
  */
-export function Attention({ farmId, items, today, alsoShown = [] }: { farmId: string; items: Priority[]; today: string; alsoShown?: string[] }) {
+export function Attention({ farmId, items, today, alsoShown = [], embedded = false }: { farmId: string; items: Priority[]; today: string; alsoShown?: string[]; embedded?: boolean }) {
   const [snoozes, setSnoozes] = useState(() => loadSnoozes(farmId));
   const [all, setAll] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
@@ -32,8 +32,10 @@ export function Attention({ farmId, items, today, alsoShown = [] }: { farmId: st
   const acted = (id: string) => noteAction(farmId, id, { kind: 'acted' }, today);
 
   return (
-    <section aria-label="Needs your attention" className="overflow-hidden rounded-[1.125rem] bg-card shadow-lift">
-      <h2 className="px-4 pt-4 text-[1.0625rem] font-bold">Needs your attention</h2>
+    <section aria-label="Needs your attention" className={embedded ? 'border-t border-line' : 'overflow-hidden rounded-[1.125rem] bg-card shadow-lift'}>
+      {embedded
+        ? <h3 className="px-4 pt-3 text-[0.9375rem] font-bold">Needs your attention</h3>
+        : <h2 className="px-4 pt-4 text-[1.0625rem] font-bold">Needs your attention</h2>}
       {byWhen.map(({ w, items: group }) => (
         <div key={w}>
           <p className={`mt-2 px-4 text-[0.75rem] font-bold uppercase tracking-wide ${w === 'overdue' ? 'text-danger' : 'text-muted'}`}>{WHEN_LABEL[w]}</p>

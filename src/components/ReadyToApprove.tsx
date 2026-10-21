@@ -17,15 +17,16 @@ const WHEN: Record<Suggestion['when'], string> = { overdue: 'Overdue', today: 'T
  * Not now asks why and for how long; No = gone for good. Legal deadlines (calf tags) can't be
  * turned down. What the farmer does is counted on this phone for the pilot (alerts.ts).
  */
-export function ReadyToApprove({ items, limit = 3 }: { items: Suggestion[]; limit?: number }) {
+export function ReadyToApprove({ items, limit = 3, embedded = false }: { items: Suggestion[]; limit?: number; embedded?: boolean }) {
   const [all, setAll] = useState(false);
   if (!items.length) return null;
   const shown = all ? items : items.slice(0, limit);
+  const Heading = embedded ? 'h3' : 'h2';
   return (
-    <section aria-label="Ready for you to approve" className="overflow-hidden rounded-[1.125rem] bg-card shadow-lift">
-      <div className="flex items-center gap-2 px-4 pt-4">
+    <section aria-label="Ready for you to approve" className={embedded ? '' : 'overflow-hidden rounded-[1.125rem] bg-card shadow-lift'}>
+      <div className={`flex items-center gap-2 px-4 ${embedded ? 'pt-3' : 'pt-4'}`}>
         <Sparkles className="h-5 w-5 text-accent" aria-hidden />
-        <h2 className="flex-1 text-[1.0625rem] font-bold">Ready for you to approve</h2>
+        <Heading className={`flex-1 font-bold ${embedded ? 'text-[0.9375rem]' : 'text-[1.0625rem]'}`}>Ready for you to approve</Heading>
         <span className="text-[0.8125rem] text-muted">{items.length}</span>
       </div>
       <p className="px-4 text-[0.8125rem] text-muted">Agri-It has done the work. Nothing is saved until you approve.</p>

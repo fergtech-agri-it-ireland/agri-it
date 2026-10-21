@@ -18,7 +18,7 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-/** More: everything that isn't on the dashboard or in the diary, in plain groups. */
+/** Modules: every part of Agri-It in plain groups. The dashboard's tiles open the most used ones. */
 export default function FarmHub() {
   const b = useFarmData();
   const d = useDerived(b);
@@ -34,7 +34,7 @@ export default function FarmHub() {
   const cropsRow = <Row to="/farm/crops" icon={icon(Sprout)} title="Crops" sub={crops.length ? `${crops.length} crops, ${fmtNum(crops.reduce((s, c) => s + Number(c.acres ?? 0), 0))} acres` : 'What you grow and the acres'} right={chev} />;
 
   return (
-    <Screen title="More" sub={`${b.farm.name}, ${b.farm.county}`}>
+    <Screen title="Modules" sub={`${b.farm.name}, ${b.farm.county}`}>
       <Group title="Your farm">
         {b.role !== 'worker' && (() => { const p = setupProgress(setupPlan(b)); return <Row to="/setup" icon={icon(ClipboardCheck)} title="Set up your farm" sub={p.complete ? 'All done. Change anything here' : `${p.finished} of ${p.total} stages done`} right={chev} />; })()}
         <Row to="/farm/types" icon={icon(Tractor)} title="What you farm" sub={types.length ? types.map((t) => FARM_TYPE_LABEL[t]).join(', ') : 'Not picked yet'} right={chev} />

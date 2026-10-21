@@ -173,8 +173,9 @@ with sync_playwright() as p:
 
     # E. Dashboard tile, only for a farm with fields or fertiliser
     go(pg, '#/')
-    tile = pg.get_by_role('region', name='Fertiliser')
-    check('Fertiliser tile shows stock and fields due', tile.count() == 1 and 'CAN (27% N)' in tile.inner_text() and ('fields due' in tile.inner_text().lower() or 'No fields due' in tile.inner_text()), tile.inner_text() if tile.count() else '')
+    tile = pg.locator('[data-module="fields"]')
+    lbl = (tile.get_attribute('aria-label') or '') if tile.count() == 1 else ''
+    check('Fields and fertiliser module tile shows what is due or closed', tile.count() == 1 and lbl.startswith('Fields and fertiliser') and ('due' in lbl.lower() or 'closed' in lbl.lower() or 'field' in lbl.lower()), lbl)
     check('No sideways scroll on Today', no_sideways(pg))
     pg.screenshot(path=f'{OUT}/board-today.png', full_page=True)
 

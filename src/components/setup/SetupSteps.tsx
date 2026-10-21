@@ -8,6 +8,7 @@ import { Check, Minus, Plus, X } from 'lucide-react';
 import type { AnimalClass, AnimalGroup, CalvingSeason, Crop, ExpectedIncome, FarmBundle, FeedProduct, FeedTransaction, FeedingRule, Loan, Routine, SilageStore } from '../../lib/types';
 import { ANIMAL_CLASS_LABEL, COST_LABEL, type CostCategory } from '../../lib/types';
 import { addDays, cur, eur, fmtDay, todayISO, uuid } from '../../lib/format';
+import { countFromText, countShown } from '../../lib/typedCount';
 import { breedLabel, breedPatch, COMMON_CROPS, currentHarvest, farmTypes, groupBreeds, speciesOf, suggestedClasses } from '../../lib/farmTypes';
 import { useFarmCtx, useSave } from '../../lib/data/farm';
 import type { Op } from '../../lib/offline/outbox';
@@ -38,17 +39,21 @@ export function StepActions({ onSave, saveLabel = 'Save and next', canSave = tru
 
 /** A compact −/+ with the number typed in between, for long lists of counts. */
 export function MiniStepper({ label, value, onChange, step, unit }: { label: string; value: number; onChange: (n: number) => void; step: number; unit?: string }) {
+  // What is typed stays exactly as typed until the farmer leaves the box, so a 0 can be deleted
+  const [typed, setTyped] = useState<string | null>(null);
   const set = (n: number) => onChange(Math.max(0, Math.round(n)));
+  const tap = (n: number) => { setTyped(null); set(n); };
   return (
     <div className="flex shrink-0 items-center gap-1.5">
-      <button type="button" aria-label={`Decrease ${label}`} onClick={() => set(value - step)} className="flex h-10 w-10 items-center justify-center rounded-full border border-line"><Minus className="h-4 w-4" aria-hidden /></button>
+      <button type="button" aria-label={`Decrease ${label}`} onClick={() => tap(value - step)} className="flex h-10 w-10 items-center justify-center rounded-full border border-line"><Minus className="h-4 w-4" aria-hidden /></button>
       <label className="relative">
         <span className="sr-only">{label}</span>
-        <input type="number" inputMode="numeric" value={value} onChange={(e) => set(Number(e.target.value || 0))}
+        <input type="number" inputMode="numeric" value={countShown(value, typed)} onFocus={(e) => e.currentTarget.select()} onBlur={() => setTyped(null)}
+          onChange={(e) => { setTyped(e.target.value); const n = countFromText(e.target.value); if (n !== null) set(n); }}
           className={`h-10 w-[4.25rem] rounded-xl border border-line bg-card text-center font-bold ${unit ? 'pr-5' : ''}`} />
         {unit && <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-[0.6875rem] font-bold text-muted">{unit}</span>}
       </label>
-      <button type="button" aria-label={`Increase ${label}`} onClick={() => set(value + step)} className="flex h-10 w-10 items-center justify-center rounded-full bg-field text-white"><Plus className="h-4 w-4" aria-hidden /></button>
+      <button type="button" aria-label={`Increase ${label}`} onClick={() => tap(value + step)} className="flex h-10 w-10 items-center justify-center rounded-full bg-field text-white"><Plus className="h-4 w-4" aria-hidden /></button>
     </div>
   );
 }

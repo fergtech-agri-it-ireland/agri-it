@@ -54,12 +54,16 @@ with sync_playwright() as p:
     check('Cash card: recorded balance, asks to check against the bank', '€130,060' in body and 'Recorded. Check bank' in body)
     check("Today's diary summary", "Today's diary" in body and '0 of 3 ticked off' in body)
     check('Needs your attention lists priorities, overdue first', 'Needs your attention' in body and 'Silage short for the winter' in body and body.upper().index('OVERDUE') < body.upper().index('COMING UP'))
-    check('Dairy farm sees the milk card', 'Last cheque' in body and 'Per litre' in body)
-    check('Animals card shows breeds', 'Holstein Friesian and Jersey cross' in body and 'Aberdeen Angus' in body and '208 cattle' in body)
+    tiles = pg.locator('[data-module]')
+    tl = lambda k: (tiles.locator(f'xpath=self::*[@data-module="{k}"]').first.get_attribute('aria-label') or '') if pg.locator(f'[data-module="{k}"]').count() else ''
+    check('Dairy farm sees the Milk module', 'Last cheque' in tl('milk') and 'a litre' in tl('milk'), tl('milk'))
+    check('Animals module shows groups and head', '4 groups' in tl('animals') and '208 cattle' in tl('animals'), tl('animals'))
+    check('Key numbers: silage, cash, bills owed', all(x in pg.get_by_label('Key numbers').inner_text() for x in ['Silage', 'Cash', 'Bills owed', '€3,805']))
+    check('To do card holds the approve list and the attention list', pg.get_by_label('To do').get_by_label('Needs your attention').count() == 1)
     check('Dairy-only farm does not see crops', 'Crops' not in body)
     check('Set up your farm hidden once every stage is done', 'Set up your farm' not in body)
     nav = pg.get_by_role('navigation', name='Main').inner_text()
-    check('Bottom bar: Dashboard, Diary, Progress, More', all(x in nav for x in ['Dashboard', 'Diary', 'Progress', 'More']), nav)
+    check('Bottom bar: Dashboard, Diary, Progress, Modules', all(x in nav for x in ['Dashboard', 'Diary', 'Progress', 'Modules']), nav)
     pg.screenshot(path=f'{OUT}/today.png')
 
     # B. Dawn mode toggle
@@ -233,7 +237,7 @@ with sync_playwright() as p:
     pg.wait_for_timeout(500)
     go(pg, '#/')
     body = pg.locator('main').inner_text()
-    check('Crops card shows acres and grain sold', '40 acres' in body and '€9,000' in body, body[-900:])
+    check('Crops module shows the acres', '40 acres' in pg.locator('[data-module="crops"]').get_attribute('aria-label'), body[-900:])
     go(pg, '#/farm/groups')
     pg.get_by_role('button', name='Add', exact=True).click()
     dlg = pg.get_by_role('dialog')

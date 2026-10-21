@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, Navigate, Outlet, useLocation } from 'react-router-dom';
-import { BookOpen, CloudOff, LayoutGrid, LineChart, MoreHorizontal, Plus, RefreshCw } from 'lucide-react';
+import { BookOpen, CloudOff, Blocks, LayoutGrid, LineChart, Plus, RefreshCw } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useBundle, useFarmCtx } from '../lib/data/farm';
 import { reminderHeadlines, useDerived, useSnapshotRecorder } from '../lib/data/derived';
@@ -34,7 +34,7 @@ const tabs = [
   { to: '/diary', label: 'Diary', Icon: BookOpen, also: [] as string[] },
   null, // centre add button
   { to: '/progress', label: 'Progress', Icon: LineChart, also: ['/forecast'] },
-  { to: '/more', label: 'More', Icon: MoreHorizontal, also: ['/money', '/farm', '/suppliers', '/records', '/routines', '/settings', '/ask', '/feed'] }
+  { to: '/more', label: 'Modules', Icon: Blocks, also: ['/money', '/farm', '/suppliers', '/records', '/routines', '/settings', '/ask', '/feed'] }
 ] as const;
 
 function SyncStatus() {

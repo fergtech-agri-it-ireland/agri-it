@@ -11,7 +11,7 @@ import { addDays } from '../format';
 import { cashPosition } from '../forecast/money';
 import { paidOn } from '../forecast/bills';
 import { balanceOn } from '../loans';
-import { DISCLAIMER, r2, sum, type ReportDoc, type ReportRow, type ReportSection } from './doc';
+import { DISCLAIMER, moneyHead, r2, sum, type CellValue, type ReportDoc, type ReportRow, type ReportSection } from './doc';
 import { RETENTION, NOTE_NO_DEPRECIATION } from './rules';
 import { reportPeriod, stockPosition, stockTotal, stockUnvaluedKg, valuesOn, valueSum, type Period } from './common';
 import { metaFor, profitFigures } from './profit';
@@ -141,9 +141,27 @@ export function balanceReport(b: FarmBundle, today: ISODate, opts: { offset?: nu
   };
   const sections = [assets, liab, worth, move];
   if (basis.rows.length) sections.push(basis);
+  // The download: Section, Line, Row, start, end, change. The change is end less start, and only where both are known.
+  const meta = metaFor(b, p, null, opts.now ?? new Date().toISOString());
+  const rowType = (r: ReportRow) => (r.kind === 'total' || r.kind === 'subtotal' ? 'Total' : 'Line');
+  const flat: CellValue[][] = [];
+  for (const s of [assets, liab, worth]) {
+    for (const r of s.rows) {
+      const o = r.cells?.[0] ?? null; const c = r.cells?.[1] ?? null;
+      flat.push([s.heading, r.label, rowType(r), o, c, typeof o === 'number' && typeof c === 'number' ? r2(c - o) : null]);
+    }
+  }
+  for (const r of move.rows) flat.push([move.heading, r.label, rowType(r), null, null, r.missing || r.amount === null || r.amount === undefined ? null : r.amount]);
   const doc: ReportDoc = {
     id: 'balance', title: 'Balance sheet', subtitle: `${b.farm.name}, at ${f.closing.day}`,
-    meta: metaFor(b, p, null, opts.now ?? new Date().toISOString()),
+    meta,
+    table: {
+      columns: [
+        { label: 'Section', type: 'text' }, { label: 'Line', type: 'text' }, { label: 'Row', type: 'text' },
+        { label: moneyHead(`At ${f.opening.day}`, meta.currency), type: 'money' }, { label: moneyHead(`At ${f.closing.day}`, meta.currency), type: 'money' }, { label: moneyHead('Change', meta.currency), type: 'money' }
+      ],
+      rows: flat
+    },
     basisNote: 'What the farm owns and owes on the day. Values for animals, crops, machinery, buildings, land and money owed are yours or your accountant\'s, with the basis shown.',
     completeness: { complete: f.complete, reasons: f.reasons, notes: f.notes }, sections,
     footnotes: [DISCLAIMER, NOTE_NO_DEPRECIATION, 'Single-entry records: this is a statement of position, not a double-entry balance sheet.', RETENTION[b.farm.jurisdiction]]

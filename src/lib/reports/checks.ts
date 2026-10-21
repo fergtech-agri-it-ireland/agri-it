@@ -62,6 +62,10 @@ export function checksReport(b: FarmBundle, today: ISODate, opts: { offset?: num
     meta: metaFor(b, p, null, opts.now ?? new Date().toISOString()),
     basisNote: 'Checks that the reports agree with each other and with your records. Do this before you send anything to your accountant.',
     completeness: { complete: failed.filter((c) => c.blocking).length === 0, reasons: failed.filter((c) => c.blocking).map((c) => `${c.label}: ${c.detail}`), notes: failed.filter((c) => !c.blocking).map((c) => `${c.label}: ${c.detail}`) },
+    table: {
+      columns: [{ label: 'Check', type: 'text' }, { label: 'Result', type: 'text' }, { label: 'Detail', type: 'text' }],
+      rows: [...failed, ...checks.filter((c) => c.ok)].map((c) => [c.label, c.ok ? 'OK' : c.blocking ? 'Fix' : 'Check', c.detail])
+    },
     sections: [{ heading: 'Needs fixing', columns: [{ label: 'Result', type: 'text' as const }], rows: failed.map(row) }, { heading: 'Passed', columns: [{ label: 'Result', type: 'text' as const }], rows: checks.filter((c) => c.ok).map(row) }].filter((s) => s.rows.length),
     footnotes: [DISCLAIMER, RETENTION[b.farm.jurisdiction]]
   };

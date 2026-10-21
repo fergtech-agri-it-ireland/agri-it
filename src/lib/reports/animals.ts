@@ -5,7 +5,7 @@
  */
 import type { AnimalGroup, FarmBundle, HeadCountChange, ISODate } from '../types';
 import { ANIMAL_CLASS_LABEL } from '../types';
-import { DISCLAIMER, sum, type ReportDoc, type ReportRow } from './doc';
+import { DISCLAIMER, sum, type CellValue, type ReportDoc, type ReportRow } from './doc';
 import { RETENTION } from './rules';
 import { headsAtEndOf, reportPeriod } from './common';
 import { metaFor } from './profit';
@@ -102,9 +102,13 @@ export function animalsReport(b: FarmBundle, today: ISODate, opts: { offset?: nu
       { label: 'Value of livestock at the year end (your figures)', amount: values.length ? sum(values.map((v) => Number(v.value_eur))) : null, missing: !values.length, kind: 'line' as const, to: '/reports/values', note: values.length ? undefined : p.provisional ? 'Entered at the year end' : 'Not entered' }
     ]
   };
+  // The download: one row per group, then a total row. Moves between groups cancel out in the total.
+  const mv = (g: Omit<GroupMovement, 'groupId' | 'name' | 'klass'>): CellValue[] => [g.opening, g.born, g.added, g.movedIn, g.sold, g.movedOut, g.reduced, g.closing];
+  const flat: CellValue[][] = [...f.groups.map((g): CellValue[] => [g.name, g.klass, 'Line', ...mv(g)]), ['All animals', '', 'Total', ...mv(f.totals)]];
   const doc: ReportDoc = {
     id: 'animals', title: 'Animals report', subtitle: `${b.farm.name}, ${p.fy.label}${p.provisional ? ' (year to date)' : ''}`,
     meta: metaFor(b, p, null, opts.now ?? new Date().toISOString()),
+    table: { columns: [{ label: 'Group', type: 'text' }, { label: 'Class', type: 'text' }, { label: 'Row', type: 'text' }, ...cols.map((c) => ({ label: c.label, type: 'number' as const }))], rows: flat },
     basisNote: 'Head counts from the day each change took effect. Values are only what you have entered.',
     completeness: { complete: f.complete, reasons: f.reasons, notes: f.notes }, sections: [movement, sales], footnotes: [DISCLAIMER, RETENTION[b.farm.jurisdiction]]
   };

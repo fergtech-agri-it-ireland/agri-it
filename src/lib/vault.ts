@@ -99,7 +99,6 @@ export function searchVault(items: VaultItem[], q: string, kind: VaultKind | 'al
 export function vaultCsv(items: VaultItem[]): string {
   const row = (r: (string | null)[]) => r.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',');
   return [
-    row(['Agri-It records. Kept as evidence: these do not replace an official notification or statutory register.']),
     row(['Date', 'Kind', 'What', 'Details', 'Confirmed', 'Attachment']),
     ...items.map((i) => row([i.date, VAULT_LABEL[i.kind], i.title, i.sub, i.confirmed ? 'Yes' : 'No', i.documentId ? `attachments/${attachmentName(i.documentId, i.fileName)}` : '']))
   ].join('\n');

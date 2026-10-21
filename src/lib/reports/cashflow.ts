@@ -9,7 +9,7 @@ import { addDays } from '../format';
 import { cashPosition } from '../forecast/money';
 import { paidOn } from '../forecast/bills';
 import { loanYear } from '../loans';
-import { DISCLAIMER, r2, sum, type ReportDoc, type ReportSection } from './doc';
+import { DISCLAIMER, amountTable, r2, sum, type ReportDoc, type ReportSection } from './doc';
 import { RETENTION } from './rules';
 import { inRange, reportPeriod } from './common';
 import { DIRECT_COSTS, OVERHEAD_COSTS, metaFor } from './profit';
@@ -92,7 +92,7 @@ export function cashflowReport(b: FarmBundle, today: ISODate, opts: { offset?: n
   const p = reportPeriod(b.farm, today, opts.offset ?? 0);
   const f = cashFigures(b, today, opts.offset ?? 0);
   const inn: ReportSection = { heading: 'Money in', rows: f.receipts.map((r) => ({ label: r.label, amount: r.total, records: r.n, kind: 'line' as const, to: '/reports/income' })) };
-  if (!f.receipts.length) inn.rows.push({ label: 'No income recorded in this year', amount: 0, kind: 'info' });
+  if (!f.receipts.length) inn.rows.push({ label: 'No income recorded in this year', amount: 0, kind: 'info', noCsv: true });
   inn.rows.push({ label: 'Total money in', amount: f.receiptsTotal, kind: 'subtotal' });
   const out: ReportSection = { heading: 'Money out', rows: f.payments.map((r) => ({ label: r.label, amount: r.total, records: r.n, kind: 'line' as const, to: '/reports/expenses' })) };
   out.rows.push({ label: 'Running costs paid', amount: f.runningPaid, kind: 'subtotal' });
@@ -109,12 +109,22 @@ export function cashflowReport(b: FarmBundle, today: ISODate, opts: { offset?: n
       { label: 'Cash at the end', amount: f.closing, missing: f.closing === null, kind: 'total', note: f.difference !== null && f.difference !== 0 ? `Does not agree by ${f.difference.toFixed(2)}` : undefined }
     ]
   };
+  const meta = metaFor(b, p, 'cash', opts.now ?? new Date().toISOString());
+  const sections = [inn, out, net];
+  // In the download the lines must add up to the total. When interest and capital cannot be split their two lines are empty,
+  // so the repayments are shown as one line instead (the screen keeps the two lines and says why they are blank).
+  const table = amountTable(sections, meta.currency);
+  if (f.loanInterest === null && f.loanRepaid !== 0) {
+    const at = table.rows.findIndex((r) => r[0] === 'Money out' && r[1] === 'Loan capital repaid');
+    table.rows.splice(at + 1, 0, ['Money out', 'Loan repayments (interest and capital not split)', 'Line', f.loanRepaid, null]);
+  }
   const doc: ReportDoc = {
     id: 'cashflow', title: 'Cash flow statement', subtitle: `${b.farm.name}, ${p.fy.label}${p.provisional ? ' (year to date)' : ''}`,
-    meta: metaFor(b, p, 'cash', opts.now ?? new Date().toISOString()),
+    meta,
     basisNote: 'Cash: money in and out of the bank on the day it moved. Bills still owed are not in it.',
     completeness: { complete: f.complete, reasons: f.reasons, notes: f.notes },
-    sections: [inn, out, net], footnotes: [DISCLAIMER, RETENTION[b.farm.jurisdiction]]
+    sections, footnotes: [DISCLAIMER, RETENTION[b.farm.jurisdiction]],
+    table
   };
   return { doc, figures: f };
 }

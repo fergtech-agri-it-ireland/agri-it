@@ -493,37 +493,87 @@ export function accountantChecklist(bundle: FarmBundle, fy: { start: ISODate; en
 const INTEREST_BASIS: Record<LoanYear['interestBasis'], string> = { statement: 'bank statement', recorded: 'your repayments', estimate: 'estimated by Agri-It', unknown: 'not known' };
 const csvRow = (r: (string | number | null)[]) => r.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',');
 
+/**
+ * The year-end summary as one flat table: Section, Line, Row, Amount. "Row" is Line or Total, so
+ * totals can be filtered out of a pivot. No title, notes or blank rows. What used to sit under the
+ * figures (livestock numbers, farm details, what to gather, missing data) is in `packReadme`.
+ */
 export function yearEndCsv(pack: ReturnType<typeof yearEndPack>, farmName: string): string {
-  const c = cur();
-  const rows: (string | number)[][] = [
-    ['Agri-It management summary (not statutory accounts or a tax computation)'],
-    ['Farm', farmName], ['Financial year', `${pack.fy.start} to ${pack.fy.end}`], ['Currency', getCurrency()], [],
-    ['Income', `Total ${c}`], ...pack.incomeByType.map((r) => [r.label, r.total.toFixed(2)]),
-    ['Total income', pack.totalIncome.toFixed(2)], [],
-    ['Running costs (by date incurred)', `Total ${c}`], ...pack.costsByCategory.map((r) => [r.label, r.total.toFixed(2)]),
-    ['Total running costs', pack.totalCosts.toFixed(2)], [],
-    ['Income less running costs', pack.net.toFixed(2)], [],
-    ...(pack.nonOperatingByCategory.length ? [['Loans and capital (not running costs)', `Total ${c}`], ...pack.nonOperatingByCategory.map((r) => [r.label, r.total.toFixed(2)]), []] : []),
-    ['Paid out in the year (cash)', pack.paidOut.toFixed(2)],
-    ['Still owed at the end of the year', pack.owedAtEndTotal.toFixed(2)],
-    ['VAT on recorded invoices', pack.totalVat.toFixed(2)], [],
-    ['Month', `In ${c}`, `Paid out ${c}`, `Net ${c}`], ...pack.flows.map((f) => [f.month, f.inflow.toFixed(2), f.outflow.toFixed(2), f.net.toFixed(2)]), [],
-    ['Supplier', `Total ${c}`], ...pack.supplierTotals.map((s) => [s.name, s.total.toFixed(2)]), [],
-    ...(pack.enterprises.length ? [['Enterprise', `Income ${c}`, `Running costs ${c}`, `Margin ${c}`], ...pack.enterprises.map((e) => [e.key, e.income.toFixed(2), e.costs.toFixed(2), e.margin.toFixed(2)]), []] : []),
-    ...(pack.loans.length ? [
-      ['Loans', `Owed at start ${c}`, `Owed at end ${c}`, 'End figure from', `Repaid in year ${c}`, `Interest ${c}`, 'Interest from'],
-      ...pack.loans.map((y) => [y.loan.lender, y.balanceStart === null ? 'see statement' : y.balanceStart.toFixed(2), y.balanceEnd.toFixed(2), y.balanceEndBasis === 'statement' ? 'bank statement' : 'worked out by Agri-It', y.repaid.toFixed(2), y.interest === null ? 'not known' : y.interest.toFixed(2), INTEREST_BASIS[y.interestBasis]]),
-      [] ] : []),
-    ...(pack.schemesReceived.length ? [['Scheme payments received', `Total ${c}`], ...pack.schemesReceived.map((r) => [r.label, r.total.toFixed(2)]), []] : []),
-    ...(pack.capital.length ? [['Capital spending', 'Date', 'Paid to', `Amount ${c}`], ...pack.capital.map((r) => [r.description || 'Capital', r.date, r.payee, r.amount.toFixed(2)]), []] : []),
-    ...(pack.household ? [['Household drawings (not a farm cost)', pack.household.toFixed(2)], []] : []),
-    ...(pack.livestock.length ? [['Livestock numbers', `Start (${pack.fy.start})`, 'End'], ...pack.livestock.map((r) => [r.name, r.start === null ? 'added in the year' : r.start, r.end]), []] : []),
-    ['Farm details'], ['Herd number', pack.details.herdNumber ?? 'not given'], ['VAT', pack.details.vatStatus === 'registered' ? 'Registered' : pack.details.vatStatus === 'flat_rate' ? 'Flat-rate farmer (not registered)' : 'not given'],
-    ['Acres owned', pack.details.acresOwned ?? 'not given'], ['Acres rented in', pack.details.acresRented ?? 'not given'], [],
-    ['For the accountant: to gather'], ...pack.checklist.map((i) => [i.text, i.done === true ? 'In Agri-It' : i.done === false ? 'Missing' : 'You have it']), [],
-    ['Missing data'], ...pack.missing.map((m) => [m.text])
-  ];
-  return rows.map(csvRow).join('\n');
+  void farmName;
+  const rows: (string | number | null)[][] = [];
+  const add = (section: string, line: string, kind: 'Line' | 'Total', amount: number | null) => rows.push([section, line, kind, amount === null ? '' : r2c(amount)]);
+  const block = (section: string, lines: { label: string; amount: number | null }[], totalLabel: string, total: number | null) => {
+    for (const l of lines) add(section, l.label, 'Line', l.amount);
+    add(section, totalLabel, 'Total', total);
+  };
+  // A total is left empty when any part is not known, never shown as if the unknown part were zero
+  const tot = (xs: (number | null)[]): number | null => (xs.some((x) => x === null) ? null : xs.reduce<number>((t, x) => t + (x as number), 0));
+  block('Income', pack.incomeByType.map((r) => ({ label: r.label, amount: r.total })), 'Total income', pack.totalIncome);
+  block('Running costs (by date incurred)', pack.costsByCategory.map((r) => ({ label: r.label, amount: r.total })), 'Total running costs', pack.totalCosts);
+  add('Result', 'Income less running costs', 'Total', pack.net);
+  if (pack.nonOperatingByCategory.length) block('Loans, capital and household (not running costs)', pack.nonOperatingByCategory.map((r) => ({ label: r.label, amount: r.total })), 'Total not running costs', pack.totalNonOperating);
+  add('Cash and bills', 'Paid out in the year (cash)', 'Line', pack.paidOut);
+  add('Cash and bills', 'Still owed at the end of the year', 'Line', pack.owedAtEndTotal);
+  add('Cash and bills', 'VAT on recorded invoices', 'Line', pack.totalVat);
+  block('Cash by month: in', pack.flows.map((f) => ({ label: f.month, amount: f.inflow })), 'Total in', tot(pack.flows.map((f) => f.inflow)));
+  block('Cash by month: paid out', pack.flows.map((f) => ({ label: f.month, amount: f.outflow })), 'Total paid out', tot(pack.flows.map((f) => f.outflow)));
+  block('Cash by month: net', pack.flows.map((f) => ({ label: f.month, amount: f.net })), 'Total net', tot(pack.flows.map((f) => f.net)));
+  block('Suppliers', pack.supplierTotals.map((s) => ({ label: s.name, amount: s.total })), 'Total suppliers', tot(pack.supplierTotals.map((s) => s.total)));
+  if (pack.enterprises.length) {
+    block('Enterprise: income', pack.enterprises.map((e) => ({ label: e.key, amount: e.income })), 'Total income', tot(pack.enterprises.map((e) => e.income)));
+    block('Enterprise: running costs', pack.enterprises.map((e) => ({ label: e.key, amount: e.costs })), 'Total running costs', tot(pack.enterprises.map((e) => e.costs)));
+    block('Enterprise: margin', pack.enterprises.map((e) => ({ label: e.key, amount: e.margin })), 'Total margin', tot(pack.enterprises.map((e) => e.margin)));
+  }
+  if (pack.loans.length) {
+    block('Loans: owed at start', pack.loans.map((y) => ({ label: y.loan.lender, amount: y.balanceStart })), 'Total owed at start', tot(pack.loans.map((y) => y.balanceStart)));
+    block('Loans: owed at end', pack.loans.map((y) => ({ label: y.loan.lender, amount: y.balanceEnd })), 'Total owed at end', tot(pack.loans.map((y) => y.balanceEnd)));
+    block('Loans: repaid in year', pack.loans.map((y) => ({ label: y.loan.lender, amount: y.repaid })), 'Total repaid', tot(pack.loans.map((y) => y.repaid)));
+    block('Loans: interest', pack.loans.map((y) => ({ label: y.loan.lender, amount: y.interest })), 'Total interest', tot(pack.loans.map((y) => y.interest)));
+  }
+  if (pack.schemesReceived.length) block('Scheme payments received', pack.schemesReceived.map((r) => ({ label: r.label, amount: r.total })), 'Total scheme payments', tot(pack.schemesReceived.map((r) => r.total)));
+  if (pack.capital.length) block('Capital spending', pack.capital.map((r) => ({ label: `${r.date} ${r.description || r.payee || 'Capital'}`, amount: r.amount })), 'Total capital spending', tot(pack.capital.map((r) => r.amount)));
+  if (pack.household) add('Household drawings (not a farm cost)', 'Household drawings', 'Line', pack.household);
+  return [['Section', 'Line', 'Row', `Amount (${getCurrency()})`], ...rows].map(csvRowPlain).join('\n');
+}
+
+const NUMERIC = /^-?\d+(\.\d+)?$/;
+const r2c = (n: number) => (Math.round((n + Number.EPSILON) * 100) / 100 + 0).toFixed(2);
+const csvRowPlain = (r: (string | number | null)[]) => r.map((c) => {
+  const v = String(c ?? '');
+  const safe = typeof c === 'string' && /^[=+\-@\t\r]/.test(v) && !NUMERIC.test(v) ? `'${v}` : v;
+  return /[",\r\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
+}).join(',');
+
+/**
+ * Everything the flat tables leave out, as plain text for the pack's README: what each file is, the
+ * basis, completeness and rule version of each report, farm details, livestock numbers, what to gather
+ * for the accountant, and the missing-data list. Kept beside the files, never inside them.
+ */
+export function packReadme(pack: ReturnType<typeof yearEndPack>, farmName: string, reports: { title: string; basisNote: string; complete: boolean; reasons: string[]; notes: string[]; footnotes: string[]; provisional: boolean; rule: string }[]): string {
+  const L: string[] = [];
+  L.push(`Agri-It management pack for ${farmName}, ${pack.fy.start} to ${pack.fy.end}.`, `Currency: ${getCurrency()}.`, '');
+  L.push('FILES', 'Every CSV is one table: a header row, the data rows and total rows. A Row column (Line or Total) lets you leave totals out of a pivot.');
+  L.push('summary.csv: totals by category, month, supplier, enterprise, loan, scheme payment and capital item.');
+  L.push('transactions.csv: every income and cost, with paid or owed, invoice number, VAT, loan interest where given, and its attachment. The totals at the foot match summary.csv.');
+  L.push('records.csv: farm records and documents, kept as evidence. They do not replace an official notification or statutory register.');
+  L.push('reports/: profit, cash flow, balance sheet, stock, animals, income, expenses and the cross-checks, one table each.');
+  L.push('attachments/: the photos and invoices.', '');
+  L.push('This is a management summary built from the farmer\'s records. It is not a set of statutory accounts and does not calculate taxable profit.', '');
+  L.push('THE REPORTS: BASIS AND GAPS');
+  for (const r of reports) {
+    L.push(`${r.title}${r.provisional ? ' (year to date)' : ''}: ${r.complete ? 'complete from the records' : 'INCOMPLETE'}. Rule ${r.rule}.`, `  Basis: ${r.basisNote}`);
+    for (const x of r.reasons) L.push(`  Missing: ${x}`);
+    for (const x of r.notes) L.push(`  Note: ${x}`);
+  }
+  const foot = [...new Set(reports.flatMap((r) => r.footnotes))];
+  if (foot.length) L.push('', 'NOTES', ...foot.map((f) => `- ${f}`));
+  L.push('', 'FARM DETAILS', `Herd number: ${pack.details.herdNumber ?? 'not given'}`, `VAT: ${pack.details.vatStatus === 'registered' ? 'Registered' : pack.details.vatStatus === 'flat_rate' ? 'Flat-rate farmer (not registered)' : 'not given'}`, `Acres owned: ${pack.details.acresOwned ?? 'not given'}`, `Acres rented in: ${pack.details.acresRented ?? 'not given'}`);
+  if (pack.details.accountant) L.push(`Accountant: ${pack.details.accountant}`);
+  if (pack.livestock.length) L.push('', `LIVESTOCK NUMBERS (start ${pack.fy.start}, end)`, ...pack.livestock.map((r) => `${r.name}: ${r.start === null ? 'added in the year' : r.start}, ${r.end}`));
+  L.push('', 'FOR THE ACCOUNTANT: TO GATHER', ...pack.checklist.map((i) => `- ${i.text}: ${i.done === true ? 'in Agri-It' : i.done === false ? 'missing' : 'you have it'}`));
+  if (pack.loans.length) L.push('', 'LOAN FIGURES FROM', ...pack.loans.map((y) => `- ${y.loan.lender}: end balance ${y.balanceEndBasis === 'statement' ? 'from the bank statement' : 'worked out by Agri-It'}; interest ${INTEREST_BASIS[y.interestBasis]}`));
+  L.push('', 'MISSING DATA', ...(pack.missing.length ? pack.missing.map((m) => `- ${m.text}`) : ['- None flagged']));
+  return `${L.join('\n')}\n`;
 }
 
 /** Every income and cost in the year, one line each, with its paperwork. Sums match the summary. */
@@ -537,7 +587,9 @@ export function ledgerCsv(pack: ReturnType<typeof yearEndPack>): string {
   ]);
   const totalIn = pack.ledger.filter((r) => r.kind === 'income').reduce((s, r) => s + r.amount, 0);
   const totalOut = pack.ledger.filter((r) => r.kind === 'cost').reduce((s, r) => s + r.amount, 0);
-  return [head, ...lines, [], ['', 'Total in', '', '', '', totalIn.toFixed(2)], ['', 'Total out', '', '', '', totalOut.toFixed(2)]].map(csvRow).join('\n');
+  // Total rows are as wide as the header, so every row of the table has the same number of cells
+  const padded = (r: string[]) => [...r, ...Array<string>(Math.max(0, head.length - r.length)).fill('')];
+  return [head, ...lines, padded(['', 'Total in', '', '', '', totalIn.toFixed(2)]), padded(['', 'Total out', '', '', '', totalOut.toFixed(2)])].map(csvRow).join('\n');
 }
 
 // ---------------------------------------------------------------------------

@@ -5,7 +5,7 @@ import { SCHEME_RULES, expectedRows, planScheme, schemeRule, schemesFor } from '
 import { calvingHint, fyHint, jobIdeasFor, monthChips, setupPlan, setupProgress } from './setup';
 import { dueDates, isDue, scheduleLabel } from './routines';
 import { yearPlan } from './forecast/plan';
-import { cashForecast90, yearEndCsv, yearEndPack } from './forecast/money';
+import { cashForecast90, packReadme, yearEndCsv, yearEndPack } from './forecast/money';
 
 const farm = (o: Partial<Farm> = {}): Farm => ({
   id: 'f', name: 'Test', eircode: null, county: 'Cork', jurisdiction: 'ROI', enterprise: 'dairy', enterprises: ['dairy'], financial_year_start_month: 1,
@@ -252,8 +252,16 @@ describe('year-end pack: what the accountant asks for', () => {
     expect(pack.checklist.find((i) => i.id === 'loan-L1')!.done).toBe(true);
     expect(pack.checklist.find((i) => i.id === 'vat')!.text).toContain('VAT 58');
     const csv = yearEndCsv(pack, 'Test');
-    expect(csv).toContain('"AIB","see statement","98000.00","bank statement","1000.00","850.00","bank statement"');
-    expect(csv).toContain('"Herd number","P1234567"');
+    expect(csv).toContain('Loans: owed at end,AIB,Line,98000.00');
+    expect(csv).toContain('Loans: interest,AIB,Line,850.00');
+    // The start balance is not known (see the statement), so it is blank and its total is blank, not 0.00
+    expect(csv.split('\n')).toContain('Loans: owed at start,AIB,Line,');
+    expect(csv.split('\n')).toContain('Loans: owed at start,Total owed at start,Total,');
+    // Farm details, what to gather and where each loan figure came from sit in the pack's README, not in the table
+    const readme = packReadme(pack, 'Test', []);
+    expect(readme).toContain('Herd number: P1234567');
+    expect(readme).toContain('VAT 58');
+    expect(readme).toContain('AIB: end balance from the bank statement; interest bank statement');
   });
   it('flags a loan with no annual statement', () => {
     const pack = yearEndPack(bundle({ loans: [loan()], costs: [cost({ id: 'r1', loan_id: 'L1' })] }), '2027-01-10', -1);

@@ -15,7 +15,7 @@ import { createDemoClient, _testDb, _testReset } from './demo/client';
 import { bundleFrom } from './testing/bundle';
 import { derive } from './data/derived';
 import { moneyStates } from './forecast/bills';
-import { cashPosition, ledgerCsv, monthlyFlows, yearEndCsv, yearEndPack } from './forecast/money';
+import { cashPosition, ledgerCsv, monthlyFlows, packReadme, yearEndCsv, yearEndPack } from './forecast/money';
 import { addDays, monthKey, todayISO } from './format';
 import type { FarmBundle } from './types';
 import type { Op } from './offline/outbox';
@@ -139,10 +139,13 @@ describe('Gate G7: month-end and export totals reconcile with a reference ledger
     expect(sum('In')).toBeCloseTo(totalIn, 2);
     expect(sum('Out')).toBeCloseTo(paidOut + 2210, 2);
     expect(body.filter((r) => r[10] === 'Owed').map((r) => Number(r[5]))).toEqual([2210]);
-    // The summary sheet says it is a management summary, and which currency
-    const summary = yearEndCsv(pack, 'Gate farm');
-    expect(summary).toContain('not statutory accounts or a tax computation');
-    expect(summary).toContain('"Currency","EUR"');
+    // The summary is a plain table: a header row (with the currency), then lines and totals that match the pack. The "management summary, not statutory accounts" wording is in the pack's README.
+    const summary = yearEndCsv(pack, 'Gate farm').split('\n');
+    expect(summary[0]).toBe('Section,Line,Row,Amount (EUR)');
+    expect(summary).toContain('Income,Total income,Total,43900.50');
+    expect(summary).toContain('Running costs (by date incurred),Total running costs,Total,4100.25');
+    expect(summary.some((l) => l.trim() === '')).toBe(false);
+    expect(packReadme(pack, 'Gate farm', [])).toContain('not a set of statutory accounts');
   });
 });
 

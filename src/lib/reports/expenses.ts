@@ -2,7 +2,7 @@
 import type { Cost, FarmBundle, ISODate } from '../types';
 import { COST_LABEL, type CostCategory } from '../types';
 import { paidOn, payeeOf } from '../forecast/bills';
-import { DISCLAIMER, r2, sum, type ReportDoc } from './doc';
+import { DISCLAIMER, moneyHead, r2, sum, type CellValue, type ReportDoc } from './doc';
 import { RETENTION } from './rules';
 import { inRange, isRegistered, reportPeriod } from './common';
 import { metaFor } from './profit';
@@ -52,9 +52,25 @@ export function expensesReport(b: FarmBundle, today: ISODate, opts: { offset?: n
   if (f.noSupplier) notes.push(`${f.noSupplier} cost${f.noSupplier > 1 ? 's have' : ' has'} no supplier recorded.`);
   if (f.noDocument) notes.push(`${f.noDocument} cost${f.noDocument > 1 ? 's have' : ' has'} no invoice or receipt attached. Revenue wants the documents behind the figures kept.`);
   if (f.noVat) notes.push(`VAT-registered: ${f.noVat} cost${f.noVat > 1 ? 's have' : ' has'} no VAT recorded.`);
+  // The download: every cost on one line (paid or owed), then a total row. Type is the column to filter or pivot on.
+  const meta = metaFor(b, p, 'accruals', opts.now ?? new Date().toISOString());
+  const desc = (c: Cost) => (c.category === 'other' && c.other_label ? `${c.other_label}${c.description ? `. ${c.description}` : ''}` : c.description ?? '');
+  const flat: CellValue[][] = list.map((c): CellValue[] => [
+    c.occurred_on, COST_LABEL[c.category], payeeOf(c, b), desc(c), c.invoice_ref ?? '', Number(c.amount_eur), c.vat_eur === null || c.vat_eur === undefined ? null : Number(c.vat_eur),
+    c.vat_eur === null || c.vat_eur === undefined ? null : r2(Number(c.amount_eur) - Number(c.vat_eur)), paidOn(c) === null ? 'Owed' : 'Paid', paidOn(c) ?? '', c.due_on ?? '', c.id
+  ]);
+  flat.push(['', 'Total', '', '', '', f.total, f.vat, f.net, '', '', '', '']);
   const doc: ReportDoc = {
     id: 'expenses', title: 'Expenses report', subtitle: `${b.farm.name}, ${p.fy.label}${p.provisional ? ' (year to date)' : ''}`,
-    meta: metaFor(b, p, 'accruals', opts.now ?? new Date().toISOString()),
+    meta,
+    table: {
+      columns: [
+        { label: 'Date', type: 'text' }, { label: 'Type', type: 'text' }, { label: 'Paid to', type: 'text' }, { label: 'Description', type: 'text' }, { label: 'Invoice no.', type: 'text' },
+        { label: moneyHead('Amount', meta.currency), type: 'money' }, { label: moneyHead('VAT', meta.currency), type: 'money' }, { label: moneyHead('Without VAT', meta.currency), type: 'money' },
+        { label: 'Status', type: 'text' }, { label: 'Paid on', type: 'text' }, { label: 'Due on', type: 'text' }, { label: 'Agri-It id', type: 'text' }
+      ],
+      rows: flat
+    },
     basisNote: 'Every cost on the day it was incurred (invoice or delivery date), whether paid or still owed. Includes loan repayments, machinery and household drawings, shown by type.',
     completeness: { complete: true, reasons: [], notes }, sections: [cat, status, sup, all], footnotes: [DISCLAIMER, RETENTION[b.farm.jurisdiction]]
   };

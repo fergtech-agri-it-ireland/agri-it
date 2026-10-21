@@ -73,7 +73,8 @@ function ReportScreen({ id }: { id: string | undefined }) {
   const [copied, setCopied] = useState<string | null>(null);
   if (worker) return <Screen title="Reports" back="/more"><Empty title="Reports are for the owner and family" /></Screen>;
   if (!known || !doc) return <Screen title="Reports" back="/reports"><Empty title="No such report" action={<Button onClick={() => nav('/reports')}>Back to reports</Button>} /></Screen>;
-  const file = `agri-it-${known.id}-${doc.meta.yearLabel.replace('/', '-')}.csv`;
+  // The basis and "year to date" are in the file name, because the file itself holds only the table
+  const file = `agri-it-${[known.id, doc.meta.yearLabel.replace('/', '-'), doc.meta.basis, doc.meta.provisional ? 'to-date' : null].filter(Boolean).join('-')}.csv`;
   async function copyCsv() {
     try { await navigator.clipboard.writeText(docCsv(doc!)); setCopied('Copied. Paste it into an email or a spreadsheet for your accountant.'); }
     catch { setCopied('This page could not copy. Open Agri-It in your phone browser to export.'); }

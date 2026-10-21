@@ -1,7 +1,7 @@
 /** Income report: every sale and payment received in the year, by type, with milk and livestock detail. Cash received basis. */
 import type { FarmBundle, ISODate } from '../types';
 import { INCOME_LABEL, type IncomeType } from '../types';
-import { DISCLAIMER, r2, sum, type ReportDoc } from './doc';
+import { DISCLAIMER, moneyHead, r2, sum, type CellValue, type ReportDoc } from './doc';
 import { RETENTION } from './rules';
 import { inRange, reportPeriod } from './common';
 import { metaFor } from './profit';
@@ -37,9 +37,17 @@ export function incomeReport(b: FarmBundle, today: ISODate, opts: { offset?: num
     heading: 'Every receipt', columns: [{ label: 'Date', type: 'text' as const }, { label: 'Type', type: 'text' as const }, { label: 'From', type: 'text' as const }, { label: 'Amount', type: 'money' as const }],
     rows: list.map((i) => ({ label: i.description || INCOME_LABEL[i.income_type], cells: [i.occurred_on, INCOME_LABEL[i.income_type], i.counterparty ?? 'Not recorded', Number(i.amount_eur)], to: '/money' }))
   };
+  // The download: every receipt on one line, then a total row. Type is the column to filter or pivot on.
+  const meta = metaFor(b, p, 'cash', opts.now ?? new Date().toISOString());
+  const flat: CellValue[][] = list.map((i): CellValue[] => [i.occurred_on, INCOME_LABEL[i.income_type], i.counterparty ?? '', i.description ?? '', i.milk_litres ?? null, i.head_count ?? null, Number(i.amount_eur), i.id]);
+  flat.push(['', 'Total', '', '', f.milkLitres || null, f.livestockHeads || null, f.total, '']);
   const doc: ReportDoc = {
     id: 'income', title: 'Income report', subtitle: `${b.farm.name}, ${p.fy.label}${p.provisional ? ' (year to date)' : ''}`,
-    meta: metaFor(b, p, 'cash', opts.now ?? new Date().toISOString()),
+    meta,
+    table: {
+      columns: [{ label: 'Date', type: 'text' }, { label: 'Type', type: 'text' }, { label: 'Received from', type: 'text' }, { label: 'Description', type: 'text' }, { label: 'Litres', type: 'number' }, { label: 'Head', type: 'number' }, { label: moneyHead('Amount', meta.currency), type: 'money' }, { label: 'Agri-It id', type: 'text' }],
+      rows: flat
+    },
     basisNote: 'Money received, on the day it was received. Amounts are as recorded; Agri-It does not split out VAT on sales.',
     completeness: { complete: true, reasons: [], notes: f.noCounterparty ? [`${f.noCounterparty} receipt${f.noCounterparty > 1 ? 's have' : ' has'} no name recorded for who paid.`] : [] },
     sections: [sum1, ...(detail.rows.length ? [detail] : []), all], footnotes: [DISCLAIMER, RETENTION[b.farm.jurisdiction]]

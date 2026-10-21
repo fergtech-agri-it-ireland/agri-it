@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Printer, Download } from 'lucide-react';
 import { useFarmData } from '../lib/data/farm';
-import { ledgerCsv, yearEndCsv, yearEndPack } from '../lib/forecast/money';
+import { ledgerCsv, packReadme, yearEndCsv, yearEndPack } from '../lib/forecast/money';
 import { buildZip, download } from '../lib/exportPack';
 import { vaultCsv, vaultItems } from '../lib/vault';
 import { FARM_TYPE_LABEL } from '../lib/farmTypes';
@@ -35,12 +35,13 @@ export default function YearEnd() {
     const records = vaultItems(b).filter((i) => inYear(i.date));
     const ids = new Set([...pack.ledger.map((r) => r.documentId), ...records.map((r) => r.documentId)].filter(Boolean) as string[]);
     const docs = b.documents.filter((d) => ids.has(d.id));
+    const docs0 = REPORT_LIST.map((r) => buildReport(r.id, b, todayISO(), { offset: Number(offset) }));
     const { blob, attached, missing } = await buildZip([
       { name: 'summary.csv', text: yearEndCsv(pack, b.farm.name) },
       { name: 'transactions.csv', text: ledgerCsv(pack) },
       { name: 'records.csv', text: vaultCsv(records) },
-      ...REPORT_LIST.map((r) => ({ name: `reports/${r.id}.csv`, text: docCsv(buildReport(r.id, b, todayISO(), { offset: Number(offset) })) })),
-      { name: 'README.txt', text: `Agri-It management pack for ${b.farm.name}, ${pack.fy.start} to ${pack.fy.end}.\n\nsummary.csv: totals by category, month, supplier and enterprise.\ntransactions.csv: every income and cost, with paid or owed, invoice number, VAT, loan interest where given, and its attachment. The totals at the foot match summary.csv.\nsummary.csv also lists loans (owed at the start and end, repaid, interest and where each figure came from), scheme payments received, capital spending, livestock numbers at the start and end of the year, and a checklist of what else to gather.\nrecords.csv: farm records and documents.\nreports/: the profit, cash flow, balance sheet, stock, animals, income and expenses reports and the cross-checks, each with its basis, completeness and rule version.\nattachments/: the photos and invoices.\n\nThis is a management summary built from the farmer's records. It is not a set of statutory accounts and does not calculate taxable profit.\n` }
+      ...docs0.map((d) => ({ name: `reports/${d.id}.csv`, text: docCsv(d) })),
+      { name: 'README.txt', text: packReadme(pack, b.farm.name, docs0.map((d) => ({ title: d.title, basisNote: d.basisNote, complete: d.completeness.complete, reasons: d.completeness.reasons, notes: d.completeness.notes, footnotes: d.footnotes, provisional: d.meta.provisional, rule: d.meta.rule }))) }
     ], docs);
     download(blob, `agri-it-accountant-pack-${label}.zip`);
     setPacking(`${pack.ledger.length} transactions and ${attached} attachment${attached === 1 ? '' : 's'}${missing.length ? `. ${missing.length} attachment${missing.length === 1 ? '' : 's'} not on this phone (listed in the zip)` : ''}.`);

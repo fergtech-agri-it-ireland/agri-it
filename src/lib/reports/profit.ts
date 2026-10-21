@@ -17,7 +17,7 @@ import { COST_LABEL, INCOME_LABEL, NON_OPERATING, type CostCategory, type Income
 import { eur as eurText, getCurrency } from '../format';
 import { loanYear } from '../loans';
 import { payeeOf } from '../forecast/bills';
-import { DISCLAIMER, REPORTS_RULE_VERSION, r2, sum, type Basis, type ReportDoc, type ReportMeta, type ReportRow, type ReportSection } from './doc';
+import { DISCLAIMER, REPORTS_RULE_VERSION, amountTable, r2, sum, type Basis, type ReportDoc, type ReportMeta, type ReportRow, type ReportSection } from './doc';
 import { NOTE_CAPITAL_ALLOWANCES, NOTE_HERD_BASIS_NI, NOTE_NO_DEPRECIATION, NOTE_STOCK_RELIEF, RETENTION } from './rules';
 import { costDate, headsAtEndOf, inRange, isRegistered, netAmount, reportPeriod, stockPosition, stockTotal, stockUnvaluedKg, valueSum, valuesOn, type Period } from './common';
 
@@ -207,7 +207,7 @@ export function profitReport(b: FarmBundle, today: ISODate, opts: { offset?: num
 
   const out: ReportSection = { heading: 'Output', rows: [] };
   for (const s of f.salesByType) out.rows.push({ label: s.label, amount: s.total, records: s.n, kind: 'line' });
-  if (!f.salesByType.length) out.rows.push({ label: 'No income recorded in this year', amount: 0, kind: 'info' });
+  if (!f.salesByType.length) out.rows.push({ label: 'No income recorded in this year', amount: 0, kind: 'info', noCsv: true });
   out.rows.push({ label: 'Sales received', amount: f.sales, kind: 'subtotal' });
   for (const c of f.changes) {
     out.rows.push({
@@ -254,10 +254,12 @@ export function profitReport(b: FarmBundle, today: ISODate, opts: { offset?: num
   const basisNote = basis === 'accruals'
     ? 'Accruals: costs on the day incurred (owed bills included), sales when received, plus the change in stock and in money owed to you where you have valued them.'
     : 'Cash: money paid and received in the year, nothing else. Stock and money owed are not counted.';
+  const meta = metaFor(b, p, basis, opts.now ?? new Date().toISOString());
   const doc: ReportDoc = {
     id: 'profit', title: 'Profit report', subtitle: `${b.farm.name}, ${p.fy.label}${p.provisional ? ' (year to date)' : ''}`,
-    meta: metaFor(b, p, basis, opts.now ?? new Date().toISOString()), basisNote,
-    completeness: { complete: f.complete, reasons: f.reasons, notes: f.notes }, sections, footnotes
+    meta, basisNote,
+    completeness: { complete: f.complete, reasons: f.reasons, notes: f.notes }, sections, footnotes,
+    table: amountTable(sections, meta.currency)
   };
   return { doc, figures: f };
 }

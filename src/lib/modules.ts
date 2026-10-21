@@ -15,7 +15,7 @@ import { farmTypes, grows, keepsAnimals, speciesOf, SPECIES } from './farmTypes'
 
 type Derived = ReturnType<typeof derive>;
 
-export type ModuleKey = 'feed' | 'silage' | 'animals' | 'milk' | 'fields' | 'crops' | 'money' | 'loans' | 'records' | 'suppliers';
+export type ModuleKey = 'feed' | 'silage' | 'animals' | 'milk' | 'fields' | 'crops' | 'money' | 'loans' | 'reports' | 'records' | 'suppliers';
 export type ModuleTone = 'urgent' | 'warn' | 'info';
 
 export interface ModuleTile {
@@ -43,6 +43,7 @@ export function moduleOf(idOrKey: string, to?: string): ModuleKey | null {
   if (r.startsWith('/feed') || r.startsWith('/record/delivery') || r.startsWith('/record/order')) return 'feed';
   if (r.startsWith('/fertiliser') || r.startsWith('/farm/fields') || r.startsWith('/record/spread') || r.startsWith('/record/fertiliser')) return 'fields';
   if (r.startsWith('/farm/silage')) return 'silage';
+  if (r.startsWith('/reports')) return 'reports';
   if (r.startsWith('/money/loans') || r.startsWith('/money/payments')) return 'loans';
   if (r.startsWith('/money') || r.startsWith('/forecast?tab=cash') || r.startsWith('/record/invoice')) return 'money';
   if (r.startsWith('/farm/groups') || r.startsWith('/calving')) return 'animals';
@@ -130,6 +131,7 @@ export function dashboardModules(b: FarmBundle, d: Derived, today: ISODate): Mod
   if (!worker) {
     tiles.push(tile('money', 'Money', 'Cash, bills, budget, year plan', '/money'));
     const loans = (b.loans ?? []).filter((l) => !l.archived);
+    tiles.push(tile('reports', 'Reports', 'Profit, cash flow, balance sheet, stock', '/reports'));
     tiles.push(tile('loans', 'Loans and schemes', loans.length ? plural(loans.length, 'loan') : 'Repayments, interest, scheme payments', '/money/loans'));
   }
 

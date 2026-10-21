@@ -58,6 +58,8 @@ import Setup, { SetupStageScreen } from './pages/Setup';
 import Loans, { LoanDetail } from './pages/Loans';
 import Payments from './pages/Payments';
 import YearPlan from './pages/YearPlan';
+import Reports, { ReportPage } from './pages/Reports';
+import YearValues from './pages/YearValues';
 
 export default function App() {
   if (!supabaseConfigured) return <MissingConfig />;
@@ -117,6 +119,9 @@ export default function App() {
         <Route path="settings/changes" element={<Changes />} />
         <Route path="money" element={<Money />} />
         <Route path="money/year-end" element={<YearEnd />} />
+        <Route path="reports" element={<Reports />} />
+        <Route path="reports/values" element={<YearValues />} />
+        <Route path="reports/:id" element={<ReportPage />} />
         <Route path="diary" element={<Diary />} />
         <Route path="routines" element={<Routines />} />
         <Route path="routines/new" element={<RoutineForm />} />

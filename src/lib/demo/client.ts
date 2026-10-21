@@ -21,7 +21,7 @@ const DB_KEY = IS_LOCAL ? 'agri-it:phone-db' : 'agri-it:demo-db';
 const SIGNED_OUT_KEY = 'agri-it:demo-signed-out';
 // Demo: bump when the seed's shape changes so stored demo data is rebuilt.
 // Phone: the farmer's own records. NEVER thrown away on a version change; migrate instead.
-const VERSION = IS_LOCAL ? 1 : 10; // demo 10 (16 Oct): a loan, an overdraft, scheme payments expected, setup done. Demo 9 (14 Oct): breeds as a list
+const VERSION = IS_LOCAL ? 1 : 11; // demo 11 (21 Oct): year-end values for the reports. Demo 10 (16 Oct): a loan, an overdraft, scheme payments expected, setup done. Demo 9 (14 Oct): breeds as a list
 const LOCAL_USER = { id: '20000000-0000-0000-0000-0000000000aa', email: 'This phone' };
 const USER = IS_LOCAL ? LOCAL_USER : DEMO_USER;
 const fresh = (): DB => (IS_LOCAL ? buildReference() : buildSeed());
@@ -212,7 +212,7 @@ function withDefaults(t: string, r: Row): Row {
 }
 
 /** Tables with updated_at (mirrors the migration), so an offline edit can spot a newer change. */
-const TOUCHED = new Set(['farms', 'animal_groups', 'feed_products', 'feed_transactions', 'feeding_rules', 'silage_stores', 'budget_lines', 'farm_records', 'jobs', 'routines', 'crops', 'documents', 'costs', 'income', 'farm_supplier_settings', 'fields', 'fertiliser_products', 'fertiliser_stock', 'fertiliser_spreads', 'fertiliser_spread_fields', 'loans', 'loan_statements', 'expected_income']);
+const TOUCHED = new Set(['farms', 'animal_groups', 'feed_products', 'feed_transactions', 'feeding_rules', 'silage_stores', 'budget_lines', 'farm_records', 'jobs', 'routines', 'crops', 'documents', 'costs', 'income', 'farm_supplier_settings', 'fields', 'fertiliser_products', 'fertiliser_stock', 'fertiliser_spreads', 'fertiliser_spread_fields', 'loans', 'loan_statements', 'expected_income', 'year_end_values']);
 /** Same as the costs_payment_dates trigger: a paid cost has a paid date, an owed one never does. */
 function paymentDates(t: string, r: Row): Row {
   if (t !== 'costs') return r;
@@ -222,7 +222,7 @@ function paymentDates(t: string, r: Row): Row {
 }
 
 /** Same as the audit_row trigger: who changed what and when. On this phone, "who" is the phone. */
-const AUDITED = new Set(['costs', 'income', 'feed_transactions', 'animal_groups', 'feeding_rules', 'documents', 'farm_records', 'budget_lines', 'jobs', 'feed_products', 'silage_stores', 'fields', 'fertiliser_products', 'fertiliser_stock', 'fertiliser_spreads', 'fertiliser_spread_fields', 'loans', 'loan_statements', 'expected_income']);
+const AUDITED = new Set(['costs', 'income', 'feed_transactions', 'animal_groups', 'feeding_rules', 'documents', 'farm_records', 'budget_lines', 'jobs', 'feed_products', 'silage_stores', 'fields', 'fertiliser_products', 'fertiliser_stock', 'fertiliser_spreads', 'fertiliser_spread_fields', 'loans', 'loan_statements', 'expected_income', 'year_end_values']);
 let auditSeq = 0;
 function audit(t: string, action: 'insert' | 'update' | 'delete', oldRow: Row | null, newRow: Row | null) {
   if (!AUDITED.has(t)) return;

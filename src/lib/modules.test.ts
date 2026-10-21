@@ -14,7 +14,7 @@ const group = (x: Partial<AnimalGroup> = {}): AnimalGroup => ({
 const bundle = (over: Partial<FarmBundle> = {}): FarmBundle => ({
   farm, groups: [group()], crops: [], suppliers: [{ id: 'tir', name: 'Tirlán' } as FarmBundle['suppliers'][number]], branches: [], supplierSettings: [], products: [],
   txns: [], rules: [], silage: [], benchmarks: [], evidence: [], income: [], costs: [], budget: [], records: [], documents: [], jobs: [], routines: [], completions: [], feedLogs: [], headHistory: [],
-  seasons: [], births: [], decisions: [], fields: [], fertilisers: [], fertStock: [], spreads: [], spreadFields: [], loans: [], loanStatements: [], expected: [], ...over
+  seasons: [], births: [], decisions: [], fields: [], fertilisers: [], fertStock: [], spreads: [], spreadFields: [], loans: [], loanStatements: [], expected: [], yearValues: [], ...over
 });
 const keys = (t: { key: string }[]) => t.map((x) => x.key);
 
@@ -54,7 +54,7 @@ describe('dashboard module tiles', () => {
   it('a new dairy farm gets the modules it needs and a plain line for each, nothing invented', () => {
     const b = bundle();
     const tiles = dashboardModules(b, derive(b, TODAY), TODAY);
-    expect(keys(tiles)).toEqual(['feed', 'silage', 'animals', 'milk', 'fields', 'money', 'loans', 'records', 'suppliers']);
+    expect(keys(tiles)).toEqual(['feed', 'silage', 'animals', 'milk', 'fields', 'money', 'reports', 'loans', 'records', 'suppliers']);
     const line = (k: string) => tiles.find((t) => t.key === k)!.line;
     expect(line('feed')).toBe('Add the feed you buy');
     expect(line('animals')).toBe('1 group, 100 cattle');

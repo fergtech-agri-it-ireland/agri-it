@@ -333,7 +333,61 @@ select pg_temp.check((select income_id is null from public.expected_income where
 select pg_temp.check((select interval_months = 12 from public.routines where title = 'Insurance'), 'a yearly bill is a routine every 12 months');
 select pg_temp.check((select count(*) = 0 from public.routines where interval_months <> 1 and title <> 'Insurance'), 'older routines are every month');
 
+-- Reports module (21 Oct 2026): year-end values, and animals bought as their own cost category
+insert into public.year_end_values (id, farm_id, kind, as_at, label, animal_group_id, head_count, unit_value_eur, value_eur, basis)
+  values ('a3000000-0000-0000-0000-0000000000d1', '30000000-0000-0000-0000-000000000001', 'livestock', '2025-12-31', 'Dairy cows', '40000000-0000-0000-0000-000000000001', 120, 1400, 168000, 'market_value');
+insert into public.year_end_values (id, farm_id, kind, as_at, label, value_eur, basis, note)
+  values ('a3000000-0000-0000-0000-0000000000d2', '30000000-0000-0000-0000-000000000001', 'debtors', '2025-12-31', 'December milk cheque', 22000, 'farmer_estimate', 'Paid in January');
+select pg_temp.check((select count(*) = 2 from public.year_end_values), 'year-end values are saved');
+do $$ begin
+  insert into public.year_end_values (farm_id, kind, as_at, label, animal_group_id, value_eur) values ('30000000-0000-0000-0000-000000000001', 'livestock', '2025-12-31', 'Dairy cows', '40000000-0000-0000-0000-000000000001', 1);
+  raise exception 'FAILED: the same group valued twice on one day';
+exception when unique_violation then raise notice 'ok: one value per group per day'; end $$;
+do $$ begin
+  insert into public.year_end_values (farm_id, kind, as_at, label, value_eur) values ('30000000-0000-0000-0000-000000000001', 'debtors', '2025-12-31', 'DECEMBER MILK CHEQUE', 1);
+  raise exception 'FAILED: the same item named twice on one day';
+exception when unique_violation then raise notice 'ok: one value per named item per day (case ignored)'; end $$;
+do $$ begin
+  insert into public.year_end_values (farm_id, kind, as_at, label, value_eur) values ('30000000-0000-0000-0000-000000000001', 'land', '2025-12-31', 'Home farm', -5);
+  raise exception 'FAILED: a negative value';
+exception when check_violation then raise notice 'ok: a value cannot be negative'; end $$;
+do $$ begin
+  insert into public.year_end_values (farm_id, kind, as_at, label, value_eur, basis) values ('30000000-0000-0000-0000-000000000001', 'land', '2025-12-31', 'Home farm', 5, 'guess');
+  raise exception 'FAILED: an unknown basis';
+exception when check_violation then raise notice 'ok: the basis must be one of the listed ones'; end $$;
+do $$ begin
+  insert into public.year_end_values (farm_id, kind, as_at, label, value_eur) values ('30000000-0000-0000-0000-000000000001', 'cars', '2025-12-31', 'Van', 5);
+  raise exception 'FAILED: an unknown kind';
+exception when check_violation then raise notice 'ok: the kind must be one of the listed ones'; end $$;
+select pg_temp.check((select count(*) >= 2 from public.audit_log where table_name = 'year_end_values'), 'year-end values are in the change history');
+update public.year_end_values set value_eur = 23000 where id = 'a3000000-0000-0000-0000-0000000000d2';
+select pg_temp.check((select updated_at > created_at from public.year_end_values where id = 'a3000000-0000-0000-0000-0000000000d2'), 'a changed value is time-stamped');
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = '20000000-0000-0000-0000-0000000000b1';
+select pg_temp.check((select count(*) = 0 from public.year_end_values), 'a farm worker sees no year-end values');
+do $$ begin
+  insert into public.year_end_values (farm_id, kind, as_at, label, value_eur) values ('30000000-0000-0000-0000-000000000001', 'land', '2025-12-31', 'Sneaky', 1);
+  raise exception 'FAILED: a worker could add a value';
+exception when insufficient_privilege or check_violation or others then if sqlerrm like 'FAILED%' then raise; end if; raise notice 'ok: a worker cannot add a year-end value'; end $$;
+commit;
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = '20000000-0000-0000-0000-0000000000b2';
+select pg_temp.check((select count(*) = 2 from public.year_end_values), 'an adviser reads year-end values');
+update public.year_end_values set value_eur = 1 where id = 'a3000000-0000-0000-0000-0000000000d2';
+select pg_temp.check((select value_eur = 23000 from public.year_end_values where id = 'a3000000-0000-0000-0000-0000000000d2'), 'an adviser cannot change a year-end value');
+commit;
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = '20000000-0000-0000-0000-0000000000b9';
+select pg_temp.check((select count(*) = 0 from public.year_end_values), 'someone outside the farm sees no year-end values');
+commit;
+insert into public.costs (id, farm_id, category, occurred_on, amount_eur, description)
+  values ('c0000000-0000-0000-0000-0000000000d1', '30000000-0000-0000-0000-000000000001', 'livestock_purchase', current_date, 4000, '10 weanlings bought');
+select pg_temp.check((select category = 'livestock_purchase' from public.costs where id = 'c0000000-0000-0000-0000-0000000000d1'), 'animals bought is a cost category');
 -- Deleting a farm takes its trail with it (no orphan audit rows, no FK errors)
 delete from public.farms where id = '30000000-0000-0000-0000-000000000001';
 select pg_temp.check((select count(*) = 0 from public.audit_log where farm_id = '30000000-0000-0000-0000-000000000001'), 'deleting a farm removes its audit trail cleanly');
+select pg_temp.check((select count(*) = 0 from public.year_end_values where farm_id = '30000000-0000-0000-0000-000000000001'), 'deleting a farm removes its year-end values');
 \echo 'ALL REVIEW DB CHECKS PASSED'

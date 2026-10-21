@@ -48,6 +48,7 @@ export const DEFAULTS: Record<string, () => Row> = {
   loans: () => ({ kind: 'loan', purpose: null, rate_percent: null, rate_type: null, repayment_eur: null, frequency: null, next_due: null, skip_months: [], interest_only_until: null, ends_on: null, credit_limit_eur: null, notes: null, archived: false }),
   loan_statements: () => ({ balance_eur: null, interest_eur: null, document_id: null }),
   expected_income: () => ({ part: 'full', rule: null, income_id: null }),
+  year_end_values: () => ({ animal_group_id: null, head_count: null, unit_value_eur: null, market_unit_value_eur: null, note: null, basis: 'farmer_estimate' }),
   budget_lines: () => ({ month: null }),
   farm_records: () => ({ details: {}, document_id: null, state: 'confirmed' }),
   jobs: () => ({ due_on: null, done_at: null, dismissed_at: null }),
@@ -344,6 +345,16 @@ export function buildSeed(): DB {
   put('expected_income', [
     { farm_id: F, scheme: 'biss', label: `BISS and CRISS ${year}, advance`, scheme_year: year, part: 'advance', amount_eur: 27750, expected_on: D(20), rule: null },
     { farm_id: F, scheme: 'biss', label: `BISS and CRISS ${year}, balance`, scheme_year: year, part: 'balance', amount_eur: 9250, expected_on: D(50), rule: null }
+  ]);
+  // Reports (21 Oct 2026): what last year's accounts put on the stock and machinery, at last year's end.
+  // This year's closing values are left blank on purpose, so this year's profit shows as provisional.
+  const lastYearEnd = `${year - 1}-12-31`;
+  put('year_end_values', [
+    { farm_id: F, kind: 'livestock', as_at: lastYearEnd, label: 'Dairy cows', animal_group_id: G_COWS, head_count: 120, unit_value_eur: 1400, value_eur: 168000, basis: 'market_value' },
+    { farm_id: F, kind: 'livestock', as_at: lastYearEnd, label: 'In-calf heifers', animal_group_id: G_HEIF, head_count: 40, unit_value_eur: 1200, value_eur: 48000, basis: 'market_value' },
+    { farm_id: F, kind: 'livestock', as_at: lastYearEnd, label: 'Weanlings', animal_group_id: G_WEAN, head_count: 30, unit_value_eur: 450, value_eur: 13500, basis: 'market_value' },
+    { farm_id: F, kind: 'debtors', as_at: lastYearEnd, label: 'December milk cheque', value_eur: 22000, basis: 'farmer_estimate', note: 'Paid in January' },
+    { farm_id: F, kind: 'machinery', as_at: lastYearEnd, label: 'Tractors and machinery', value_eur: 85000, basis: 'accountant' }
   ]);
   for (const t of ['documents', 'forecast_snapshots', 'calf_births', 'suggestion_decisions']) db[t] = db[t] ?? [];
   return db;

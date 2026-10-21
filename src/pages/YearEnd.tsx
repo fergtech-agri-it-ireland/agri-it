@@ -10,6 +10,7 @@ import type { FarmType } from '../lib/types';
 import { eur, fmtDate, fmtMonth, fmtNum, todayISO } from '../lib/format';
 import { Button, Card, Chips, List, Row, Screen, SectionTitle, ToneIcon } from '../components/ui';
 import { IN_FRAME, IS_DEMO } from '../lib/env';
+import { buildReport, REPORT_LIST, docCsv } from '../lib/reports';
 
 export default function YearEnd() {
   const b = useFarmData();
@@ -38,7 +39,8 @@ export default function YearEnd() {
       { name: 'summary.csv', text: yearEndCsv(pack, b.farm.name) },
       { name: 'transactions.csv', text: ledgerCsv(pack) },
       { name: 'records.csv', text: vaultCsv(records) },
-      { name: 'README.txt', text: `Agri-It management pack for ${b.farm.name}, ${pack.fy.start} to ${pack.fy.end}.\n\nsummary.csv: totals by category, month, supplier and enterprise.\ntransactions.csv: every income and cost, with paid or owed, invoice number, VAT, loan interest where given, and its attachment. The totals at the foot match summary.csv.\nsummary.csv also lists loans (owed at the start and end, repaid, interest and where each figure came from), scheme payments received, capital spending, livestock numbers at the start and end of the year, and a checklist of what else to gather.\nrecords.csv: farm records and documents.\nattachments/: the photos and invoices.\n\nThis is a management summary built from the farmer's records. It is not a set of statutory accounts and does not calculate taxable profit.\n` }
+      ...REPORT_LIST.map((r) => ({ name: `reports/${r.id}.csv`, text: docCsv(buildReport(r.id, b, todayISO(), { offset: Number(offset) })) })),
+      { name: 'README.txt', text: `Agri-It management pack for ${b.farm.name}, ${pack.fy.start} to ${pack.fy.end}.\n\nsummary.csv: totals by category, month, supplier and enterprise.\ntransactions.csv: every income and cost, with paid or owed, invoice number, VAT, loan interest where given, and its attachment. The totals at the foot match summary.csv.\nsummary.csv also lists loans (owed at the start and end, repaid, interest and where each figure came from), scheme payments received, capital spending, livestock numbers at the start and end of the year, and a checklist of what else to gather.\nrecords.csv: farm records and documents.\nreports/: the profit, cash flow, balance sheet, stock, animals, income and expenses reports and the cross-checks, each with its basis, completeness and rule version.\nattachments/: the photos and invoices.\n\nThis is a management summary built from the farmer's records. It is not a set of statutory accounts and does not calculate taxable profit.\n` }
     ], docs);
     download(blob, `agri-it-accountant-pack-${label}.zip`);
     setPacking(`${pack.ledger.length} transactions and ${attached} attachment${attached === 1 ? '' : 's'}${missing.length ? `. ${missing.length} attachment${missing.length === 1 ? '' : 's'} not on this phone (listed in the zip)` : ''}.`);
@@ -51,6 +53,8 @@ export default function YearEnd() {
         <p className="font-bold">Management summary only</p>
         <p className="text-muted">Built from the records in Agri-It. It is not a set of statutory accounts and does not calculate taxable profit. Your accountant uses it as a starting point.</p>
       </Card>
+
+      <Link to={`/reports?year=${offset}`} className="no-print block rounded-[1.125rem] bg-card p-4 font-bold text-accent shadow-lift">Open the reports: profit, cash flow, balance sheet and checks</Link>
 
       <SectionTitle>Before you send it</SectionTitle>
       {pack.missing.length === 0 ? (

@@ -222,3 +222,17 @@ describe('Scheme payment timings (16 Oct 2026): sourced, dated and rechecked', (
     }
   });
 });
+
+describe('Reports rules (21 Oct 2026): sourced, dated and rechecked', () => {
+  it('every rule names its source and is not more than 30 days past its recheck', async () => {
+    const { REPORT_RULES } = await import('./reports/rules');
+    for (const r of REPORT_RULES) {
+      expect(/^https:\/\//.test(r.url), r.key).toBe(true);
+      expect(r.checkedOn <= today).toBe(true);
+      // To fix: check the source again (Revenue 38-03-17 and 23-02-02, SCSI stocktaking paper, HMRC BIM55410,
+      // gov.uk records pages), then update the text, checkedOn and reviewBy in lib/reports/rules.ts and
+      // bump REPORTS_RULE_VERSION in lib/reports/doc.ts if a rule changed.
+      expect(addDays(r.reviewBy, 30) >= today, `${r.key} is overdue a recheck (review by ${r.reviewBy})`).toBe(true);
+    }
+  });
+});

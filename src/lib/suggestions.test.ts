@@ -14,7 +14,7 @@ const group = (x: Partial<AnimalGroup>): AnimalGroup => ({
 const bundle = (over: Partial<FarmBundle> = {}): FarmBundle => ({
   farm, groups: [group({})], crops: [], suppliers: [{ id: 'tir', name: 'Tirlán' } as FarmBundle['suppliers'][number]], branches: [], supplierSettings: [], products: [],
   txns: [], rules: [], silage: [], benchmarks: [], evidence: [], income: [], costs: [], budget: [], records: [], documents: [], jobs: [], routines: [], completions: [], feedLogs: [], headHistory: [],
-  seasons: [], births: [], decisions: [], fields: [], fertilisers: [], fertStock: [], spreads: [], spreadFields: [], loans: [], loanStatements: [], expected: [], ...over
+  seasons: [], births: [], decisions: [], fields: [], fertilisers: [], fertStock: [], spreads: [], spreadFields: [], loans: [], loanStatements: [], expected: [], yearValues: [], ...over
 });
 const cost = (id: string, on: string, amt = 210): Cost => ({
   id, farm_id: 'f', category: 'utilities', other_label: null, occurred_on: on, amount_eur: amt, supplier_id: null, supplier_name: 'ESB', feed_transaction_id: null, description: null, document_id: null

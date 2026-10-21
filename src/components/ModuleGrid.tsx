@@ -1,10 +1,10 @@
 import type { ComponentType } from 'react';
 import { Link } from 'react-router-dom';
-import { Banknote, ClipboardList, Landmark, Map as MapIcon, Milk, Sprout, Truck, Users, Warehouse, Wheat } from 'lucide-react';
+import { Banknote, ClipboardList, FileBarChart, Landmark, Map as MapIcon, Milk, Sprout, Truck, Users, Warehouse, Wheat } from 'lucide-react';
 import type { ModuleKey, ModuleTile, ModuleTone } from '../lib/modules';
 
 const ICON: Record<ModuleKey, ComponentType<{ className?: string }>> = {
-  feed: Wheat, silage: Warehouse, animals: Users, milk: Milk, fields: MapIcon, crops: Sprout, money: Banknote, loans: Landmark, records: ClipboardList, suppliers: Truck
+  feed: Wheat, silage: Warehouse, animals: Users, milk: Milk, fields: MapIcon, crops: Sprout, money: Banknote, loans: Landmark, reports: FileBarChart, records: ClipboardList, suppliers: Truck
 };
 const BADGE: Record<ModuleTone, string> = { urgent: 'bg-danger-bg text-danger', warn: 'bg-warn-bg text-warn', info: 'bg-field-light text-accent' };
 

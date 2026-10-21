@@ -41,7 +41,9 @@ export const IMPORT_ORDER = [
   'budget_lines', 'farm_records', 'jobs',
   'calving_seasons', 'calf_births', 'suggestion_decisions',
   // After costs: a fertiliser delivery points at its bill
-  'fields', 'fertiliser_products', 'fertiliser_stock', 'fertiliser_spreads', 'fertiliser_spread_fields'
+  'fields', 'fertiliser_products', 'fertiliser_stock', 'fertiliser_spreads', 'fertiliser_spread_fields',
+  // After the animal groups they point at (21 Oct 2026)
+  'year_end_values'
 ] as const;
 export type ImportTable = (typeof IMPORT_ORDER)[number];
 
@@ -63,7 +65,8 @@ export const TABLE_LABEL: Record<ImportTable, string> = {
   calving_seasons: 'calving seasons', calf_births: 'calves born', suggestion_decisions: 'answers to suggestions',
   fields: 'fields', fertiliser_products: 'fertilisers', fertiliser_stock: 'fertiliser orders, deliveries and stock checks',
   fertiliser_spreads: 'spreading', fertiliser_spread_fields: 'spreading by field',
-  loans: 'loans, hire purchase and overdrafts', loan_statements: 'loan statements', expected_income: 'scheme payments expected'
+  loans: 'loans, hire purchase and overdrafts', loan_statements: 'loan statements', expected_income: 'scheme payments expected',
+  year_end_values: 'year-end values'
 };
 
 export interface ImportPlan {

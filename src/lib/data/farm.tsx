@@ -104,7 +104,7 @@ async function fetchBundle(farmId: string): Promise<FarmBundle> {
     Promise.resolve(p).then((r) => { if (r.error) throw new Error(r.error.message); return (r.data ?? []) as T; });
 
   const userId = (await supabase.auth.getSession()).data.session?.user.id ?? null;
-  const [farm, groups, crops, suppliers, branches, supplierSettings, products, txns, rules, silage, benchmarks, evidence, income, costs, budget, records, documents, jobs, routines, completions, feedLogs, headHistory, members, seasons, births, decisions, fields, fertilisers, fertStock, spreads, spreadFields, loans, loanStatements, expected] =
+  const [farm, groups, crops, suppliers, branches, supplierSettings, products, txns, rules, silage, benchmarks, evidence, income, costs, budget, records, documents, jobs, routines, completions, feedLogs, headHistory, members, seasons, births, decisions, fields, fertilisers, fertStock, spreads, spreadFields, loans, loanStatements, expected, yearValues] =
     await Promise.all([
       q(supabase.from('farms').select('*').eq('id', farmId).single()),
       q(supabase.from('animal_groups').select('*').eq('farm_id', farmId).order('sort_order').order('name')),
@@ -140,13 +140,14 @@ async function fetchBundle(farmId: string): Promise<FarmBundle> {
       // Money tables (16 Oct 2026): a farm worker's read comes back empty
       q(supabase.from('loans').select('*').eq('farm_id', farmId).order('created_at')),
       q(supabase.from('loan_statements').select('*').eq('farm_id', farmId).order('period_end')),
-      q(supabase.from('expected_income').select('*').eq('farm_id', farmId).order('expected_on'))
+      q(supabase.from('expected_income').select('*').eq('farm_id', farmId).order('expected_on')),
+      q(supabase.from('year_end_values').select('*').eq('farm_id', farmId).order('as_at'))
     ]);
   const role = (members as { user_id: string; role: MemberRole }[]).find((m) => m.user_id === userId)?.role ?? 'owner';
-  return { farm, groups, crops, suppliers, branches, supplierSettings, products, txns, rules, silage, benchmarks, evidence, income, costs, budget, records, documents, jobs, routines, completions, feedLogs, headHistory, seasons, births, decisions, fields, fertilisers, fertStock, spreads, spreadFields, loans, loanStatements, expected, role } as unknown as FarmBundle;
+  return { farm, groups, crops, suppliers, branches, supplierSettings, products, txns, rules, silage, benchmarks, evidence, income, costs, budget, records, documents, jobs, routines, completions, feedLogs, headHistory, seasons, births, decisions, fields, fertilisers, fertStock, spreads, spreadFields, loans, loanStatements, expected, yearValues, role } as unknown as FarmBundle;
 }
 
-const LIST_KEYS = ['groups', 'crops', 'suppliers', 'branches', 'supplierSettings', 'products', 'txns', 'rules', 'silage', 'benchmarks', 'evidence', 'income', 'costs', 'budget', 'records', 'documents', 'jobs', 'routines', 'completions', 'feedLogs', 'headHistory', 'seasons', 'births', 'decisions', 'fields', 'fertilisers', 'fertStock', 'spreads', 'spreadFields', 'loans', 'loanStatements', 'expected'] as const;
+const LIST_KEYS = ['groups', 'crops', 'suppliers', 'branches', 'supplierSettings', 'products', 'txns', 'rules', 'silage', 'benchmarks', 'evidence', 'income', 'costs', 'budget', 'records', 'documents', 'jobs', 'routines', 'completions', 'feedLogs', 'headHistory', 'seasons', 'births', 'decisions', 'fields', 'fertilisers', 'fertStock', 'spreads', 'spreadFields', 'loans', 'loanStatements', 'expected', 'yearValues'] as const;
 
 /** Data cached by an older version of the app can lack newer lists. Treat a missing list as empty. */
 export function normalizeBundle(b: FarmBundle): FarmBundle {
@@ -209,7 +210,7 @@ const TABLE_LIST: Record<string, keyof FarmBundle> = {
   costs: 'costs', income: 'income', jobs: 'jobs', animal_groups: 'groups', feed_products: 'products', feeding_rules: 'rules',
   silage_stores: 'silage', farm_records: 'records', routines: 'routines', crops: 'crops', feed_transactions: 'txns',
   documents: 'documents', budget_lines: 'budget', calving_seasons: 'seasons',
-  loans: 'loans', loan_statements: 'loanStatements', expected_income: 'expected',
+  loans: 'loans', loan_statements: 'loanStatements', expected_income: 'expected', year_end_values: 'yearValues',
   fertiliser_stock: 'fertStock', fertiliser_spreads: 'spreads', fields: 'fields'
 };
 

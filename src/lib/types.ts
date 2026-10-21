@@ -21,7 +21,9 @@ export type CostCategory =
   | 'feed' | 'fertiliser' | 'seed_sprays' | 'contractor' | 'vet_medicine' | 'machinery_fuel' | 'utilities' | 'other'
   | 'loan_repayment' | 'capital'
   // 16 Oct 2026: the lines a Teagasc cash flow budget and an accountant keep apart
-  | 'land_rent' | 'labour' | 'insurance' | 'professional_fees' | 'household';
+  | 'land_rent' | 'labour' | 'insurance' | 'professional_fees' | 'household'
+  // 21 Oct 2026: animals bought. Kept apart from Other so the profit report can set them against sales.
+  | 'livestock_purchase';
 /**
  * Cash going out that is not a running cost of the farm: loan repayments (the interest part
  * is shown separately), machinery, buildings and land, and household drawings.
@@ -642,6 +644,39 @@ export interface FertiliserSpreadField {
   kg: number;
 }
 
+/**
+ * A value the farmer (or their accountant) puts on something at a year end (21 Oct 2026).
+ * Agri-It never makes these up: livestock, crops in store, money owed to the farm, machinery,
+ * buildings and land are only ever the farmer's figure, with the basis they used.
+ */
+export type YearValueKind = 'livestock' | 'crops_in_store' | 'debtors' | 'machinery' | 'buildings' | 'land' | 'other_asset';
+export type ValueBasis = 'market_value' | 'cost' | 'net_realisable_value' | 'deemed_cost' | 'accountant' | 'farmer_estimate';
+export interface YearEndValue {
+  id: string;
+  farm_id: string;
+  kind: YearValueKind;
+  /** The day the value is at: normally a financial year end */
+  as_at: ISODate;
+  label: string;
+  animal_group_id: string | null;
+  head_count: number | null;
+  unit_value_eur: number | null;
+  value_eur: number;
+  basis: ValueBasis;
+  /** Deemed cost only: the market value per head it was worked from */
+  market_unit_value_eur: number | null;
+  note: string | null;
+  updated_at?: string;
+}
+export const YEAR_VALUE_LABEL: Record<YearValueKind, string> = {
+  livestock: 'Livestock', crops_in_store: 'Crops in store', debtors: 'Money owed to you', machinery: 'Machinery',
+  buildings: 'Buildings and yards', land: 'Land', other_asset: 'Other assets'
+};
+export const VALUE_BASIS_LABEL: Record<ValueBasis, string> = {
+  market_value: 'Market value', cost: 'Cost', net_realisable_value: 'Net realisable value', deemed_cost: 'Deemed cost',
+  accountant: "Accountant's figure", farmer_estimate: 'My estimate'
+};
+
 export interface FarmBundle {
   farm: Farm;
   groups: AnimalGroup[];
@@ -680,6 +715,8 @@ export interface FarmBundle {
   loans: Loan[];
   loanStatements: LoanStatement[];
   expected: ExpectedIncome[];
+  /** Year-end values the farmer or accountant entered (21 Oct 2026). Money rules: a farm worker gets none. */
+  yearValues: YearEndValue[];
   /** This user's role on the farm (owner when not known, e.g. the phone-only build). */
   role?: MemberRole;
 }
@@ -721,7 +758,8 @@ export const COST_LABEL: Record<CostCategory, string> = {
   labour: 'Wages',
   insurance: 'Insurance',
   professional_fees: 'Accountant & advice',
-  household: 'Household (drawings)'
+  household: 'Household (drawings)',
+  livestock_purchase: 'Livestock bought'
 };
 
 export const INCOME_LABEL: Record<IncomeType, string> = {

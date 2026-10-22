@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import { Link, NavLink, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { BookOpen, CloudOff, Blocks, LayoutGrid, LineChart, Plus, RefreshCw } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -120,12 +120,25 @@ function Recorder({ bundle }: { bundle: FarmBundle }) {
   return null;
 }
 
+/**
+ * Every new page opens at the top. The browser keeps the old scroll position when only the content
+ * changes, so a long page followed by a short one used to open at the bottom. Only a change of page
+ * counts: choosing a year or filter on the same page leaves the scroll alone. A layout effect runs
+ * before a page's own effects, so a page that scrolls to one of its sections still wins.
+ */
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useLayoutEffect(() => { window.scrollTo(0, 0); }, [pathname]);
+  return null;
+}
+
 export function AppShell() {
   const { data } = useBundle();
   const loc = useLocation();
-  const hideNav = loc.pathname.startsWith('/record') || loc.pathname.startsWith('/edit/') || /^\/routines\/.+/.test(loc.pathname) || /\/(new|count|edit|adjust)$/.test(loc.pathname) || loc.pathname.includes('/rule/') || loc.pathname === '/farm/types' || loc.pathname === '/money/budget' || loc.pathname.startsWith('/calving/') || loc.pathname.startsWith('/setup/') || /^\/money\/loans\/.+/.test(loc.pathname) || /^\/animals\/.+/.test(loc.pathname);
+  const hideNav = loc.pathname.startsWith('/record') || loc.pathname.startsWith('/edit/') || /^\/routines\/.+/.test(loc.pathname) || /\/(new|count|edit|adjust)$/.test(loc.pathname) || loc.pathname.includes('/rule/') || loc.pathname === '/farm/types' || loc.pathname === '/money/budget' || loc.pathname.startsWith('/calving/') || loc.pathname.startsWith('/setup/') || /^\/money\/loans\/.+/.test(loc.pathname) || /^\/animals\/(new|many|update|[0-9a-f-]{20,})$/.test(loc.pathname);
   return (
     <>
+      <ScrollToTop />
       <SyncStatus />
       {data && <Recorder bundle={data} />}
       {IS_DEMO && <DemoBanner />}

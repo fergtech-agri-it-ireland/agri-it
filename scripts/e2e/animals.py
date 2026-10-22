@@ -60,7 +60,11 @@ def run(p):
     go(pg, '#/farm/groups')
     check('Animals and breeds links to Animal tags', pg.get_by_role('link', name=re.compile('Animal tags')).count() == 1)
     go(pg, '#/animals')
-    check('Empty list explains itself', 'No animals recorded yet' in body(pg))
+    check('Hub: six tiles, all the same size', pg.locator('[data-animal-tile]').count() == 6 and len(set(tuple(x) for x in pg.evaluate("[...document.querySelectorAll('[data-animal-tile]')].map(e => { const r = e.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; })"))) == 1)
+    check('Hub says it is not the herd register', 'not the official herd register' in body(pg))
+    go(pg, '#/animals/herd')
+    check('Empty list explains itself', 'No animals yet' in body(pg))
+    go(pg, '#/animals/add')
     check('Demo uses a file picker, not the camera', pg.locator('[data-testid=card-input]').first.get_attribute('capture') is None)
 
     # B. Scan a clean card
@@ -127,11 +131,9 @@ def run(p):
     pg.locator('[data-testid=animal-saved]').wait_for(timeout=8000)
 
     # G. The list
-    go(pg, '#/animals')
+    go(pg, '#/animals/herd')
     txt = body(pg)
     check('List shows the animals', all(x in txt for x in ['372 12 34567 8 1234', '372 12 34567 2 0456', 'IE 04 12345 6 7890', 'SHEEP7']), txt[:300])
-    check('List counts the tagged against the group', re.search(r'Dairy cows\s+4 of 120 head', txt) is not None, txt[txt.lower().find('tagged'):txt.lower().find('tagged') + 260])
-    check('Says it is not the herd register', 'not the official herd register' in txt)
     pg.get_by_label('Search tags').fill('0456')
     check('Search by the last digits', pg.locator('[data-animal]').count() == 1)
     pg.get_by_label('Search tags').fill('')
@@ -145,10 +147,10 @@ def run(p):
     check('Sold asks when', 'Sold on' in body(pg))
     pg.get_by_role('button', name='Save changes').click()
     pg.wait_for_timeout(700)
-    check('Back on the list after saving', pg.locator('[data-animal]').count() >= 1 and 'Animal tags' in body(pg))
+    check('Back on the list after saving', pg.locator('[data-animal]').count() >= 1 and 'Find and manage' in body(pg))
     check('Sold one is off the farm list', pg.locator('[data-animal="372123456781234"]').count() == 0)
-    pg.get_by_role('button', name=re.compile('Left the farm')).click()
-    check('Sold one is under Left the farm, with its date', pg.locator('[data-animal="372123456781234"]').count() == 1 and 'sold' in pg.locator('[data-animal="372123456781234"]').inner_text())
+    pg.get_by_role('button', name=re.compile(r'^Left \(')).click()
+    check('Sold one is under Left the farm, with its date', pg.locator('[data-animal="372123456781234"]').count() == 1 and 'sold' in pg.locator('a:has([data-animal="372123456781234"])').inner_text().lower())
 
     # I. Delete asks first
     pg.locator('[data-animal="372123456781234"]').click()
@@ -158,7 +160,7 @@ def run(p):
     pg.get_by_role('button', name='Delete this animal').click()
     pg.get_by_role('button', name='Yes, delete').click()
     pg.wait_for_timeout(700)
-    pg.get_by_role('button', name=re.compile('Left the farm')).click()
+    pg.get_by_role('button', name=re.compile(r'^Left \(')).click()
     check('Deleted', pg.locator('[data-animal="372123456781234"]').count() == 0)
 
     # J. Dashboard: tagged count on the Animals tile, and every module tile the same size

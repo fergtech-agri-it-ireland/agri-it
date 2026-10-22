@@ -16,7 +16,19 @@ export type Op =
   | { kind: 'insert'; table: string; row: Record<string, unknown> }
   | { kind: 'upsert'; table: string; row: Record<string, unknown>; onConflict: string }
   | { kind: 'update'; table: string; match: Record<string, unknown>; patch: Record<string, unknown>; ifUpdatedAt?: string }
-  | { kind: 'delete'; table: string; match: Record<string, unknown> };
+  | { kind: 'delete'; table: string; match: Record<string, unknown> }
+  // Many records in one request (a farm can load or change thousands of animals at once)
+  | { kind: 'insertMany'; table: string; rows: Record<string, unknown>[] }
+  | { kind: 'updateMany'; table: string; ids: string[]; patch: Record<string, unknown> }
+  | { kind: 'deleteMany'; table: string; ids: string[] };
+
+/** The most records one request carries. Longer lists are cut into requests of this size. */
+export const BATCH = 250;
+export function chunk<T>(xs: T[], n = BATCH): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < xs.length; i += n) out.push(xs.slice(i, i + n));
+  return out;
+}
 
 export interface Queued {
   id: string;
@@ -125,6 +137,15 @@ async function run(op: Op): Promise<unknown> {
     }
     case 'delete':
       res = await supabase.from(op.table).delete().match(op.match);
+      break;
+    case 'insertMany':
+      res = await supabase.from(op.table).upsert(op.rows, { onConflict: 'id', ignoreDuplicates: true });
+      break;
+    case 'updateMany':
+      res = await supabase.from(op.table).update(op.patch).in('id', op.ids);
+      break;
+    case 'deleteMany':
+      res = await supabase.from(op.table).delete().in('id', op.ids);
       break;
   }
   if (res.error) {

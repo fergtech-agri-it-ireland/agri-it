@@ -422,7 +422,19 @@ do $$ begin
 exception when check_violation then raise notice 'ok: the source must be card photo or typed'; end $$;
 update public.animals set status = 'sold', left_on = '2026-09-30' where id = 'a4000000-0000-0000-0000-0000000000e1';
 select pg_temp.check((select updated_at > created_at from public.animals where id = 'a4000000-0000-0000-0000-0000000000e1'), 'a changed animal is time-stamped');
-select pg_temp.check((select count(*) >= 3 from public.audit_log where table_name = 'animals'), 'animals are in the change history');
+select pg_temp.check((select count(*) = 0 from public.audit_log where table_name = 'animals'), 'animals stay out of the change history, so a bulk load cannot bury the rest');
+-- Species, castrated and a stage set by hand (22 Oct 2026)
+select pg_temp.check((select species = 'cattle' and castrated is null and stage is null from public.animals where id = 'a4000000-0000-0000-0000-0000000000e2'), 'a new animal is cattle with no stage set by hand');
+update public.animals set species = 'sheep', castrated = true, stage = 'wether' where id = 'a4000000-0000-0000-0000-0000000000e2';
+select pg_temp.check((select species = 'sheep' and castrated and stage = 'wether' from public.animals where id = 'a4000000-0000-0000-0000-0000000000e2'), 'species, castrated and a stage can be set');
+do $$ begin
+  update public.animals set species = 'dragon' where id = 'a4000000-0000-0000-0000-0000000000e2';
+  raise exception 'a made-up species was accepted';
+exception when check_violation then null; end $$;
+do $$ begin
+  update public.animals set stage = 'Not A Stage' where id = 'a4000000-0000-0000-0000-0000000000e2';
+  raise exception 'a stage with capitals and spaces was accepted';
+exception when check_violation then null; end $$;
 begin;
 set local role authenticated;
 set local request.jwt.claim.sub = '20000000-0000-0000-0000-0000000000b1';

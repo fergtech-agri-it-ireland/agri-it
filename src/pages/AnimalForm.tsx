@@ -2,8 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Check, Clock, HelpCircle, Loader2, ScanText } from 'lucide-react';
 import { useFarmCtx, useFarmData, useSave } from '../lib/data/farm';
-import { ANIMAL_STATUS_LABEL, type Animal, type AnimalStatus } from '../lib/types';
+import { ANIMAL_STATUS_LABEL, SPECIES_LABEL, type Animal, type AnimalSpecies, type AnimalStatus } from '../lib/types';
 import { fmtDate, todayISO, uuid } from '../lib/format';
+import { farmTypes } from '../lib/farmTypes';
+import { CLASS_RANK, ageText, speciesOf, stageChoices, stageOf } from '../lib/lifeStages';
+import { purposeFor } from '../lib/animalQuery';
 import { ANIMAL_CARD_RULE, formatTag, parseTag, readAnimalCard, TAG_HELP, tagProblem, type AnimalCardRead, type TagRead } from '../lib/animalId';
 import { NotReadable, readLines } from '../lib/docket/flow';
 import { warmReader, type ReadProgress } from '../lib/docket/reader';
@@ -45,6 +48,11 @@ export default function AnimalForm() {
   const [tag, setTag] = useState(existing ? formatTag(existing.tag_number) : '');
   const [other, setOther] = useState(!!existing && !parseTag(existing.tag_number));
   const [groupId, setGroupId] = useState<string | null>(existing?.animal_group_id ?? null);
+  const types = farmTypes(b.farm);
+  const [species, setSpecies] = useState<AnimalSpecies>(existing ? speciesOf(existing) : types.some((t) => ['dairy', 'suckler', 'beef', 'calf_rearing'].includes(t)) || !types.includes('sheep') ? 'cattle' : 'sheep');
+  const cattle = species === 'cattle';
+  const [castrated, setCastrated] = useState<'yes' | 'no' | ''>(existing?.castrated === true ? 'yes' : existing?.castrated === false ? 'no' : '');
+  const [stageHand, setStageHand] = useState(existing?.stage ?? '');
   const [sex, setSex] = useState<'female' | 'male' | ''>(existing?.sex ?? '');
   const [breed, setBreed] = useState(existing?.breed ?? '');
   const [born, setBorn] = useState(existing?.born_on ?? '');
@@ -91,9 +99,10 @@ export default function AnimalForm() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const parsed = other ? null : parseTag(tag);
-  const canonical = other ? tag.toUpperCase().replace(/\s+/g, '') : parsed?.canonical ?? '';
-  const problem = other ? (canonical.length > 30 ? 'That is too long for a tag.' : null) : tagProblem(tag);
+  const free = other || !cattle;
+  const parsed = free ? null : parseTag(tag);
+  const canonical = free ? tag.toUpperCase().replace(/\s+/g, '') : parsed?.canonical ?? '';
+  const problem = free ? (canonical.length > 30 ? 'That is too long for a tag.' : null) : tagProblem(tag);
   const dupe = canonical ? b.animals.find((a) => a.id !== existing?.id && a.tag_number === canonical) : undefined;
   const read = phase?.stage === 'read' ? phase.read : null;
   const fromCard: TagRead | undefined = read?.tags.find((t) => t.value.canonical === canonical);
@@ -102,7 +111,8 @@ export default function AnimalForm() {
 
   const rowFrom = (animalId: string): Animal => ({
     id: animalId, farm_id: farmId!, tag_number: canonical, tag_source: fromCard ? 'card_photo' : (existing?.tag_source === 'card_photo' && existing.tag_number === canonical ? 'card_photo' : 'typed'),
-    animal_group_id: groupId, sex: sex || null, breed: breed.trim() || null, born_on: born || null,
+    animal_group_id: groupId, sex: sex || null, species, castrated: sex === 'male' && castrated ? castrated === 'yes' : null, stage: stageHand || null,
+    breed: breed.trim() || null, born_on: born || null,
     status, left_on: status === 'on_farm' ? null : leftOn, note: note.trim() || null
   });
 
@@ -110,8 +120,8 @@ export default function AnimalForm() {
     if (!ready) return;
     if (existing) {
       const next = rowFrom(existing.id);
-      const patch = { tag_number: next.tag_number, tag_source: next.tag_source, animal_group_id: next.animal_group_id, sex: next.sex, breed: next.breed, born_on: next.born_on, status: next.status, left_on: next.left_on, note: next.note };
-      const old = { tag_number: existing.tag_number, tag_source: existing.tag_source, animal_group_id: existing.animal_group_id, sex: existing.sex, breed: existing.breed, born_on: existing.born_on, status: existing.status, left_on: existing.left_on, note: existing.note };
+      const patch = { tag_number: next.tag_number, tag_source: next.tag_source, animal_group_id: next.animal_group_id, sex: next.sex, species: next.species, castrated: next.castrated, stage: next.stage, breed: next.breed, born_on: next.born_on, status: next.status, left_on: next.left_on, note: next.note };
+      const old = { tag_number: existing.tag_number, tag_source: existing.tag_source, animal_group_id: existing.animal_group_id, sex: existing.sex, species: speciesOf(existing), castrated: existing.castrated ?? null, stage: existing.stage ?? null, breed: existing.breed, born_on: existing.born_on, status: existing.status, left_on: existing.left_on, note: existing.note };
       const ok = await save([{ kind: 'update', table: 'animals', match: { id: existing.id }, patch }], {
         label: `${formatTag(next.tag_number)} saved`,
         patch: (x) => ({ ...x, animals: x.animals.map((a) => (a.id === existing.id ? { ...a, ...patch } : a)) }),
@@ -137,12 +147,13 @@ export default function AnimalForm() {
       patch: (x) => ({ ...x, animals: x.animals.filter((a) => a.id !== existing.id) }),
       undo: [{ kind: 'insert', table: 'animals', row: { ...row } }]
     });
-    if (ok) { setConfirmDelete(false); nav('/animals', { replace: true }); }
+    if (ok) { setConfirmDelete(false); nav('/animals/herd', { replace: true }); }
   }
 
-  if (id && !existing) return <Screen title="Animal" back="/animals"><Empty title="Animal not found" body="It may have been deleted on another phone." action={<Link to="/animals" className="font-bold text-accent">Back to the animals</Link>} /></Screen>;
+  if (id && !existing) return <Screen title="Animal" back="/animals/herd"><Empty title="Animal not found" body="It may have been deleted on another phone." action={<Link to="/animals/herd" className="font-bold text-accent">Back to the animals</Link>} /></Screen>;
 
   const group = b.groups.find((g) => g.id === groupId);
+  const stageNow = stageOf({ species, sex: sex || null, castrated: sex === 'male' && castrated ? castrated === 'yes' : null, born_on: born || null, stage: stageHand || null }, today, purposeFor(b, group ?? null));
   const unavailableText = IS_DEMO
     ? 'Can\'t read this photo here: the demo page blocks the photo reader. In the app, the reader sets itself up the first time you have signal. Type the tag number below.'
     : IS_LOCAL && IN_FRAME
@@ -150,7 +161,7 @@ export default function AnimalForm() {
       : 'Can\'t read photos on this phone right now. The reader needs signal once to set itself up. Type the tag number below.';
 
   return (
-    <Screen title={existing ? 'Change animal' : 'Add an animal'} back="/animals">
+    <Screen title={existing ? 'Change animal' : 'Add an animal'} back={existing ? '/animals/herd' : '/animals/add'}>
       {saved && (
         <Card className="space-y-3 bg-field-light" >
           <div data-testid="animal-saved">
@@ -236,23 +247,49 @@ export default function AnimalForm() {
 
       {!saved && (
         <Card className="space-y-4">
-          {other ? (
-            <TextInput label="Tag or number" value={tag} onChange={setTag} hint="Any number you use for this animal: a sheep or pig tag, a horse's passport number or your own number." autoFocus />
+          <Chips label="What kind of animal?" value={species} onChange={(v) => { setSpecies(v); setStageHand(''); if (v !== 'cattle') setOther(true); else setOther(!!tag && !parseTag(tag)); }} columns={3}
+            options={(Object.keys(SPECIES_LABEL) as AnimalSpecies[]).map((k) => ({ value: k, label: SPECIES_LABEL[k] }))} />
+          {free ? (
+            <TextInput label={cattle ? 'Tag or number' : 'Tag number'} value={tag} onChange={setTag} hint="The tag or number you use for this animal: a sheep or pig tag, a horse's passport number or your own number." autoFocus={other} />
           ) : (
             <TextInput label="Tag number" value={tag} onChange={setTag} placeholder="372 12 34567 8 1234" hint={TAG_HELP} />
           )}
           {parsed && <p className="text-[0.95rem] font-semibold" data-testid="tag-shown">{formatTag(parsed.canonical)}{fromCard ? ' (read from the card)' : ''}</p>}
           {tag && problem && <p role="alert" className="font-bold text-danger">{problem}</p>}
           {dupe && <p role="alert" className="font-bold text-danger" data-testid="tag-dupe">That tag is already on the farm. <Link to={`/animals/${dupe.id}`} className="underline">Open it</Link></p>}
-          <button type="button" className="min-h-[2.75rem] text-sm font-bold text-accent" onClick={() => { setOther(!other); }}>
-            {other ? 'It is a cattle tag' : 'Not a cattle tag? Type any number'}
-          </button>
+          {cattle && (
+            <button type="button" className="min-h-[2.75rem] text-sm font-bold text-accent" onClick={() => { setOther(!other); }}>
+              {other ? 'It is a cattle tag' : 'Not a cattle tag? Type any number'}
+            </button>
+          )}
 
-          <GroupPicker b={b} value={groupId} onChange={(g) => setGroupId(g === groupId ? null : g)} label="Which group? (optional)" />
+          <GroupPicker b={b} value={groupId} label="Which group? (optional)" onChange={(g) => {
+            setGroupId(g === groupId ? null : g);
+            // A group of sheep makes this a sheep, unless the kind has been picked already
+            const sp = CLASS_RANK[b.groups.find((x) => x.id === g)?.animal_class ?? 'other']?.species;
+            if (g !== groupId && sp && sp !== species && !tag) { setSpecies(sp); if (sp !== 'cattle') setOther(true); }
+          }} />
           {group && <p className="hint">Tap the group again to leave it out. Group head counts are not changed.</p>}
-          <Chips label="Sex" value={sex} onChange={setSex} columns={3} options={[{ value: 'female', label: 'Female' }, { value: 'male', label: 'Male' }, { value: '', label: 'Not said' }]} />
+          <Chips label="Sex" value={sex} onChange={(v) => { setSex(v); if (v !== 'male') setCastrated(''); }} columns={3} options={[{ value: 'female', label: 'Female' }, { value: 'male', label: 'Male' }, { value: '', label: 'Not said' }]} />
+          {sex === 'male' && ['cattle', 'sheep', 'goat', 'pig', 'horse'].includes(species) && (
+            <Chips label={cattle ? 'Bull or bullock?' : 'Castrated?'} value={castrated} onChange={setCastrated} columns={3}
+              options={[{ value: 'no', label: cattle ? 'Bull' : 'No' }, { value: 'yes', label: cattle ? 'Bullock' : 'Yes' }, { value: '', label: 'Not said' }]} />
+          )}
           <TextInput label="Breed (optional)" value={breed} onChange={setBreed} placeholder="e.g. Angus, or Holstein Friesian" />
           <Field label="Born (optional)" htmlFor="born"><input id="born" type="date" className="input" max={today} value={born} onChange={(e) => setBorn(e.target.value)} /></Field>
+          {stageNow && (
+            <div data-testid="stage-line" className="rounded-xl bg-field-light px-3 py-2 text-[0.9375rem]">
+              <b>{stageNow.label}</b>{stageNow.ageMonths !== null ? `, ${ageText(stageNow.ageMonths)} old` : ''}{stageNow.byHand ? ' (set by you)' : ''}
+              {stageNow.next ? <span className="block text-muted">Becomes a {stageNow.next.label.toLowerCase()} on {fmtDate(stageNow.next.on)}.</span> : null}
+              {stageNow.key === 'unknown_age' ? <span className="block text-muted">Add the date born and Agri-It will work out what it is called, and move it up as it grows.</span> : null}
+            </div>
+          )}
+          <Field label="Life stage" htmlFor="stage" hint="Normally worked out from the date born. Pick one only to override it.">
+            <select id="stage" className="input" value={stageHand} onChange={(e) => setStageHand(e.target.value)}>
+              <option value="">Worked out from its age</option>
+              {stageChoices(species).map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+            </select>
+          </Field>
           <Chips label="Where is it now?" value={status} onChange={setStatus} columns={2} options={(Object.keys(ANIMAL_STATUS_LABEL) as AnimalStatus[]).map((s) => ({ value: s, label: ANIMAL_STATUS_LABEL[s] }))} />
           {status !== 'on_farm' && <DateChips label={status === 'sold' ? 'Sold on' : status === 'died' ? 'Died on' : 'Left on'} value={leftOn} onChange={setLeftOn} />}
           {datesBad && <p role="alert" className="font-bold text-danger">{datesBad}</p>}

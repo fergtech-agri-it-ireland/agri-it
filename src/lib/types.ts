@@ -683,6 +683,9 @@ export const VALUE_BASIS_LABEL: Record<ValueBasis, string> = {
  * group head counts still drive the feed and silage forecasts and are not changed by these.
  */
 export type AnimalStatus = 'on_farm' | 'sold' | 'died' | 'moved_off';
+/** What kind of animal. Cattle by default: the 372 and IE tags are cattle tags. */
+export type AnimalSpecies = 'cattle' | 'sheep' | 'goat' | 'pig' | 'horse' | 'other';
+export const SPECIES_LABEL: Record<AnimalSpecies, string> = { cattle: 'Cattle', sheep: 'Sheep', goat: 'Goats', pig: 'Pigs', horse: 'Horses', other: 'Other' };
 export interface Animal {
   id: string;
   farm_id: string;
@@ -691,6 +694,12 @@ export interface Animal {
   tag_source: 'card_photo' | 'typed';
   animal_group_id: string | null;
   sex: 'female' | 'male' | null;
+  /** Missing on animals saved before 22 Oct 2026: those are cattle */
+  species?: AnimalSpecies;
+  /** A male that has been castrated (a bullock, a wether). Null: not said. */
+  castrated?: boolean | null;
+  /** A life stage the farmer set by hand. Null: worked out from the age (see lib/lifeStages.ts). */
+  stage?: string | null;
   breed: string | null;
   born_on: ISODate | null;
   status: AnimalStatus;

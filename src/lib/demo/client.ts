@@ -21,7 +21,7 @@ const DB_KEY = IS_LOCAL ? 'agri-it:phone-db' : 'agri-it:demo-db';
 const SIGNED_OUT_KEY = 'agri-it:demo-signed-out';
 // Demo: bump when the seed's shape changes so stored demo data is rebuilt.
 // Phone: the farmer's own records. NEVER thrown away on a version change; migrate instead.
-const VERSION = IS_LOCAL ? 1 : 12; // demo 12 (22 Oct): animals with tag numbers. Demo 11 (21 Oct): year-end values for the reports. Demo 10 (16 Oct): a loan, an overdraft, scheme payments expected, setup done. Demo 9 (14 Oct): breeds as a list
+const VERSION = IS_LOCAL ? 1 : 13; // demo 13 (22 Oct, later): animals have a kind, castrated and a stage. Demo 12 (22 Oct): animals with tag numbers. Demo 11 (21 Oct): year-end values for the reports. Demo 10 (16 Oct): a loan, an overdraft, scheme payments expected, setup done. Demo 9 (14 Oct): breeds as a list
 const LOCAL_USER = { id: '20000000-0000-0000-0000-0000000000aa', email: 'This phone' };
 const USER = IS_LOCAL ? LOCAL_USER : DEMO_USER;
 const fresh = (): DB => (IS_LOCAL ? buildReference() : buildSeed());
@@ -222,7 +222,7 @@ function paymentDates(t: string, r: Row): Row {
 }
 
 /** Same as the audit_row trigger: who changed what and when. On this phone, "who" is the phone. */
-const AUDITED = new Set(['costs', 'income', 'feed_transactions', 'animal_groups', 'feeding_rules', 'documents', 'farm_records', 'budget_lines', 'jobs', 'feed_products', 'silage_stores', 'fields', 'fertiliser_products', 'fertiliser_stock', 'fertiliser_spreads', 'fertiliser_spread_fields', 'loans', 'loan_statements', 'expected_income', 'year_end_values', 'animals']);
+const AUDITED = new Set(['costs', 'income', 'feed_transactions', 'animal_groups', 'feeding_rules', 'documents', 'farm_records', 'budget_lines', 'jobs', 'feed_products', 'silage_stores', 'fields', 'fertiliser_products', 'fertiliser_stock', 'fertiliser_spreads', 'fertiliser_spread_fields', 'loans', 'loan_statements', 'expected_income', 'year_end_values']); // animals are not audited: loading thousands would push every other change out of the 2,000 kept
 let auditSeq = 0;
 function audit(t: string, action: 'insert' | 'update' | 'delete', oldRow: Row | null, newRow: Row | null) {
   if (!AUDITED.has(t)) return;
@@ -302,6 +302,7 @@ class Query implements PromiseLike<{ data: unknown; error: { message: string } |
   private filters: Filter[] = [];
   private orders: { col: string; asc: boolean }[] = [];
   private lim: number | null = null;
+  private rangeFrom = 0;
   private one = false;
   private mode: Mode = 'select';
   private payload: Row[] = [];
@@ -312,6 +313,8 @@ class Query implements PromiseLike<{ data: unknown; error: { message: string } |
 
   select() { return this; }
   eq(col: string, v: unknown) { this.filters.push((r) => r[col] === v); return this; }
+  in(col: string, vals: unknown[]) { const set = new Set(vals); this.filters.push((r) => set.has(r[col])); return this; }
+  range(from: number, to: number) { this.rangeFrom = from; this.lim = to - from + 1; return this; }
   gte(col: string, v: unknown) { this.filters.push((r) => String(r[col] ?? '') >= String(v)); return this; }
   match(m: Row) { for (const [k, v] of Object.entries(m)) this.eq(k, v); return this; }
   or(expr: string) {
@@ -405,7 +408,7 @@ class Query implements PromiseLike<{ data: unknown; error: { message: string } |
             return 0;
           });
         }
-        if (this.lim !== null) out = out.slice(0, this.lim);
+        if (this.lim !== null) out = out.slice(this.rangeFrom, this.rangeFrom + this.lim);
         if (this.one) return out.length === 1 ? ok(out[0]) : fail(out.length ? 'More than one row returned' : 'Row not found');
         return ok(out);
       }

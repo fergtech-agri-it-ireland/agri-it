@@ -93,14 +93,14 @@ with sync_playwright() as p:
     with pg.expect_download() as d: pg.get_by_role('button', name='Excel').click()
     dl = d.value; ap = f'{OUT}/animals.xlsx'; dl.save_as(ap)
     ws = openpyxl.load_workbook(ap).active
-    check('Animals Excel header row', [c.value for c in ws[1]] == ['Tag number', 'Group', 'Sex', 'Breed', 'Born', 'Status', 'Left'], str([c.value for c in ws[1]]))
+    check('Animals Excel header row', [c.value for c in ws[1]] == ['Tag number', 'Type', 'Stage', 'Group', 'Sex', 'Breed', 'Born', 'Status', 'Left'], str([c.value for c in ws[1]]))
     arows = [[c.value for c in r] for r in ws.iter_rows(min_row=2)]
-    check('Animals Excel: one row per animal, tag as text, breed with a comma in one cell', len(arows) == 2 and arows[0][0] == '372 12 34567 2 0456' and arows[1][3] == 'Limousin' and arows[0][3] == 'Charolais, cross', str(arows))
+    check('Animals Excel: one row per animal, tag as text, breed with a comma in one cell', len(arows) == 2 and arows[0][0] == '372 12 34567 2 0456' and arows[1][5] == 'Limousin' and arows[0][5] == 'Charolais, cross', str(arows))
     with pg.expect_download() as d: pg.get_by_role('button', name='CSV').click()
     path = f'{OUT}/animals.csv'; d.value.save_as(path)
     raw, text, rows = rows_of(path)
     plain('Animals CSV', text, rows)
-    check('Animals CSV: header and two animals, comma kept in one cell', rows[0][0] == 'Tag number' and len(rows) == 3 and any(r[3] == 'Charolais, cross' for r in rows), str(rows))
+    check('Animals CSV: header and two animals, comma kept in one cell', rows[0][0] == 'Tag number' and len(rows) == 3 and any(r[5] == 'Charolais, cross' for r in rows), str(rows))
 
     # --- The screen has no long explanations
     t = pg.locator('body').inner_text()

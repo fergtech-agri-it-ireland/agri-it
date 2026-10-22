@@ -3,7 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../supabase';
-import type { FarmBundle, MemberRole } from '../types';
+import type { Animal, FarmBundle, MemberRole } from '../types';
 import { groupsAsOf } from '../heads';
 import { IN_BROWSER, key } from '../env';
 import { addDays, currencyFor, setCurrency, todayISO } from '../format';
@@ -98,6 +98,22 @@ export function useFarmCtx() {
 // The farm bundle: small-farm data volumes make one cached fetch the simplest
 // way to get instant screens and full offline reads.
 // ---------------------------------------------------------------------------
+/**
+ * Every animal on the farm. The server returns at most 1,000 rows a request, and a farm can have
+ * thousands of animals, so they are read a page at a time until a short page says that is all.
+ */
+async function allAnimals(farmId: string): Promise<Animal[]> {
+  const PAGE = 1000;
+  const out: Animal[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const r = await supabase.from('animals').select('*').eq('farm_id', farmId).order('tag_number').range(from, from + PAGE - 1);
+    if (r.error) throw new Error(r.error.message);
+    const rows = (r.data ?? []) as Animal[];
+    out.push(...rows);
+    if (rows.length < PAGE) return out;
+  }
+}
+
 async function fetchBundle(farmId: string): Promise<FarmBundle> {
   const since = addDays(todayISO(), -800);
   const q = <T,>(p: PromiseLike<{ data: T | null; error: { message: string } | null }>) =>
@@ -142,7 +158,7 @@ async function fetchBundle(farmId: string): Promise<FarmBundle> {
       q(supabase.from('loan_statements').select('*').eq('farm_id', farmId).order('period_end')),
       q(supabase.from('expected_income').select('*').eq('farm_id', farmId).order('expected_on')),
       q(supabase.from('year_end_values').select('*').eq('farm_id', farmId).order('as_at')),
-      q(supabase.from('animals').select('*').eq('farm_id', farmId).order('tag_number'))
+      allAnimals(farmId)
     ]);
   const role = (members as { user_id: string; role: MemberRole }[]).find((m) => m.user_id === userId)?.role ?? 'owner';
   return { farm, groups, crops, suppliers, branches, supplierSettings, products, txns, rules, silage, benchmarks, evidence, income, costs, budget, records, documents, jobs, routines, completions, feedLogs, headHistory, seasons, births, decisions, fields, fertilisers, fertStock, spreads, spreadFields, loans, loanStatements, expected, yearValues, animals, role } as unknown as FarmBundle;

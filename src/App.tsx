@@ -62,6 +62,12 @@ import Reports, { ReportPage } from './pages/Reports';
 import YearValues from './pages/YearValues';
 import Animals from './pages/Animals';
 import AnimalForm from './pages/AnimalForm';
+import AnimalHerd from './pages/AnimalHerd';
+import AnimalAdd from './pages/AnimalAdd';
+import AnimalMany from './pages/AnimalMany';
+import AnimalUpdate from './pages/AnimalUpdate';
+import AnimalMoveUp from './pages/AnimalMoveUp';
+import AnimalStages from './pages/AnimalStages';
 
 export default function App() {
   if (!supabaseConfigured) return <MissingConfig />;
@@ -132,6 +138,12 @@ export default function App() {
         <Route path="farm" element={<FarmHub />} />
         <Route path="farm/groups" element={<Groups />} />
         <Route path="animals" element={<Animals />} />
+        <Route path="animals/herd" element={<AnimalHerd />} />
+        <Route path="animals/add" element={<AnimalAdd />} />
+        <Route path="animals/many" element={<AnimalMany />} />
+        <Route path="animals/update" element={<AnimalUpdate />} />
+        <Route path="animals/moveup" element={<AnimalMoveUp />} />
+        <Route path="animals/stages" element={<AnimalStages />} />
         <Route path="animals/new" element={<AnimalForm />} />
         <Route path="animals/:id" element={<AnimalForm />} />
         <Route path="farm/types" element={<FarmTypes />} />

@@ -76,7 +76,7 @@ with sync_playwright() as p:
     # ---- C. Tiles open their module; the tab bar says Modules ---------------------------------
     mods.locator('[data-module="animals"]').click()
     pg.wait_for_timeout(500)
-    check('Animals tile opens Animals', 'farm/groups' in pg.evaluate('location.hash'), pg.evaluate('location.hash'))
+    check('Animals tile opens Animals', pg.evaluate('location.hash').endswith('/animals'), pg.evaluate('location.hash'))
     go(pg, '#/')
     pg.get_by_role('navigation', name='Main').get_by_text('Modules').click()
     pg.wait_for_timeout(500)

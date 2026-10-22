@@ -48,7 +48,7 @@ export const DEFAULTS: Record<string, () => Row> = {
   loans: () => ({ kind: 'loan', purpose: null, rate_percent: null, rate_type: null, repayment_eur: null, frequency: null, next_due: null, skip_months: [], interest_only_until: null, ends_on: null, credit_limit_eur: null, notes: null, archived: false }),
   loan_statements: () => ({ balance_eur: null, interest_eur: null, document_id: null }),
   expected_income: () => ({ part: 'full', rule: null, income_id: null }),
-  animals: () => ({ tag_source: 'typed', animal_group_id: null, sex: null, breed: null, born_on: null, status: 'on_farm', left_on: null, note: null }),
+  animals: () => ({ species: 'cattle', castrated: null, stage: null, tag_source: 'typed', animal_group_id: null, sex: null, breed: null, born_on: null, status: 'on_farm', left_on: null, note: null }),
   year_end_values: () => ({ animal_group_id: null, head_count: null, unit_value_eur: null, market_unit_value_eur: null, note: null, basis: 'farmer_estimate' }),
   budget_lines: () => ({ month: null }),
   farm_records: () => ({ details: {}, document_id: null, state: 'confirmed' }),

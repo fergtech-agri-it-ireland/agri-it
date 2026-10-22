@@ -255,7 +255,7 @@ describe('downloads are plain tables: a header row and the values, nothing else'
   it('the headers are short names only', () => {
     expect(table('profit').head).toEqual(['Section', 'Item', 'Amount (EUR)']);
     expect(table('balance').head).toEqual(['Section', 'Item', 'At 31 Dec 2025 (EUR)', 'At 31 Dec 2026 (EUR)', 'Change (EUR)']);
-    expect(table('animals').head).toEqual(['Tag number', 'Group', 'Sex', 'Breed', 'Born', 'Status', 'Left']);
+    expect(table('animals').head).toEqual(['Tag number', 'Type', 'Stage', 'Group', 'Sex', 'Breed', 'Born', 'Status', 'Left']);
   });
   it('money columns hold plain numbers with two decimals, and an unknown figure is an empty cell', () => {
     for (const id of ['profit', 'balance'] as const) {
@@ -296,10 +296,10 @@ describe('downloads are plain tables: a header row and the values, nothing else'
     const t = table('animals');
     expect(t.body).toHaveLength(5);
     const a1 = t.body.find((r) => r[0] === formatTag('372123456781234'))!;
-    expect(a1).toEqual(['372 12 34567 8 1234', 'Cows', 'Female', 'Holstein', '04/03/2022', 'On the farm', '']);
+    expect(a1).toEqual(['372 12 34567 8 1234', 'Cattle', 'Dairy cow', 'Cows', 'Female', 'Holstein', '04/03/2022', 'On the farm', '']);
     const a3 = t.body.find((r) => r[0] === formatTag('372123456780003'))!;
-    expect([a3[4], a3[5], a3[6]]).toEqual(['05/05/2024', 'Sold', '01/10/2026']);
-    expect(t.body.find((r) => r[0] === formatTag('372123456780007'))!.slice(4)).toEqual(['', 'Moved off', '08/08/2026']);
+    expect([a3[6], a3[7], a3[8]]).toEqual(['05/05/2024', 'Sold', '01/10/2026']);
+    expect(t.body.find((r) => r[0] === formatTag('372123456780007'))!.slice(6)).toEqual(['', 'Moved off', '08/08/2026']);
   });
   it('a negative amount is a number, and text that could run as a formula is made safe', () => {
     const csv = tableCsv({ columns: [{ label: 'Item', type: 'text' }, { label: 'Amount (EUR)', type: 'money' }], rows: [['Refund', -12.5], ['=1+1', 0], ['Mart, Cahir', -0.001], ['Say "hi"', 3]] });

@@ -1,4 +1,4 @@
-# Reports module (21 October 2026, release 0.5.0; downloads reworked in 0.5.1; cut to three reports in 0.6.0)
+# Reports module (21 October 2026, release 0.5.0; animals report gained Type and Stage in 0.7.0; downloads reworked in 0.5.1; cut to three reports in 0.6.0)
 
 Feargal's brief: a reports module with the key reports for end of year accounting and basic reports for stock, animals, income and expenses, compliant with basic accounting principles, researched first.
 
@@ -34,7 +34,7 @@ All three sit under **Reports** (module tile on the dashboard, a row in Money, a
 | --- | --- | --- |
 | Profit and loss (`profit.ts`) | Output, direct costs, gross margin, overheads, profit, then what is not in profit. Accruals or Cash chips | Section, Item, Amount (EUR) |
 | Balance sheet (`balance.ts`) | Owns, Owes, Net worth, one column for the start and one for the end of the year | Section, Item, At <start> (EUR), At <end> (EUR), Change (EUR) |
-| Animals (`animals.ts`) | A few counts for the year (born, sold, died, moved off, on the farm at the end), then one row per tagged animal | Tag number, Group, Sex, Breed, Born, Status, Left |
+| Animals (`animals.ts`) | A few counts for the year (born, sold, died, moved off, on the farm at the end), then one row per tagged animal | Tag number, Type, Stage, Group, Sex, Breed, Born, Status, Left |
 
 - **Animals** lists the animals that have a tag number in Agri-It (the new Animals pages) that were on the farm at some point in the year. Dates are day/month/year. An animal marked sold, died or moved off with no date is flagged, because it cannot be placed in a year. It is not the official herd register, and group head counts are not used.
 - **Removed in 0.6.0:** Cash flow, Stock, Income, Expenses and "Do the reports agree?" (their code and tests are deleted; git history has them). Profit and loss and the balance sheet figures are unchanged. The cross-checks can come back as a separate screen once the three read right.

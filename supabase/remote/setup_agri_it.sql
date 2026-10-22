@@ -2116,6 +2116,27 @@ grant execute on function public.import_phone_backup(uuid, jsonb, jsonb) to auth
 comment on table public.animals is 'One row per animal the farmer has recorded: tag number (from the animal identity card or typed), group, sex, breed, born, and when it left. Not the official herd register.';
 commit;
 
+-- 2. 20261022000200_animal_stages.sql
+begin;
+-- Animals at scale (22 Oct 2026): what kind of animal it is, whether a male was castrated, and an
+-- optional life stage set by hand. The stage normally comes from the animal's age (calf, weanling,
+-- heifer, cow; lamb, hogget, ewe) and is worked out in the app, never stored, so it moves up on
+-- its own as the animal gets older. `stage` is only for the farmer who overrides it (an in-calf
+-- heifer, say). Indexes keep lists of thousands of animals quick.
+
+alter table public.animals
+  add column if not exists species   text not null default 'cattle' check (species in ('cattle', 'sheep', 'goat', 'pig', 'horse', 'other')),
+  add column if not exists castrated boolean,
+  add column if not exists stage     text check (stage is null or stage ~ '^[a-z_]{2,30}$');
+
+create index if not exists animals_farm_status on public.animals (farm_id, status);
+create index if not exists animals_farm_species on public.animals (farm_id, species) where status = 'on_farm';
+
+-- No change history for animals: a farm can load or update thousands at once, which would bury
+-- the history of money and feed records. Each animal still has created_at and updated_at.
+drop trigger if exists animals_audit on public.animals;
+commit;
+
 -- 3. Reference data from seed.sql (top half only: no demo login, no demo farm)
 begin;
 -- Agri-It local seed. Runs on `supabase db reset` (and first `supabase start`).
@@ -2266,7 +2287,8 @@ insert into supabase_migrations.schema_migrations (version, name) values
   ('20261016000200', 'setup_planner'),
   ('20261021000100', 'reports_enums'),
   ('20261021000200', 'year_end_values'),
-  ('20261022000100', 'animals');
+  ('20261022000100', 'animals'),
+  ('20261022000200', 'animal_stages');
 commit;
 
 -- 5. db_review.sql checks, run against the demo farm inside one transaction and rolled back.
@@ -2793,10 +2815,75 @@ select pg_temp.check((select count(*) = 0 from public.year_end_values), 'someone
 insert into public.costs (id, farm_id, category, occurred_on, amount_eur, description)
   values ('c0000000-0000-0000-0000-0000000000d1', '30000000-0000-0000-0000-000000000001', 'livestock_purchase', current_date, 4000, '10 weanlings bought');
 select pg_temp.check((select category = 'livestock_purchase' from public.costs where id = 'c0000000-0000-0000-0000-0000000000d1'), 'animals bought is a cost category');
+-- Animal tags (22 Oct 2026): each animal as its own record
+insert into public.animals (id, farm_id, tag_number, tag_source, animal_group_id, sex, breed, born_on)
+  values ('a4000000-0000-0000-0000-0000000000e1', '30000000-0000-0000-0000-000000000001', '372123456781234', 'card_photo', '40000000-0000-0000-0000-000000000001', 'female', 'Holstein Friesian', '2024-02-05');
+insert into public.animals (id, farm_id, tag_number) values ('a4000000-0000-0000-0000-0000000000e2', '30000000-0000-0000-0000-000000000001', 'IE041234567890');
+select pg_temp.check((select count(*) = 2 from public.animals), 'animals are saved');
+select pg_temp.check((select status = 'on_farm' and tag_source = 'typed' and left_on is null from public.animals where id = 'a4000000-0000-0000-0000-0000000000e2'), 'an animal added with just a tag is on the farm and typed');
+do $$ begin
+  insert into public.animals (farm_id, tag_number) values ('30000000-0000-0000-0000-000000000001', '372123456781234');
+  raise exception 'FAILED: the same tag on the farm twice';
+exception when unique_violation then raise notice 'ok: a tag number is one animal on a farm'; end $$;
+do $$ begin
+  insert into public.animals (farm_id, tag_number) values ('30000000-0000-0000-0000-000000000001', 'ie041234567891');
+  raise exception 'FAILED: a lower case tag';
+exception when check_violation then raise notice 'ok: tags are stored upper case'; end $$;
+do $$ begin
+  insert into public.animals (farm_id, tag_number) values ('30000000-0000-0000-0000-000000000001', '372 12 34567 8 1235');
+  raise exception 'FAILED: a tag with spaces';
+exception when check_violation then raise notice 'ok: tags are stored with no spaces'; end $$;
+do $$ begin
+  insert into public.animals (farm_id, tag_number, status) values ('30000000-0000-0000-0000-000000000001', 'IE041234567899', 'cow');
+  raise exception 'FAILED: an unknown status';
+exception when check_violation then raise notice 'ok: the status must be one of the listed ones'; end $$;
+do $$ begin
+  insert into public.animals (farm_id, tag_number, status, left_on) values ('30000000-0000-0000-0000-000000000001', 'IE041234567898', 'on_farm', '2026-01-01');
+  raise exception 'FAILED: an animal on the farm with a leaving date';
+exception when check_violation then raise notice 'ok: an animal on the farm has no leaving date'; end $$;
+do $$ begin
+  insert into public.animals (farm_id, tag_number, born_on, status, left_on) values ('30000000-0000-0000-0000-000000000001', 'IE041234567897', '2026-05-01', 'sold', '2026-01-01');
+  raise exception 'FAILED: sold before it was born';
+exception when check_violation then raise notice 'ok: an animal cannot leave before it was born'; end $$;
+do $$ begin
+  insert into public.animals (farm_id, tag_number, tag_source) values ('30000000-0000-0000-0000-000000000001', 'IE041234567896', 'guessed');
+  raise exception 'FAILED: an unknown source';
+exception when check_violation then raise notice 'ok: the source must be card photo or typed'; end $$;
+update public.animals set status = 'sold', left_on = '2026-09-30' where id = 'a4000000-0000-0000-0000-0000000000e1';
+select pg_temp.check((select updated_at > created_at from public.animals where id = 'a4000000-0000-0000-0000-0000000000e1'), 'a changed animal is time-stamped');
+select pg_temp.check((select count(*) = 0 from public.audit_log where table_name = 'animals'), 'animals stay out of the change history, so a bulk load cannot bury the rest');
+-- Species, castrated and a stage set by hand (22 Oct 2026)
+select pg_temp.check((select species = 'cattle' and castrated is null and stage is null from public.animals where id = 'a4000000-0000-0000-0000-0000000000e2'), 'a new animal is cattle with no stage set by hand');
+update public.animals set species = 'sheep', castrated = true, stage = 'wether' where id = 'a4000000-0000-0000-0000-0000000000e2';
+select pg_temp.check((select species = 'sheep' and castrated and stage = 'wether' from public.animals where id = 'a4000000-0000-0000-0000-0000000000e2'), 'species, castrated and a stage can be set');
+do $$ begin
+  update public.animals set species = 'dragon' where id = 'a4000000-0000-0000-0000-0000000000e2';
+  raise exception 'a made-up species was accepted';
+exception when check_violation then null; end $$;
+do $$ begin
+  update public.animals set stage = 'Not A Stage' where id = 'a4000000-0000-0000-0000-0000000000e2';
+  raise exception 'a stage with capitals and spaces was accepted';
+exception when check_violation then null; end $$;
+set local role authenticated;
+set local request.jwt.claim.sub = '20000000-0000-0000-0000-0000000000b1';
+select pg_temp.check((select count(*) = 2 from public.animals), 'a farm worker sees the animals');
+insert into public.animals (id, farm_id, tag_number) values ('a4000000-0000-0000-0000-0000000000e3', '30000000-0000-0000-0000-000000000001', 'IE041234567895');
+select pg_temp.check((select count(*) = 1 from public.animals where id = 'a4000000-0000-0000-0000-0000000000e3'), 'a farm worker can add an animal');
+set local role authenticated;
+set local request.jwt.claim.sub = '20000000-0000-0000-0000-0000000000b2';
+select pg_temp.check((select count(*) = 3 from public.animals), 'an adviser reads the animals');
+update public.animals set note = 'changed' where id = 'a4000000-0000-0000-0000-0000000000e3';
+select pg_temp.check((select note is null from public.animals where id = 'a4000000-0000-0000-0000-0000000000e3'), 'an adviser cannot change an animal');
+set local role authenticated;
+set local request.jwt.claim.sub = '20000000-0000-0000-0000-0000000000b9';
+select pg_temp.check((select count(*) = 0 from public.animals), 'someone outside the farm sees no animals');
+delete from public.animal_groups where id = '40000000-0000-0000-0000-000000000001';
+select pg_temp.check((select count(*) = 1 and bool_and(animal_group_id is null) from public.animals where id = 'a4000000-0000-0000-0000-0000000000e1'), 'removing a group keeps its animals, with no group');
 -- Deleting a farm takes its trail with it (no orphan audit rows, no FK errors)
 delete from public.farms where id = '30000000-0000-0000-0000-000000000001';
 select pg_temp.check((select count(*) = 0 from public.audit_log where farm_id = '30000000-0000-0000-0000-000000000001'), 'deleting a farm removes its audit trail cleanly');
 select pg_temp.check((select count(*) = 0 from public.year_end_values where farm_id = '30000000-0000-0000-0000-000000000001'), 'deleting a farm removes its year-end values');
+select pg_temp.check((select count(*) = 0 from public.animals where farm_id = '30000000-0000-0000-0000-000000000001'), 'deleting a farm removes its animals');
 reset role;
 rollback;
 

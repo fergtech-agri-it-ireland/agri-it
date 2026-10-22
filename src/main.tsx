@@ -26,7 +26,7 @@ const queryClient = new QueryClient({
   }
 });
 // Bump when the shape of cached farm data changes, so an older cache is thrown away instead of crashing screens.
-const CACHE_VERSION = 'v10-animals';
+const CACHE_VERSION = 'v11-animal-stages';
 const persister = createSyncStoragePersister({ storage: window.localStorage, key: key('cache') });
 
 startThemeClock();

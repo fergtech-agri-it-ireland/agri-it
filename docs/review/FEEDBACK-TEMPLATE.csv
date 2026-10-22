@@ -1,0 +1,3 @@
+ID,Where (screen or gallery file),Task or step,Type,Severity (1 blocker to 4 polish),What happened or what you noticed,Evidence (timing or quote),Suggested change,Effort (S/M/L),Who it affects
+EX1,Dashboard,Reading what to do today,confusion,2,"Three different things look urgent and I could not tell which to do first","Took about 20 seconds to decide","Show one most urgent item at the top, then the rest",M,Daily user
+EX2,Feed arrived,Recording a delivery,friction,3,"I was asked for a price before I had the docket in front of me","Paused at the price field","Let the price be added later from the invoice",S,Daily user

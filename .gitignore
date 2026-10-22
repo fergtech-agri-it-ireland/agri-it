@@ -23,3 +23,8 @@ out/
 boundary.png
 public/ocr/
 dist-online
+
+# Third-party review pack (built by scripts/make_review_pack.sh)
+agri-it-review-pack.zip
+docs/review/screens/
+review-pack/

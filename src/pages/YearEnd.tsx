@@ -10,7 +10,8 @@ import type { FarmType } from '../lib/types';
 import { eur, fmtDate, fmtMonth, fmtNum, todayISO } from '../lib/format';
 import { Button, Card, Chips, List, Row, Screen, SectionTitle, ToneIcon } from '../components/ui';
 import { IN_FRAME, IS_DEMO } from '../lib/env';
-import { buildReport, REPORT_LIST, docCsv } from '../lib/reports';
+import { buildReport, REPORT_LIST } from '../lib/reports';
+import { tableXlsx } from '../lib/reports/xlsx';
 
 export default function YearEnd() {
   const b = useFarmData();
@@ -40,7 +41,7 @@ export default function YearEnd() {
       { name: 'summary.csv', text: yearEndCsv(pack, b.farm.name) },
       { name: 'transactions.csv', text: ledgerCsv(pack) },
       { name: 'records.csv', text: vaultCsv(records) },
-      ...docs0.map((d) => ({ name: `reports/${d.id}.csv`, text: docCsv(d) })),
+      ...docs0.map((d) => ({ name: `reports/${d.id}.xlsx`, data: tableXlsx(d.table, d.title) })),
       { name: 'README.txt', text: packReadme(pack, b.farm.name, docs0.map((d) => ({ title: d.title, basisNote: d.basisNote, complete: d.completeness.complete, reasons: d.completeness.reasons, notes: d.completeness.notes, footnotes: d.footnotes, provisional: d.meta.provisional, rule: d.meta.rule }))) }
     ], docs);
     download(blob, `agri-it-accountant-pack-${label}.zip`);
@@ -55,7 +56,7 @@ export default function YearEnd() {
         <p className="text-muted">Built from the records in Agri-It. It is not a set of statutory accounts and does not calculate taxable profit. Your accountant uses it as a starting point.</p>
       </Card>
 
-      <Link to={`/reports?year=${offset}`} className="no-print block rounded-[1.125rem] bg-card p-4 font-bold text-accent shadow-lift">Open the reports: profit, cash flow, balance sheet and checks</Link>
+      <Link to={`/reports?year=${offset}`} className="no-print block rounded-[1.125rem] bg-card p-4 font-bold text-accent shadow-lift">Open the reports: profit and loss, balance sheet and animals</Link>
 
       <SectionTitle>Before you send it</SectionTitle>
       {pack.missing.length === 0 ? (

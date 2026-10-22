@@ -69,7 +69,7 @@ export default function Money() {
           sub={expected.length ? `${eur(expected.reduce((t, e) => t + Number(e.amount_eur), 0))} expected, next ${fmtDay(expected[0].expected_on)}` : 'None planned'} right={<ChevronRight className="h-5 w-5 text-muted" />} />
         <Row to="/money/bills" icon={<Receipt className="h-6 w-6 text-accent" />} title="Bills to pay"
           sub={d.money.owed.length ? `${d.money.owed.length} owed, ${eur(d.money.owedTotal)}${d.money.overdueCount ? `. ${d.money.overdueCount} overdue` : ''}` : 'Nothing owed'} right={<ChevronRight className="h-5 w-5 text-muted" />} />
-        <Row to="/reports" icon={<FileBarChart className="h-6 w-6 text-accent" />} title="Reports" sub="Profit, cash flow, balance sheet, stock, animals" right={<ChevronRight className="h-5 w-5 text-muted" />} />
+        <Row to="/reports" icon={<FileBarChart className="h-6 w-6 text-accent" />} title="Reports" sub="Profit and loss, balance sheet, animals" right={<ChevronRight className="h-5 w-5 text-muted" />} />
         <Row to="/money/year-end" icon={<FileText className="h-6 w-6 text-accent" />} title="Year-end pack for your accountant"
           sub={ye.missing.length ? `${ye.missing.length} gaps to fill first` : 'No gaps flagged'} right={<ChevronRight className="h-5 w-5 text-muted" />} />
         <Row to="/money/budget" icon={<Target className="h-6 w-6 text-accent" />} title="Budget" sub={b.budget.length ? 'Compare plan with actual' : 'Not set yet'} right={<ChevronRight className="h-5 w-5 text-muted" />} />

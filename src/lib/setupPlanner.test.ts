@@ -24,7 +24,7 @@ const cost = (o: Partial<Cost>): Cost => ({
 const bundle = (o: Partial<FarmBundle> = {}): FarmBundle => ({
   farm: farm(), groups: [], crops: [], suppliers: [], branches: [], supplierSettings: [], products: [], txns: [], rules: [], silage: [], benchmarks: [], evidence: [],
   income: [], costs: [], budget: [], records: [], documents: [], jobs: [], routines: [], completions: [], feedLogs: [], headHistory: [], seasons: [], births: [],
-  decisions: [], fields: [], fertilisers: [], fertStock: [], spreads: [], spreadFields: [], loans: [], loanStatements: [], expected: [], yearValues: [], ...o
+  decisions: [], fields: [], fertilisers: [], fertStock: [], spreads: [], spreadFields: [], loans: [], loanStatements: [], expected: [], yearValues: [], animals: [], ...o
 });
 
 describe('loans@1.0: when repayments fall', () => {

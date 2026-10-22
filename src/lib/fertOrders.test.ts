@@ -17,7 +17,7 @@ const cost = (o: Partial<Cost>): Cost => ({ id: 'c', farm_id: 'f', category: 'fe
 const bundle = (over: Partial<FarmBundle>): FarmBundle => ({
   farm, groups: [], crops: [], suppliers: [{ id: 'tir', name: 'Tirlán' } as FarmBundle['suppliers'][number]], branches: [], supplierSettings: [], products: [],
   txns: [], rules: [], silage: [], benchmarks: [], evidence: [], income: [], costs: [], budget: [], records: [], documents: [], jobs: [], routines: [], completions: [],
-  feedLogs: [], headHistory: [], seasons: [], births: [], decisions: [], fields: [], fertilisers: [can], fertStock: [], spreads: [], spreadFields: [], loans: [], loanStatements: [], expected: [], yearValues: [], ...over
+  feedLogs: [], headHistory: [], seasons: [], births: [], decisions: [], fields: [], fertilisers: [can], fertStock: [], spreads: [], spreadFields: [], loans: [], loanStatements: [], expected: [], yearValues: [], animals: [], ...over
 });
 
 describe('fertiliser orders', () => {

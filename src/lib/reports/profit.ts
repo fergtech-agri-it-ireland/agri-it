@@ -118,16 +118,16 @@ export function profitFigures(b: FarmBundle, today: ISODate, offset = 0, basis: 
       changes.push({ label: 'Livestock', opening: missOpen.length ? null : o, closing: missClose.length ? null : c, change: why ? null : r2(c - o), why });
     }
     // Crops in store and money owed to the farm: if either end is entered, both are needed
-    const pair = (kind: 'crops_in_store' | 'debtors', label: string, missingWhy: string) => {
+    const pair = (kind: 'crops_in_store' | 'debtors', label: string) => {
       const o = valuesOn(b, p.openingDay, kind); const c = valuesOn(b, closingDay, kind);
       if (!o.length && !c.length) return;
       const missO = !o.length; const missC = !c.length;
       const why = missO || missC ? `${label} ${missO ? `not entered at ${p.openingDay}` : `not entered at ${closingDay}`}` : null;
-      if (why) reasons.push(`${missingWhy}: ${why.toLowerCase()}`);
+      if (why) reasons.push(why);
       changes.push({ label, opening: missO ? null : valueSum(o), closing: missC ? null : valueSum(c), change: why ? null : r2(valueSum(c) - valueSum(o)), why });
     };
-    pair('crops_in_store', 'Crops in store', 'Crops');
-    pair('debtors', 'Money owed to you', 'Money owed to you');
+    pair('crops_in_store', 'Crops in store');
+    pair('debtors', 'Money owed to you');
     // Feed and fertiliser: worked out from the records, at cost
     const so = stockPosition(b, p.openingDay, today); const sc = stockPosition(b, p.asAt, today);
     const fo = stockTotal(so); const fc = stockTotal(sc);
@@ -207,47 +207,46 @@ export function profitReport(b: FarmBundle, today: ISODate, opts: { offset?: num
 
   const out: ReportSection = { heading: 'Output', rows: [] };
   for (const s of f.salesByType) out.rows.push({ label: s.label, amount: s.total, records: s.n, kind: 'line' });
-  if (!f.salesByType.length) out.rows.push({ label: 'No income recorded in this year', amount: 0, kind: 'info', noCsv: true });
-  out.rows.push({ label: 'Sales received', amount: f.sales, kind: 'subtotal' });
+  if (!f.salesByType.length) out.rows.push({ label: 'No income recorded', amount: 0, kind: 'info', noCsv: true });
+  out.rows.push({ label: 'Total sales', amount: f.sales, kind: 'subtotal' });
   for (const c of f.changes) {
     out.rows.push({
-      label: `${c.label}: ${basis === 'accruals' ? 'increase (decrease) in the year' : ''}`.replace(/: $/, ''),
+      label: `Change in ${c.label.charAt(0).toLowerCase()}${c.label.slice(1)}`,
       amount: c.change, missing: c.change === null, kind: 'line',
-      note: c.change === null ? c.why ?? 'Not valued' : `${c.closing === null ? '' : 'Closing'} less opening`.trim(),
-      to: c.label.startsWith('Feed') ? '/reports/stock' : '/reports/values'
+      note: c.change === null ? c.why ?? 'Not valued' : undefined,
+      to: c.label.startsWith('Feed') ? undefined : '/reports/values'
     });
   }
   out.rows.push({ label: 'Total output', amount: f.output, kind: 'total', note: f.changes.some((c) => c.change === null) ? 'Leaves out the changes that are not valued' : undefined });
 
-  const direct: ReportSection = { heading: 'Direct costs', rows: f.direct.map((d) => ({ label: d.label, amount: d.total, records: d.n, kind: 'line' as const, to: '/reports/expenses' })) };
+  const direct: ReportSection = { heading: 'Direct costs', rows: f.direct.map((d) => ({ label: d.label, amount: d.total, records: d.n, kind: 'line' as const })) };
   direct.rows.push({ label: 'Total direct costs', amount: f.directTotal, kind: 'subtotal' });
-  const margin: ReportSection = { heading: 'Gross margin', rows: [{ label: 'Gross margin (output less direct costs)', amount: f.grossMargin, kind: 'total' }] };
-  const over: ReportSection = { heading: 'Overheads', rows: f.overheads.map((d) => ({ label: d.label, amount: d.total, records: d.n, kind: 'line' as const, to: '/reports/expenses' })) };
+  const margin: ReportSection = { heading: 'Gross margin', rows: [{ label: 'Gross margin', amount: f.grossMargin, kind: 'total' }] };
+  const over: ReportSection = { heading: 'Overheads', rows: f.overheads.map((d) => ({ label: d.label, amount: d.total, records: d.n, kind: 'line' as const })) };
   if (f.interest > 0 || f.interestUnknown > 0) {
     over.rows.push({
       label: 'Loan interest', amount: f.interestUnknown > 0 && f.interest === 0 ? null : f.interest, missing: f.interestUnknown > 0 && f.interest === 0, kind: 'line', to: '/money/loans',
       note: f.interestUnknown > 0 ? `Not known for ${f.interestUnknown} loan${f.interestUnknown > 1 ? 's' : ''}` : f.interestEstimated ? 'Part of this is estimated by Agri-It' : 'From the bank statement or your repayments'
     });
   }
-  over.rows.push({ label: 'Total overheads and interest', amount: r2(f.overheadsTotal + f.interest), kind: 'subtotal' });
+  over.rows.push({ label: 'Total overheads', amount: r2(f.overheadsTotal + f.interest), kind: 'subtotal' });
   over.rows.push({ label: 'Depreciation and capital allowances', amount: null, missing: true, kind: 'info', note: 'Not included: your accountant works these out' });
   const result: ReportSection = {
     heading: 'Profit',
-    rows: [{ label: 'Profit before depreciation and capital allowances', amount: f.profit, kind: 'total', note: f.complete ? undefined : 'Incomplete: see what is missing above' }]
+    rows: [{ label: 'Profit before depreciation', amount: f.profit, kind: 'total', note: f.complete ? undefined : 'Incomplete: see what is missing above' }]
   };
 
   const beneath: ReportSection = {
-    heading: 'Not in the profit figure',
-    note: 'These are real money, but not running costs of the year.',
+    heading: 'Not in profit',
     rows: [
-      { label: 'Loan capital repaid', amount: f.loanCapitalRepaid, kind: 'line', to: '/money/loans', note: f.loanRepaymentsTotal > 0 ? `Repayments ${f.loanRepaymentsTotal.toFixed(2)} less interest ${f.interest.toFixed(2)}` : undefined },
-      { label: 'Machinery, buildings and land bought', amount: f.capitalTotal, kind: 'line', records: f.capital.length, note: f.capital.length ? f.capital.map((c) => `${c.date} ${c.description || c.payee}`).join('; ') : undefined },
+      { label: 'Loan capital repaid', amount: f.loanCapitalRepaid, kind: 'line', to: '/money/loans' },
+      { label: 'Machinery, buildings and land bought', amount: f.capitalTotal, kind: 'line' },
       { label: 'Household drawings', amount: f.household, kind: 'line' }
     ]
   };
   const sections = [out, direct, margin, over, result, beneath];
   if (f.stockIncrease !== null) {
-    sections.push({ heading: 'For your accountant: stock', rows: [{ label: 'Increase in trading stock in the year', amount: f.stockIncrease, kind: 'info', note: ni ? 'Livestock, crops, feed and fertiliser. Your accountant values it for tax.' : 'Livestock, crops, feed and fertiliser: the figure stock relief is worked from.' }] });
+    sections.push({ heading: 'For your accountant', rows: [{ label: 'Increase in trading stock', amount: f.stockIncrease, kind: 'info' }] });
   }
 
   const footnotes = [DISCLAIMER, NOTE_NO_DEPRECIATION, ...(f.capital.length && !ni ? [NOTE_CAPITAL_ALLOWANCES] : []), ...(ni ? [NOTE_HERD_BASIS_NI] : [NOTE_STOCK_RELIEF]), RETENTION[b.farm.jurisdiction]];
@@ -256,7 +255,7 @@ export function profitReport(b: FarmBundle, today: ISODate, opts: { offset?: num
     : 'Cash: money paid and received in the year, nothing else. Stock and money owed are not counted.';
   const meta = metaFor(b, p, basis, opts.now ?? new Date().toISOString());
   const doc: ReportDoc = {
-    id: 'profit', title: 'Profit report', subtitle: `${b.farm.name}, ${p.fy.label}${p.provisional ? ' (year to date)' : ''}`,
+    id: 'profit', title: 'Profit and loss', subtitle: `${b.farm.name}, ${p.fy.label}${p.provisional ? ' (year to date)' : ''}`,
     meta, basisNote,
     completeness: { complete: f.complete, reasons: f.reasons, notes: f.notes }, sections, footnotes,
     table: amountTable(sections, meta.currency)

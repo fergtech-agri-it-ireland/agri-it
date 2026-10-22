@@ -1,4 +1,4 @@
-# Reports module (21 October 2026, release 0.5.0; downloads reworked in 0.5.1)
+# Reports module (21 October 2026, release 0.5.0; downloads reworked in 0.5.1; cut to three reports in 0.6.0)
 
 Feargal's brief: a reports module with the key reports for end of year accounting and basic reports for stock, animals, income and expenses, compliant with basic accounting principles, researched first.
 
@@ -24,59 +24,30 @@ Agri-It keeps single-entry farm records (money in, money out, stock, animals). I
 
 Not confirmed this session, so not claimed as a source: the exact wording of FRS 102 Section 2 (going concern, consistency, offsetting), FRS 105 for micro-entities, and Revenue's valuation basis for stock relief (TDM 23-02-02 does not state it). Where Agri-It follows those ideas it says "Agri-It's rule", not "the standard says".
 
-## The reports
+## The reports (0.6.0: cut back to three, plain tables)
 
-All sit under **Reports** (module tile on the dashboard, a row in Money, a link from the Year-end pack). This year or last year; the screen, the print and the CSV come from one document (`ReportDoc`, `lib/reports/doc.ts`), so they cannot disagree. Print and CSV work in the installed app; the demo and the preview frame show the report on screen (CSV can be copied in the frame). The download is a plain table, see "Downloads" below.
+Feargal's brief (22 Oct): the downloads had odd characters and did not read like proper reports; they should be the table headers and the values, not sentences. Strip back to three until they are right: a balance sheet, a profit and loss, and an animal report of key dates (born, sold and so on).
 
-**Built in 0.5.0**
+All three sit under **Reports** (module tile on the dashboard, a row in Money, a link from the Year-end pack). This year or last year. The screen, the download and the print come from one document (`ReportDoc`, `lib/reports/doc.ts`). The screen shows tables and figures, plus one "Not complete" card with the gaps when something is missing. The basis, rule version and the long notes are no longer on the screen; they stay in the zip's `README.txt`.
 
-| Report | What it shows | Basis |
+| Report | Screen | Download columns |
 | --- | --- | --- |
-| **Profit report** (Teagasc layout) | Output (sales by type, plus the change in livestock, crops in store, money owed to you when valued, and feed and fertiliser in store at cost), direct costs (feed, fertiliser, seed and sprays, vet, contractor, livestock bought), gross margin, overheads, loan interest, profit before depreciation and capital allowances. Beneath, kept out of profit: loan capital repaid, machinery buildings and land bought, household drawings. Stock relief (ROI) or herd basis (NI) note. | Accruals (default) or cash |
-| **Cash flow** | Money in by type, money out by type, loan interest and capital split, machinery buildings and land, household, cash at the start and end, with the difference to the recorded bank balance (must be 0.00). | Cash (paid and received dates) |
-| **Balance sheet** | Assets (cash, money owed to you, livestock, crops, feed and fertiliser at cost, machinery, buildings, land, other) and liabilities (loans, bills owed) at the start and end, net worth, and how net worth moved (profit, drawings, and "other changes" shown, never forced). Values listed with the basis used. | At a date |
-| **Stock** | Feed and fertiliser at the start and end in kg, closing value at cost, kg with no price recorded (not valued), increase in value. | Quantity and FIFO cost |
-| **Animals** | Per group: start, born, added, moved in, sold, moved out, reduced by hand, end; each group must add up; livestock sales; value at the year end if entered. | Numbers, then value |
-| **Income** | By type, milk litres and average price, animals sold and average per head, every receipt. | Received date |
-| **Expenses** | By type with VAT, paid and still owed, biggest suppliers, every cost. | Date incurred |
-| **Do the reports agree?** | Income and expenses agree with the profit report, cash flow agrees with the bank balance, animal counts add up, sales match head counts, livestock valued, loan interest known, overdue and undated bills, documents attached, VAT recorded, stock priced, net worth movement explained. "Fix" blocks relying on the year-end figures; "Check" is worth a look. | Checks |
+| Profit and loss (`profit.ts`) | Output, direct costs, gross margin, overheads, profit, then what is not in profit. Accruals or Cash chips | Section, Item, Amount (EUR) |
+| Balance sheet (`balance.ts`) | Owns, Owes, Net worth, one column for the start and one for the end of the year | Section, Item, At <start> (EUR), At <end> (EUR), Change (EUR) |
+| Animals (`animals.ts`) | A few counts for the year (born, sold, died, moved off, on the farm at the end), then one row per tagged animal | Tag number, Group, Sex, Breed, Born, Status, Left |
 
-The existing **Year-end pack** stays and links to these. Its accountant zip now has a `reports/` folder with each report as a CSV table, and a README that carries what the tables leave out.
+- **Animals** lists the animals that have a tag number in Agri-It (the new Animals pages) that were on the farm at some point in the year. Dates are day/month/year. An animal marked sold, died or moved off with no date is flagged, because it cannot be placed in a year. It is not the official herd register, and group head counts are not used.
+- **Removed in 0.6.0:** Cash flow, Stock, Income, Expenses and "Do the reports agree?" (their code and tests are deleted; git history has them). Profit and loss and the balance sheet figures are unchanged. The cross-checks can come back as a separate screen once the three read right.
+- **Balance sheet** lost the "How net worth moved" and "How the values were put on things" blocks. `balanceFigures()` still works out the movement.
 
-**Not built yet (candidates for 0.5.x)**
+## Downloads (0.6.0): Excel first, CSV as well
 
-- By-month tables on cash flow, income and expenses.
-- Money owed to suppliers aged at the year end (not yet due, 1 to 30, 31 to 60, 61 to 90, over 90 days).
-- Stock report columns for delivered, adjusted (with reasons) and used; silage and bales in tonnes with a value.
-- The cut-off list (items dated within 14 days of the year end) and evidence coverage in the checks.
-- Opening a figure to the records behind it (rows link to the screen that holds them, not to the single record). Record ids are already in the income, expenses and transactions tables.
-- Price per head and per litre by group.
+- **Excel (.xlsx)** is the main download, made on the phone with the zip library already in the app (`lib/reports/xlsx.ts`). One sheet, a bold header row that stays put on scroll, numbers as numbers (money `#,##0.00`), dates as dates (dd/mm/yyyy), total rows in bold, columns wide enough. Text is UTF-8 inside the file, so accents and the euro sign cannot turn into odd characters. Checked by opening files in openpyxl and LibreOffice.
+- **CSV** is the same table as plain UTF-8: **no byte-order mark** (the BOM was the likely cause of "weird characters" in some viewers, which show it as stray characters before the first header), no hidden characters, plain numbers with two decimals, dates as dd/mm/yyyy, empty cell for a figure that is not known, a leading `'` on text that would run as a formula.
+- **On screen**, amounts no longer carry the invisible word joiner that `eur()` puts after a minus sign; the currency is in the heading instead of every figure.
+- **Names:** `agri-it-<report>-<year>-<basis>[-to-date].xlsx` or `.csv`.
+- **Year-end pack zip:** `reports/profit.xlsx`, `reports/balance.xlsx`, `reports/animals.xlsx`. `summary.csv`, `transactions.csv` and `records.csv` are unchanged (they still start with a byte-order mark so Excel reads accents; say if those should lose it too).
 
-## Downloads (0.5.1): a plain table an accountant can use
-
-The first downloads (0.5.0) were the screen written out as text: a title and notes at the top, a block of stamps (farm, basis, rule, generated), a heading and a different set of columns for every section, blank lines, and footnotes at the foot. That opens in a spreadsheet as a document, not a table, and a third party cannot sort, filter, pivot, sum or import it. Feargal's brief (21 Oct, night): every report has only the column headers, the data and the total rows, as an accountant would want it.
-
-**The rule for every CSV (reports, year-end summary, transactions, records):** one header row, then data rows, then total rows. Nothing else: no title, subtitle, notes, stamp, section heading, blank line or footnote. Every row has as many cells as the header. Numbers are plain (no currency sign, no thousands separator, two decimals for money, minus sign for negatives); the currency is in the money headers, for example `Amount (EUR)`. Dates are `YYYY-MM-DD`. A figure that is not known is an empty cell, never 0 and never text; a total that has an unknown part is empty too. Text that begins with `=`, `+`, `-` or `@` gets a leading apostrophe so a spreadsheet does not run it as a formula. UTF-8 with a byte-order mark on download.
-
-| Report | Columns | Total rows |
-| --- | --- | --- |
-| Profit, Cash flow | Section, Line, Row, Amount (CUR), Records | The report's own totals (Total output, Gross margin, Profit, Total money in, and so on), marked `Total` in Row |
-| Balance sheet | Section, Line, Row, At start (CUR), At end (CUR), Change (CUR) | Total assets, Total owed, Net worth |
-| Stock | Stock, Item, Row, Start (kg), End (kg), Value at start, Value at end, Not valued (kg) | Total feed, Total fertiliser, Total stock |
-| Animals | Group, Class, Row, Start, Born, Added, Moved in, Sold, Moved out, Reduced by hand, End | All animals |
-| Income | Date, Type, Received from, Description, Litres, Head, Amount, Agri-It id | Total |
-| Expenses | Date, Type, Paid to, Description, Invoice no., Amount, VAT, Without VAT, Status, Paid on, Due on, Agri-It id | Total |
-| Do the reports agree? | Check, Result, Detail | None (a list of checks) |
-| Summary (year-end pack) | Section, Line, Row, Amount (CUR) | One total per section |
-| Transactions, Records | as before, minus the records note row | Total in, Total out |
-
-"Row" is `Line` or `Total`, so a pivot can leave the totals out and never count anything twice. In the profit and cash flow tables the lines always add up to their total: when loan interest and capital cannot be split, the cash flow table shows the repayments as one line ("Loan repayments (interest and capital not split)") instead of two empty ones.
-
-**Where the rest went.** The basis, completeness (what is missing and why), notes, rule version, currency, retention note and the "not statutory accounts and not a tax computation" wording are still on the screen and in Print / PDF. They are no longer inside the CSV. In the accountant zip they are in `README.txt`, per report, together with the farm details, livestock numbers, the "what to gather" checklist, which loan figures came from a statement and the missing-data list (these used to sit at the foot of `summary.csv`). A single CSV downloaded from a report screen carries its basis and "to-date" in the file name instead (`agri-it-profit-2026-accruals.csv`, `agri-it-profit-2026-cash-to-date.csv`).
-
-**Trade-off, said plainly.** A downloaded CSV on its own no longer says that a profit is incomplete or provisional. An unvalued line (for example livestock) is an empty cell, so it is visible in the table, but the sentence "Incomplete: livestock not valued" is on the screen, in print and in the README only.
-
-**Not in the tables, on purpose:** the value-basis list ("How the values were put on things"), the milk and livestock averages, the biggest-suppliers and paid-versus-owed summaries of the expenses report (all can be pivoted from the lines), and per-row notes. Livestock numbers and farm details are in the README.
 
 ## Rules of the book
 

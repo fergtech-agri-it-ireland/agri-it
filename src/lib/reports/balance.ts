@@ -6,8 +6,7 @@
  * explicit "other changes" line, never forced to balance.
  */
 import type { FarmBundle, ISODate, YearValueKind } from '../types';
-import { YEAR_VALUE_LABEL, type YearEndValue } from '../types';
-import { addDays } from '../format';
+import { addDays, fmtDate } from '../format';
 import { cashPosition } from '../forecast/money';
 import { paidOn } from '../forecast/bills';
 import { balanceOn } from '../loans';
@@ -95,25 +94,25 @@ export function balanceReport(b: FarmBundle, today: ISODate, opts: { offset?: nu
   const p: Period = reportPeriod(b.farm, today, opts.offset ?? 0);
   const f = balanceFigures(b, today, opts.offset ?? 0);
   const col = (o: Side, c: Side, label: string, get: (s: Side) => number | null, extra?: Partial<ReportRow>): ReportRow => ({ label, cells: [get(o), get(c)], ...extra });
-  const money = [{ label: `At ${f.opening.day}`, type: 'money' as const }, { label: `At ${f.closing.day}`, type: 'money' as const }];
+  const money = [{ label: `At ${fmtDate(f.opening.day)}`, type: 'money' as const }, { label: `At ${fmtDate(f.closing.day)}`, type: 'money' as const }];
   const assets: ReportSection = {
-    heading: 'What the farm owns', columns: money,
+    heading: 'Owns', columns: money,
     rows: [
       col(f.opening, f.closing, 'Cash at bank', (s) => s.cash, { to: '/setup' }),
       col(f.opening, f.closing, 'Money owed to you', (s) => s.debtors, { to: '/reports/values' }),
       col(f.opening, f.closing, 'Livestock', (s) => s.livestock, { to: '/reports/values' }),
       col(f.opening, f.closing, 'Crops in store', (s) => s.crops, { to: '/reports/values' }),
-      col(f.opening, f.closing, 'Feed and fertiliser in store, at cost', (s) => s.stock, { to: '/reports/stock' }),
+      col(f.opening, f.closing, 'Feed and fertiliser in store', (s) => s.stock),
       col(f.opening, f.closing, 'Machinery', (s) => s.machinery, { to: '/reports/values' }),
       col(f.opening, f.closing, 'Buildings', (s) => s.buildings, { to: '/reports/values' }),
       col(f.opening, f.closing, 'Land', (s) => s.land, { to: '/reports/values' }),
       col(f.opening, f.closing, 'Other assets', (s) => s.other, { to: '/reports/values' }),
-      col(f.opening, f.closing, 'Total assets', (s) => s.assetsTotal, { kind: 'total' })
+      col(f.opening, f.closing, 'Total owned', (s) => s.assetsTotal, { kind: 'total' })
     ].filter((r) => r.kind === 'total' || r.cells!.some((c) => c !== null))
   };
   const loanRows: ReportRow[] = f.closing.loans.map((l) => ({ label: `Loan: ${l.lender}`, cells: [f.opening.loans.find((x) => x.lender === l.lender)?.balance ?? null, l.balance], to: '/money/loans', kind: 'line' as const }));
   const liab: ReportSection = {
-    heading: 'What the farm owes', columns: money,
+    heading: 'Owes', columns: money,
     rows: [
       ...loanRows,
       col(f.opening, f.closing, 'Bills owed to suppliers', (s) => s.creditors, { to: '/money/bills' }),
@@ -122,45 +121,29 @@ export function balanceReport(b: FarmBundle, today: ISODate, opts: { offset?: nu
   };
   const worth: ReportSection = {
     heading: 'Net worth', columns: money,
-    rows: [{ ...col(f.opening, f.closing, 'Net worth (owns less owes)', (s) => s.netWorth, { kind: 'total', note: f.complete ? undefined : 'Incomplete: values missing above' }) }]
+    rows: [col(f.opening, f.closing, 'Net worth', (s) => s.netWorth, { kind: 'total' })]
   };
-  const move: ReportSection = {
-    heading: 'How net worth moved',
-    rows: [
-      { label: 'Net worth at the end less at the start', amount: f.netWorthChange, kind: 'line' },
-      { label: 'Profit for the year (profit report, accruals)', amount: f.profit, kind: 'line', to: '/reports/profit' },
-      { label: 'Less household drawings', amount: f.household === 0 ? 0 : -f.household, kind: 'line' },
-      { label: 'Other changes', amount: f.otherChanges, missing: f.otherChanges === null, kind: 'total', note: f.otherChanges === null ? 'Shown once every value is entered' : 'Revaluations, depreciation not counted, money put in or taken out of the farm, and anything not recorded' }
-    ]
-  };
-  const basis: ReportSection = {
-    heading: 'How the values were put on things',
-    rows: (b.yearValues ?? []).filter((v: YearEndValue) => v.as_at === p.closingDay).map((v) => ({
-      label: `${YEAR_VALUE_LABEL[v.kind]}: ${v.label}`, amount: Number(v.value_eur), kind: 'info' as const, note: `${VALUE_BASIS_TEXT[v.basis]}${v.note ? `. ${v.note}` : ''}`, to: '/reports/values'
-    }))
-  };
-  const sections = [assets, liab, worth, move];
-  if (basis.rows.length) sections.push(basis);
-  // The download: Section, Line, Row, start, end, change. The change is end less start, and only where both are known.
+  const sections = [assets, liab, worth];
+  // The download: Section, Item, start, end, change. The change is end less start, and only where both are known.
   const meta = metaFor(b, p, null, opts.now ?? new Date().toISOString());
-  const rowType = (r: ReportRow) => (r.kind === 'total' || r.kind === 'subtotal' ? 'Total' : 'Line');
   const flat: CellValue[][] = [];
-  for (const s of [assets, liab, worth]) {
+  const strong: number[] = [];
+  for (const s of sections) {
     for (const r of s.rows) {
       const o = r.cells?.[0] ?? null; const c = r.cells?.[1] ?? null;
-      flat.push([s.heading, r.label, rowType(r), o, c, typeof o === 'number' && typeof c === 'number' ? r2(c - o) : null]);
+      if (r.kind === 'total') strong.push(flat.length);
+      flat.push([s.heading, r.label, o, c, typeof o === 'number' && typeof c === 'number' ? r2(c - o) : null]);
     }
   }
-  for (const r of move.rows) flat.push([move.heading, r.label, rowType(r), null, null, r.missing || r.amount === null || r.amount === undefined ? null : r.amount]);
   const doc: ReportDoc = {
-    id: 'balance', title: 'Balance sheet', subtitle: `${b.farm.name}, at ${f.closing.day}`,
+    id: 'balance', title: 'Balance sheet', subtitle: `${b.farm.name}, at ${fmtDate(f.closing.day)}`,
     meta,
     table: {
       columns: [
-        { label: 'Section', type: 'text' }, { label: 'Line', type: 'text' }, { label: 'Row', type: 'text' },
-        { label: moneyHead(`At ${f.opening.day}`, meta.currency), type: 'money' }, { label: moneyHead(`At ${f.closing.day}`, meta.currency), type: 'money' }, { label: moneyHead('Change', meta.currency), type: 'money' }
+        { label: 'Section', type: 'text' }, { label: 'Item', type: 'text' },
+        { label: moneyHead(`At ${fmtDate(f.opening.day)}`, meta.currency), type: 'money' }, { label: moneyHead(`At ${fmtDate(f.closing.day)}`, meta.currency), type: 'money' }, { label: moneyHead('Change', meta.currency), type: 'money' }
       ],
-      rows: flat
+      rows: flat, strong
     },
     basisNote: 'What the farm owns and owes on the day. Values for animals, crops, machinery, buildings, land and money owed are yours or your accountant\'s, with the basis shown.',
     completeness: { complete: f.complete, reasons: f.reasons, notes: f.notes }, sections,
@@ -168,8 +151,3 @@ export function balanceReport(b: FarmBundle, today: ISODate, opts: { offset?: nu
   };
   return { doc, figures: f };
 }
-
-const VALUE_BASIS_TEXT: Record<string, string> = {
-  market_value: 'Market value', cost: 'Cost', net_realisable_value: 'Net realisable value',
-  deemed_cost: 'Deemed cost (a set percentage of market value)', accountant: 'Your accountant\'s figure', farmer_estimate: 'Your own estimate'
-};

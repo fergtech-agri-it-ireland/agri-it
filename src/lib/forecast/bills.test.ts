@@ -16,7 +16,7 @@ const cost = (r: Partial<Cost>): Cost => ({
 const farm = { id: 'f', name: 'Test', financial_year_start_month: 1, opening_cash_eur: 10000, opening_cash_date: '2026-01-01', enterprise: 'dairy', enterprises: ['dairy'] } as unknown as Farm;
 const bundle = (over: Partial<FarmBundle>): FarmBundle => ({
   farm, groups: [], crops: [], suppliers: [{ id: 'tir', name: 'Tirlán' } as FarmBundle['suppliers'][number]], branches: [], supplierSettings: [], products: [{ id: 'p', name: 'Dairy nut' } as FarmBundle['products'][number]],
-  txns: [], rules: [], silage: [], benchmarks: [], evidence: [], income: [], costs: [], budget: [], records: [], documents: [], jobs: [], routines: [], completions: [], feedLogs: [], headHistory: [], seasons: [], births: [], decisions: [], fields: [], fertilisers: [], fertStock: [], spreads: [], spreadFields: [], loans: [], loanStatements: [], expected: [], yearValues: [], ...over
+  txns: [], rules: [], silage: [], benchmarks: [], evidence: [], income: [], costs: [], budget: [], records: [], documents: [], jobs: [], routines: [], completions: [], feedLogs: [], headHistory: [], seasons: [], births: [], decisions: [], fields: [], fertilisers: [], fertStock: [], spreads: [], spreadFields: [], loans: [], loanStatements: [], expected: [], yearValues: [], animals: [], ...over
 });
 
 describe('paid, owed and when cash moves', () => {

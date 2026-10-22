@@ -677,6 +677,30 @@ export const VALUE_BASIS_LABEL: Record<ValueBasis, string> = {
   accountant: "Accountant's figure", farmer_estimate: 'My estimate'
 };
 
+/**
+ * One animal the farmer has recorded (22 Oct 2026): its tag number (from the identity card or
+ * typed), group, sex, breed, when it was born and when it left. Records on top of the groups:
+ * group head counts still drive the feed and silage forecasts and are not changed by these.
+ */
+export type AnimalStatus = 'on_farm' | 'sold' | 'died' | 'moved_off';
+export interface Animal {
+  id: string;
+  farm_id: string;
+  /** No spaces, upper case: 372123456781234 or IE123456781234 (other animals: whatever number the farmer typed) */
+  tag_number: string;
+  tag_source: 'card_photo' | 'typed';
+  animal_group_id: string | null;
+  sex: 'female' | 'male' | null;
+  breed: string | null;
+  born_on: ISODate | null;
+  status: AnimalStatus;
+  left_on: ISODate | null;
+  note: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+export const ANIMAL_STATUS_LABEL: Record<AnimalStatus, string> = { on_farm: 'On the farm', sold: 'Sold', died: 'Died', moved_off: 'Moved off' };
+
 export interface FarmBundle {
   farm: Farm;
   groups: AnimalGroup[];
@@ -717,6 +741,8 @@ export interface FarmBundle {
   expected: ExpectedIncome[];
   /** Year-end values the farmer or accountant entered (21 Oct 2026). Money rules: a farm worker gets none. */
   yearValues: YearEndValue[];
+  /** Animals recorded one by one, with their tag numbers (22 Oct 2026) */
+  animals: Animal[];
   /** This user's role on the farm (owner when not known, e.g. the phone-only build). */
   role?: MemberRole;
 }

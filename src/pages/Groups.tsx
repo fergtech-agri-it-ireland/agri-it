@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { ArrowRightLeft } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { ArrowRightLeft, ChevronRight } from 'lucide-react';
 import { useFarmData, useFarmCtx, useSave } from '../lib/data/farm';
 import { ANIMAL_CLASS_LABEL, type AnimalClass, type AnimalGroup, type FarmBundle, type HeadCountChange } from '../lib/types';
 import { fmtDay, fmtRelative, todayISO, uuid } from '../lib/format';
@@ -110,6 +111,7 @@ export default function Groups() {
   return (
     <Screen title="Animals and breeds" back right={<Button onClick={() => setOpen(true)}>Add</Button>}>
       <p className="px-1 text-[0.9375rem] text-muted">Head counts drive every feed and silage forecast. Each change is kept with its date, so past feeding keeps the numbers you had then. Sales update them for you.</p>
+      <Link to="/animals" className="flex min-h-[3.5rem] items-center justify-between gap-2 rounded-[1.125rem] bg-card px-4 py-2.5 shadow-lift"><span><b className="block text-[0.9375rem]">Animal tags</b><span className="text-[0.8125rem] text-muted">{b.animals.length ? `${b.animals.filter((a) => a.status === 'on_farm').length} animals with tag numbers` : 'Scan the blue card to add a tag number'}</span></span><ChevronRight className="h-4 w-4 text-muted" aria-hidden /></Link>
       {groups.length >= 2 && <Button variant="secondary" block onClick={() => setMoving(true)}><ArrowRightLeft className="h-5 w-5" aria-hidden />Move animals between groups</Button>}
       {groups.length === 0 ? <Empty title="No groups yet" body="Cattle, sheep, goats, pigs, poultry or horses: add a group for each." action={<Button onClick={() => setOpen(true)}>Add a group</Button>} /> : groups.map((g) => <GroupCard key={g.id + g.head_count} g={g} history={b.headHistory.filter((h) => h.animal_group_id === g.id)} />)}
       <MoveSheet b={b} open={moving} onClose={() => setMoving(false)} />

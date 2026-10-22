@@ -196,6 +196,7 @@ export function addOptions(types: FarmType[]): AddOption[] {
     { id: 'order', label: 'Feed order', sub: 'Ordered, not here yet', to: '/record/order', relevant: animals },
     { id: 'milk', label: 'Milk cheque', sub: 'Monthly milk payment', to: '/record/milk', relevant: has('dairy') },
     { id: 'sale', label: has('sheep') && !has('suckler', 'beef', 'calf_rearing', 'dairy') ? 'Sold lambs or sheep' : 'Sold animals', sub: 'Mart, factory or private sale', to: '/record/sale', relevant: animals },
+    { id: 'animal-tag', label: 'Scan an animal card', sub: 'Blue identity card: adds the tag number', to: '/animals/new', relevant: any || has('dairy', 'suckler', 'beef', 'calf_rearing') },
     { id: 'calf', label: 'Calf born', sub: 'Tag and register dates kept for you', to: '/record/calf', relevant: has('dairy', 'suckler') },
     { id: 'grain', label: 'Grain or straw sale', sub: 'Crop income', to: '/record/income?type=crop', relevant: has('tillage') },
     { id: 'spread', label: 'Spread fertiliser', sub: 'On one field or several; comes off the stock', to: '/record/spread', relevant: true },

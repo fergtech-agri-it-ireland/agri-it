@@ -9,10 +9,10 @@ import type { ISODate } from '../types';
 
 export const REPORTS_RULE_VERSION = 'reports@1.0';
 
-export type ReportId = 'profit' | 'cashflow' | 'balance' | 'stock' | 'animals' | 'income' | 'expenses' | 'checks';
+export type ReportId = 'profit' | 'balance' | 'animals';
 export type Basis = 'accruals' | 'cash';
 export type RowKind = 'line' | 'subtotal' | 'total' | 'info' | 'warn';
-export type ColumnType = 'money' | 'number' | 'kg' | 'text';
+export type ColumnType = 'money' | 'number' | 'kg' | 'text' | 'date';
 
 export interface ReportRow {
   label: string;
@@ -39,8 +39,9 @@ export interface ReportColumn { label: string; type: ColumnType }
  * filtered, sorted, pivoted and summed, or imported by other software.
  */
 export type CellValue = string | number | null;
-export interface FlatColumn { label: string; type: 'text' | 'money' | 'number' }
-export interface FlatTable { columns: FlatColumn[]; rows: CellValue[][] }
+export interface FlatColumn { label: string; type: 'text' | 'money' | 'number' | 'date' }
+/** `strong` lists the rows that are totals, so a spreadsheet can show them in bold. Dates are ISO text. */
+export interface FlatTable { columns: FlatColumn[]; rows: CellValue[][]; strong?: number[] }
 export interface ReportSection { heading: string; columns?: ReportColumn[]; rows: ReportRow[]; note?: string }
 
 export interface Completeness {
@@ -90,20 +91,21 @@ export const sum = (xs: number[]) => r2(xs.reduce((s, x) => s + x, 0));
 export const moneyHead = (label: string, currency: 'EUR' | 'GBP') => `${label} (${currency})`;
 
 /**
- * Amount-style reports (profit, cash flow) as one long table: Section, Line, Row, Amount, Records.
- * "Row" is Line or Total, so a pivot can leave the totals out and never count anything twice.
- * A figure that is not known is an empty cell.
+ * Amount-style reports (profit and loss) as one table: Section, Item, Amount.
+ * A total is a row whose item says Total, and is bold in the spreadsheet. A figure that is not known is an empty cell.
  */
 export function amountTable(sections: ReportSection[], currency: 'EUR' | 'GBP'): FlatTable {
   const rows: CellValue[][] = [];
+  const strong: number[] = [];
   for (const s of sections) {
     for (const r of s.rows) {
       if (r.noCsv) continue;
       if (r.kind === 'info' && (r.missing || r.amount === null || r.amount === undefined)) continue;
-      rows.push([s.heading, r.label, r.kind === 'total' || r.kind === 'subtotal' ? 'Total' : 'Line', r.missing || r.amount === null || r.amount === undefined ? null : r.amount, r.records ?? null]);
+      if (r.kind === 'total' || r.kind === 'subtotal') strong.push(rows.length);
+      rows.push([s.heading, r.label, r.missing || r.amount === null || r.amount === undefined ? null : r.amount]);
     }
   }
-  return { columns: [{ label: 'Section', type: 'text' }, { label: 'Line', type: 'text' }, { label: 'Row', type: 'text' }, { label: moneyHead('Amount', currency), type: 'money' }, { label: 'Records', type: 'number' }], rows };
+  return { columns: [{ label: 'Section', type: 'text' }, { label: 'Item', type: 'text' }, { label: moneyHead('Amount', currency), type: 'money' }], rows, strong };
 }
 
 const text = (v: string) => {
@@ -111,15 +113,17 @@ const text = (v: string) => {
   const safe = /^[=+\-@\t\r]/.test(v) && !/^-?\d+(\.\d+)?$/.test(v) ? `'${v}` : v;
   return /[",\r\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
 };
+/** 2026-02-05 as 05/02/2026, the way it is written in Ireland and read by an Irish spreadsheet */
+export const dmy = (iso: string) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso); return m ? `${m[3]}/${m[2]}/${m[1]}` : iso; };
 const value = (v: CellValue | undefined, col: FlatColumn | undefined) => {
   if (v === null || v === undefined) return '';
-  if (typeof v === 'string') return text(v);
+  if (typeof v === 'string') return col?.type === 'date' ? dmy(v) : text(v);
   if (!Number.isFinite(v)) return '';
   const n = r2(v) + 0; // no "-0.00"
   return col?.type === 'money' ? n.toFixed(2) : String(n);
 };
 
-/** CSV of a table: header row, then rows. Numbers are plain (no currency sign, no thousands separator). */
+/** CSV of a table: header row, then rows. Numbers are plain (no currency sign, no thousands separator). Plain UTF-8, no byte-order mark. */
 export function tableCsv(t: FlatTable): string {
   const head = t.columns.map((c) => text(c.label)).join(',');
   const body = t.rows.map((row) => t.columns.map((c, i) => value(row[i], c)).join(','));

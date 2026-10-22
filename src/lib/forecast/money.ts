@@ -556,7 +556,7 @@ export function packReadme(pack: ReturnType<typeof yearEndPack>, farmName: strin
   L.push('summary.csv: totals by category, month, supplier, enterprise, loan, scheme payment and capital item.');
   L.push('transactions.csv: every income and cost, with paid or owed, invoice number, VAT, loan interest where given, and its attachment. The totals at the foot match summary.csv.');
   L.push('records.csv: farm records and documents, kept as evidence. They do not replace an official notification or statutory register.');
-  L.push('reports/: profit, cash flow, balance sheet, stock, animals, income, expenses and the cross-checks, one table each.');
+  L.push('reports/: profit and loss, balance sheet and animals, one Excel file each.');
   L.push('attachments/: the photos and invoices.', '');
   L.push('This is a management summary built from the farmer\'s records. It is not a set of statutory accounts and does not calculate taxable profit.', '');
   L.push('THE REPORTS: BASIS AND GAPS');

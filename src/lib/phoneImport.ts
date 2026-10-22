@@ -32,7 +32,7 @@ export interface PhoneBackup {
 /** Tables copied, in the order the server inserts them (parents before children). */
 export const IMPORT_ORDER = [
   'suppliers', 'farm_supplier_settings',
-  'animal_groups', 'head_count_history', 'crops', 'documents',
+  'animal_groups', 'head_count_history', 'animals', 'crops', 'documents',
   'feed_products', 'feed_transactions', 'feeding_rules', 'feed_use_logs',
   'silage_stores', 'routines',
   // Before costs: a loan repayment points at its loan (16 Oct 2026)
@@ -58,7 +58,7 @@ export const FARM_SETTINGS = [
 /** Friendly names for the summary before the farmer confirms. */
 export const TABLE_LABEL: Record<ImportTable, string> = {
   suppliers: 'suppliers you added', farm_supplier_settings: 'supplier settings and "my rep"',
-  animal_groups: 'animal groups', head_count_history: 'head count changes', crops: 'crops', documents: 'photos and documents',
+  animal_groups: 'animal groups', head_count_history: 'head count changes', animals: 'animals with tag numbers', crops: 'crops', documents: 'photos and documents',
   feed_products: 'feeds', feed_transactions: 'feed deliveries, orders and counts', feeding_rules: 'feeding plans', feed_use_logs: 'ticked-off feeding',
   silage_stores: 'silage and bales', routines: 'routines', income: 'income', costs: 'bills and costs', routine_completions: 'ticked-off routines',
   budget_lines: 'budget lines', farm_records: 'records', jobs: 'jobs',

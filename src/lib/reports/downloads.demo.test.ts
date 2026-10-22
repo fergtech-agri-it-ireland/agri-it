@@ -54,7 +54,8 @@ describe('downloads on the demo farm are plain tables', () => {
       const b = demo();
       for (const r of REPORT_LIST) {
         for (const basis of r.id === 'profit' ? (['accruals', 'cash'] as const) : (['accruals'] as const)) {
-          assertPlain(`${r.id} ${offset} ${basis}`, docCsv(buildReport(r.id, b, today, { offset, basis })));
+          // The demo farm has no tagged animals, so its animal report is a header and nothing else
+          assertPlain(`${r.id} ${offset} ${basis}`, docCsv(buildReport(r.id, b, today, { offset, basis })), r.id === 'animals');
         }
       }
     });
@@ -77,7 +78,7 @@ describe('downloads on the demo farm are plain tables', () => {
     const pack = yearEndPack(b, today, 0);
     const docs = REPORT_LIST.map((r) => buildReport(r.id, b, today, {}));
     const readme = packReadme(pack, b.farm.name, docs.map((d) => ({ title: d.title, basisNote: d.basisNote, complete: d.completeness.complete, reasons: d.completeness.reasons, notes: d.completeness.notes, footnotes: d.footnotes, provisional: d.meta.provisional, rule: d.meta.rule })));
-    expect(readme).toContain('Profit report');
+    expect(readme).toContain('Profit and loss');
     expect(readme).toMatch(/Basis: Accruals/);
     expect(readme).toContain('Rule reports@1.0');
     expect(readme).toMatch(/not statutory accounts|not a set of statutory accounts/);
@@ -88,7 +89,7 @@ describe('downloads on the demo farm are plain tables', () => {
     const d = buildReport('profit', demo(), today, { basis: 'cash' });
     expect(d.meta.basis).toBe('cash');
     expect(typeof d.meta.provisional).toBe('boolean');
-    expect(tableCsv(d.table).split('\n')[0]).toBe('Section,Line,Row,Amount (EUR),Records');
+    expect(tableCsv(d.table).split('\n')[0]).toBe('Section,Item,Amount (EUR)');
     void addDays;
   });
 });

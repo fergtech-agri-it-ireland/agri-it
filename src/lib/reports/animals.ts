@@ -1,116 +1,108 @@
 /**
- * Animals report: head count reconciliation per group for the year (opening + born + bought or added
- * + moved in - sold - moved out - other reductions = closing), then livestock sales and what the
- * farmer has valued them at. Numbers of animals only; values are the farmer's (year-end values).
+ * Animal report: one row per animal that has a tag number in Agri-It, with the dates that matter:
+ * tag number, group, sex, breed, date born, status (on the farm, sold, died, moved off) and the
+ * date it left. Above the list, a few counts for the year: born, sold, died, moved off, and how
+ * many are on the farm at the end.
+ *
+ * Which animals: those on the farm at any time in the year. An animal that left before the year
+ * began is not listed. An animal with no date born is listed (it may be older than the records).
+ * Head counts on the group pages are not used here: this report is the tagged animals only, and
+ * says so when the two differ.
  */
-import type { AnimalGroup, FarmBundle, HeadCountChange, ISODate } from '../types';
-import { ANIMAL_CLASS_LABEL } from '../types';
-import { DISCLAIMER, sum, type CellValue, type ReportDoc, type ReportRow } from './doc';
+import type { Animal, FarmBundle, ISODate } from '../types';
+import { ANIMAL_STATUS_LABEL } from '../types';
+import { formatTag } from '../animalId';
+import { DISCLAIMER, type CellValue, type ReportDoc, type ReportRow } from './doc';
 import { RETENTION } from './rules';
-import { headsAtEndOf, reportPeriod } from './common';
+import { reportPeriod } from './common';
 import { metaFor } from './profit';
 
-export interface GroupMovement {
-  groupId: string;
-  name: string;
-  klass: string;
-  opening: number;
-  born: number;
-  added: number;
-  movedIn: number;
-  sold: number;
-  movedOut: number;
-  /** Counted down by hand: deaths, losses, corrections */
-  reduced: number;
-  closing: number;
-  /** opening + in - out - closing: 0 when every change is classed */
-  unexplained: number;
-  soldRecordedInIncome: number;
+export interface AnimalLine {
+  id: string;
+  tag: string;
+  group: string;
+  sex: string;
+  breed: string;
+  bornOn: ISODate | null;
+  status: string;
+  leftOn: ISODate | null;
 }
 
-export function classify(reason: string): 'born' | 'moved_in' | 'moved_out' | 'sold' | 'sale_undone' | 'calf_undone' | 'ignore' | 'adjust' {
-  const r = reason.toLowerCase();
-  if (r === 'calved') return 'born';
-  if (r === 'sale') return 'sold';
-  if (r.startsWith('moved from')) return 'moved_in';
-  if (r.startsWith('moved to')) return 'moved_out';
-  if (r === 'sale undone') return 'sale_undone';
-  if (r === 'calf undone') return 'calf_undone';
-  if (r === 'confirmed') return 'ignore';
-  return 'adjust';
+export interface AnimalFigures {
+  lines: AnimalLine[];
+  onFarmAtEnd: number;
+  bornInYear: number;
+  soldInYear: number;
+  diedInYear: number;
+  movedOffInYear: number;
+  /** Left the farm but no date given: cannot be placed in a year */
+  leftNoDate: number;
+  /** Heads in the groups, to say when the tagged animals are only some of them */
+  groupHeads: number;
+  complete: boolean;
+  reasons: string[];
+  notes: string[];
 }
 
-/** Where one group's head count went in the year. The first count entered for a group is not a movement. */
-export function groupMovement(g: AnimalGroup, history: HeadCountChange[], income: FarmBundle['income'], start: ISODate, openingDay: ISODate, end: ISODate): GroupMovement {
-  const rows = [...history].sort((a, c) => (a.effective_on + a.created_at).localeCompare(c.effective_on + c.created_at));
-  let running = headsAtEndOf(g, rows, openingDay);
-  const opening = running;
-  const m = { born: 0, added: 0, movedIn: 0, sold: 0, movedOut: 0, reduced: 0 };
-  for (const h of rows.filter((x) => x.effective_on >= start && x.effective_on <= end)) {
-    if (h.reason === 'opening') { running = Number(h.head_count); continue; }
-    const delta = Number(h.head_count) - running;
-    running = Number(h.head_count);
-    if (delta === 0) continue;
-    const k = classify(h.reason);
-    if (k === 'ignore') continue;
-    if (k === 'born' && delta > 0) m.born += delta;
-    else if (k === 'moved_in' && delta > 0) m.movedIn += delta;
-    else if (k === 'moved_out' && delta < 0) m.movedOut += -delta;
-    else if (k === 'sold' && delta < 0) m.sold += -delta;
-    else if (k === 'sale_undone' && delta > 0) m.sold -= delta; // the sale was taken back: not sold after all
-    else if (k === 'calf_undone' && delta < 0) m.born += delta; // the birth was taken back
-    else if (delta > 0) m.added += delta; // bought in, group started, or a hand count up
-    else m.reduced += -delta;
-  }
-  const closing = running;
-  const sold = income.filter((i) => i.income_type === 'livestock' && i.animal_group_id === g.id && i.occurred_on >= start && i.occurred_on <= end).reduce((s, i) => s + Number(i.head_count ?? 0), 0);
-  return { groupId: g.id, name: g.name, klass: ANIMAL_CLASS_LABEL[g.animal_class], opening, ...m, closing, unexplained: opening + m.born + m.added + m.movedIn - m.sold - m.movedOut - m.reduced - closing, soldRecordedInIncome: sold };
-}
-
-export interface AnimalFigures { groups: GroupMovement[]; totals: Omit<GroupMovement, 'groupId' | 'name' | 'klass'>; livestockSalesEur: number; soldHeadsInSales: number; unattachedSales: number; complete: boolean; reasons: string[]; notes: string[] }
+const SEX = { female: 'Female', male: 'Male' } as const;
 
 export function animalFigures(b: FarmBundle, today: ISODate, offset = 0): AnimalFigures {
   const p = reportPeriod(b.farm, today, offset);
-  const hist = (g: AnimalGroup) => (b.headHistory ?? []).filter((h) => h.animal_group_id === g.id);
-  const groups = b.groups.map((g) => groupMovement(g, hist(g), b.income, p.fy.start, p.openingDay, p.asAt)).filter((m) => !(m.opening === 0 && m.closing === 0 && m.born + m.added + m.movedIn + m.sold + m.movedOut + m.reduced === 0));
-  const t = (k: keyof GroupMovement) => groups.reduce((s, g) => s + (g[k] as number), 0);
-  const totals = { opening: t('opening'), born: t('born'), added: t('added'), movedIn: t('movedIn'), sold: t('sold'), movedOut: t('movedOut'), reduced: t('reduced'), closing: t('closing'), unexplained: t('unexplained'), soldRecordedInIncome: t('soldRecordedInIncome') };
-  const sales = b.income.filter((i) => i.income_type === 'livestock' && i.occurred_on >= p.fy.start && i.occurred_on <= p.asAt);
-  const unattachedSales = sales.filter((i) => !i.animal_group_id).length;
-  const reasons: string[] = []; const notes: string[] = [];
-  for (const g of groups) if (g.sold !== g.soldRecordedInIncome && g.soldRecordedInIncome > 0) reasons.push(`${g.name}: ${g.soldRecordedInIncome} sold in sales records, head count went down by ${g.sold}`);
-  if (unattachedSales) notes.push(`${unattachedSales} livestock sale${unattachedSales > 1 ? 's are' : ' is'} not linked to a group, so ${unattachedSales > 1 ? 'they are' : 'it is'} not in the head counts.`);
-  if (b.headHistory?.some((h) => h.reason === 'opening' && h.effective_on > p.fy.start && h.effective_on <= p.asAt)) notes.push('A group first entered during the year is counted as there from the start. Its first count is not shown as animals added.');
-  if (groups.some((g) => g.added > 0)) notes.push('"Added" is animals bought in, a group started, or a count raised by hand. Record purchases as Livestock bought in Money so they reach the profit report.');
-  if (groups.some((g) => g.reduced > 0)) notes.push('"Reduced by hand" is deaths, losses or corrections. Agri-It does not know which.');
-  if (p.provisional) notes.push(`Year to date, to ${p.asAt}.`);
-  return { groups, totals, livestockSalesEur: sum(sales.map((i) => Number(i.amount_eur))), soldHeadsInSales: sales.reduce((s, i) => s + Number(i.head_count ?? 0), 0), unattachedSales, complete: reasons.length === 0, reasons, notes };
+  const start = p.fy.start; const end = p.asAt;
+  const groupName = new Map(b.groups.map((g) => [g.id, g.name]));
+  const all: Animal[] = b.animals ?? [];
+  const present = all.filter((a) => (!a.born_on || a.born_on <= end) && (!a.left_on || a.left_on >= start));
+  const lines: AnimalLine[] = present
+    .map((a) => ({
+      id: a.id, tag: formatTag(a.tag_number), group: (a.animal_group_id && groupName.get(a.animal_group_id)) || '',
+      sex: a.sex ? SEX[a.sex] : '', breed: a.breed ?? '', bornOn: a.born_on, status: ANIMAL_STATUS_LABEL[a.status], leftOn: a.left_on
+    }))
+    .sort((x, y) => x.tag.localeCompare(y.tag));
+  const inYear = (d: ISODate | null) => !!d && d >= start && d <= end;
+  const leftIn = (s: Animal['status']) => present.filter((a) => a.status === s && inYear(a.left_on)).length;
+  const onFarmAtEnd = present.filter((a) => (a.left_on ? a.left_on > end : a.status === 'on_farm')).length;
+  const leftNoDate = present.filter((a) => a.status !== 'on_farm' && !a.left_on).length;
+  const groupHeads = b.groups.filter((g) => !g.archived).reduce((s, g) => s + Number(g.head_count ?? 0), 0);
+  const reasons: string[] = [];
+  const notes: string[] = [];
+  if (leftNoDate) reasons.push(`${leftNoDate} animal${leftNoDate > 1 ? 's' : ''} marked sold, died or moved off with no date`);
+  if (all.length && groupHeads > onFarmAtEnd && offset === 0) notes.push(`${onFarmAtEnd} of ${groupHeads} animals in your groups have a tag number here`);
+  return {
+    lines, onFarmAtEnd, bornInYear: present.filter((a) => inYear(a.born_on)).length,
+    soldInYear: leftIn('sold'), diedInYear: leftIn('died'), movedOffInYear: leftIn('moved_off'), leftNoDate, groupHeads,
+    complete: reasons.length === 0, reasons, notes
+  };
 }
 
 export function animalsReport(b: FarmBundle, today: ISODate, opts: { offset?: number; now?: string } = {}): { doc: ReportDoc; figures: AnimalFigures } {
   const p = reportPeriod(b.farm, today, opts.offset ?? 0);
   const f = animalFigures(b, today, opts.offset ?? 0);
-  const cols = ['Start', 'Born', 'Added', 'Moved in', 'Sold', 'Moved out', 'Reduced by hand', 'End'].map((label) => ({ label, type: 'number' as const }));
-  const row = (label: string, g: Omit<GroupMovement, 'groupId' | 'name' | 'klass'>, extra: Partial<ReportRow> = {}): ReportRow => ({ label, cells: [g.opening, g.born, g.added, g.movedIn, g.sold, g.movedOut, g.reduced, g.closing], ...extra });
-  const rows: ReportRow[] = f.groups.map((g) => row(g.name.toLowerCase() === g.klass.toLowerCase() ? g.name : `${g.name} (${g.klass})`, g, { to: '/farm/groups', note: g.unexplained !== 0 ? `Does not add up by ${g.unexplained}` : undefined }));
-  rows.push(row('All animals', f.totals, { kind: 'total' }));
-  const movement = { heading: 'Animals: start to end of the year', columns: cols, rows, note: 'Start + born + added + moved in - sold - moved out - reduced by hand = end. Moves between groups cancel out in the total.' };
-  const values = (b.yearValues ?? []).filter((v) => v.kind === 'livestock' && v.as_at === p.closingDay);
-  const sales = {
-    heading: 'Sales and values', rows: [
-      { label: 'Livestock sales received', amount: f.livestockSalesEur, kind: 'line' as const, to: '/reports/income', note: f.soldHeadsInSales ? `${f.soldHeadsInSales} animals recorded in sales` : undefined },
-      { label: 'Value of livestock at the year end (your figures)', amount: values.length ? sum(values.map((v) => Number(v.value_eur))) : null, missing: !values.length, kind: 'line' as const, to: '/reports/values', note: values.length ? undefined : p.provisional ? 'Entered at the year end' : 'Not entered' }
-    ]
+  const count = (label: string, n: number): ReportRow => ({ label, cells: [n] });
+  const summary = {
+    heading: 'This year',
+    columns: [{ label: 'Animals', type: 'number' as const }],
+    rows: [count('Born', f.bornInYear), count('Sold', f.soldInYear), count('Died', f.diedInYear), count('Moved off', f.movedOffInYear), { ...count('On the farm at the end', f.onFarmAtEnd), kind: 'total' as const }]
   };
-  // The download: one row per group, then a total row. Moves between groups cancel out in the total.
-  const mv = (g: Omit<GroupMovement, 'groupId' | 'name' | 'klass'>): CellValue[] => [g.opening, g.born, g.added, g.movedIn, g.sold, g.movedOut, g.reduced, g.closing];
-  const flat: CellValue[][] = [...f.groups.map((g): CellValue[] => [g.name, g.klass, 'Line', ...mv(g)]), ['All animals', '', 'Total', ...mv(f.totals)]];
+  const cols: { label: string; type: 'text' | 'date' }[] = [
+    { label: 'Group', type: 'text' }, { label: 'Sex', type: 'text' }, { label: 'Breed', type: 'text' }, { label: 'Born', type: 'date' }, { label: 'Status', type: 'text' }, { label: 'Left', type: 'date' }
+  ];
+  const list = {
+    heading: 'Animals',
+    columns: cols,
+    rows: f.lines.map((l): ReportRow => ({ label: l.tag, to: `/animals/${l.id}`, cells: [l.group, l.sex, l.breed, l.bornOn, l.status, l.leftOn] }))
+  };
+  const flat: CellValue[][] = f.lines.map((l) => [l.tag, l.group, l.sex, l.breed, l.bornOn, l.status, l.leftOn]);
   const doc: ReportDoc = {
-    id: 'animals', title: 'Animals report', subtitle: `${b.farm.name}, ${p.fy.label}${p.provisional ? ' (year to date)' : ''}`,
+    id: 'animals', title: 'Animals', subtitle: `${b.farm.name}, ${p.fy.label}${p.provisional ? ' (year to date)' : ''}`,
     meta: metaFor(b, p, null, opts.now ?? new Date().toISOString()),
-    table: { columns: [{ label: 'Group', type: 'text' }, { label: 'Class', type: 'text' }, { label: 'Row', type: 'text' }, ...cols.map((c) => ({ label: c.label, type: 'number' as const }))], rows: flat },
-    basisNote: 'Head counts from the day each change took effect. Values are only what you have entered.',
-    completeness: { complete: f.complete, reasons: f.reasons, notes: f.notes }, sections: [movement, sales], footnotes: [DISCLAIMER, RETENTION[b.farm.jurisdiction]]
+    table: {
+      columns: [{ label: 'Tag number', type: 'text' }, { label: 'Group', type: 'text' }, { label: 'Sex', type: 'text' }, { label: 'Breed', type: 'text' }, { label: 'Born', type: 'date' }, { label: 'Status', type: 'text' }, { label: 'Left', type: 'date' }],
+      rows: flat
+    },
+    basisNote: 'Animals with a tag number in Agri-It that were on the farm at some point in the year.',
+    completeness: { complete: f.complete, reasons: f.reasons, notes: f.notes },
+    sections: [summary, list],
+    footnotes: [DISCLAIMER, 'Not the official herd register. Check dates against your official records.', RETENTION[b.farm.jurisdiction]]
   };
   return { doc, figures: f };
 }

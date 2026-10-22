@@ -97,9 +97,10 @@ export function dashboardModules(b: FarmBundle, d: Derived, today: ISODate): Mod
   }
 
   // Animals
+  const tagged = (b.animals ?? []).filter((a) => a.status === 'on_farm').length;
   const groups = b.groups.filter((g) => !g.archived && g.head_count > 0);
   const bySpecies = SPECIES.map((s) => ({ s, n: groups.filter((g) => speciesOf(g.animal_class) === s.value).reduce((t, g) => t + g.head_count, 0) })).filter((x) => x.n > 0);
-  tiles.push(tile('animals', 'Animals', groups.length === 0 ? 'Add your groups' : `${plural(groups.length, 'group')}, ${bySpecies.map((x) => `${fmtNum(x.n)} ${x.s.label.toLowerCase()}`).join(', ')}`, '/farm/groups'));
+  tiles.push(tile('animals', 'Animals', groups.length === 0 ? 'Add your groups' : `${plural(groups.length, 'group')}, ${bySpecies.map((x) => `${fmtNum(x.n)} ${x.s.label.toLowerCase()}`).join(', ')}${tagged > 0 ? `, ${fmtNum(tagged)} tagged` : ''}`, '/farm/groups'));
 
   // Milk
   if (types.includes('dairy') && !worker) {
@@ -131,7 +132,7 @@ export function dashboardModules(b: FarmBundle, d: Derived, today: ISODate): Mod
   if (!worker) {
     tiles.push(tile('money', 'Money', 'Cash, bills, budget, year plan', '/money'));
     const loans = (b.loans ?? []).filter((l) => !l.archived);
-    tiles.push(tile('reports', 'Reports', 'Profit, cash flow, balance sheet, stock', '/reports'));
+    tiles.push(tile('reports', 'Reports', 'Profit and loss, balance sheet, animals', '/reports'));
     tiles.push(tile('loans', 'Loans and schemes', loans.length ? plural(loans.length, 'loan') : 'Repayments, interest, scheme payments', '/money/loans'));
   }
 

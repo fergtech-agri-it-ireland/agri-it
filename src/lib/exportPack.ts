@@ -7,13 +7,14 @@ import { documentUrl } from './upload';
 import { attachmentName } from './vault';
 import type { DocumentRow } from './types';
 
-export interface PackFile { name: string; text: string }
+/** A text file (CSV, README) or a finished binary file (an Excel report) */
+export interface PackFile { name: string; text?: string; data?: Uint8Array }
 
 /** Zip the CSVs and every attachment that can be fetched. Missing ones are listed in a note. */
 export async function buildZip(files: PackFile[], docs: DocumentRow[]): Promise<{ blob: Blob; attached: number; missing: string[] }> {
   const entries: Record<string, Uint8Array> = {};
-  // A byte-order mark so spreadsheet programs open the euro sign properly
-  for (const f of files) entries[f.name] = strToU8(`﻿${f.text}`);
+  // CSV files get a byte-order mark so spreadsheet programs open accents properly; Excel reports are real .xlsx and need none
+  for (const f of files) entries[f.name] = f.data ?? strToU8(f.name.endsWith('.csv') ? `﻿${f.text ?? ''}` : f.text ?? '');
   const missing: string[] = [];
   let attached = 0;
   for (const d of docs) {

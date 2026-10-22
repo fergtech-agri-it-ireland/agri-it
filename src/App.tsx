@@ -60,6 +60,8 @@ import Payments from './pages/Payments';
 import YearPlan from './pages/YearPlan';
 import Reports, { ReportPage } from './pages/Reports';
 import YearValues from './pages/YearValues';
+import Animals from './pages/Animals';
+import AnimalForm from './pages/AnimalForm';
 
 export default function App() {
   if (!supabaseConfigured) return <MissingConfig />;
@@ -129,6 +131,9 @@ export default function App() {
         <Route path="money/budget" element={<Budget />} />
         <Route path="farm" element={<FarmHub />} />
         <Route path="farm/groups" element={<Groups />} />
+        <Route path="animals" element={<Animals />} />
+        <Route path="animals/new" element={<AnimalForm />} />
+        <Route path="animals/:id" element={<AnimalForm />} />
         <Route path="farm/types" element={<FarmTypes />} />
         <Route path="farm/crops" element={<Crops />} />
         <Route path="edit/:kind/:id" element={<EditEntry />} />

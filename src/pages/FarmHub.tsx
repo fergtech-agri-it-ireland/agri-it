@@ -1,6 +1,6 @@
 import type { ComponentType, ReactNode } from 'react';
 import {
-  Baby, Banknote, BookOpen, CalendarRange, ClipboardCheck, Landmark, Map as MapIcon, ChevronRight, ClipboardList, FileSpreadsheet, ListChecks, MessageCircleQuestion, PiggyBank, Repeat, Settings, Sprout, Tractor, Truck, Users, Warehouse, Wheat
+  Baby, Banknote, BookOpen, CalendarRange, ClipboardCheck, Landmark, Map as MapIcon, ChevronRight, ClipboardList, FileSpreadsheet, ListChecks, MessageCircleQuestion, PiggyBank, Repeat, ScanLine, Settings, Sprout, Tractor, Truck, Users, Warehouse, Wheat
 } from 'lucide-react';
 import { useFarmData } from '../lib/data/farm';
 import { useDerived } from '../lib/data/derived';
@@ -42,6 +42,7 @@ export default function FarmHub() {
           <Row to="/calving" icon={icon(Baby)} title="Calving and drying off" sub={(b.seasons ?? []).some((s) => !s.archived) ? 'Your season plan and calves to tag' : 'Plan the season from the first calf date'} right={chev} />
         )}
         <Row to="/farm/groups" icon={icon(Users)} title="Animals and breeds" sub={heads ? `${b.groups.filter((g) => !g.archived).length} groups, ${fmtNum(heads)} head` : 'Add your groups'} right={chev} />
+        <Row to="/animals" icon={icon(ScanLine)} title="Animal tags" sub={b.animals.length ? `${fmtNum(b.animals.filter((a) => a.status === 'on_farm').length)} animals with tag numbers` : 'Scan the blue card to add a tag number'} right={chev} />
         {grows(types) && cropsRow}
         <Row to="/progress?tab=feed" icon={icon(Wheat)} title="Bought-in feed" sub={`${b.products.filter((p) => !p.archived).length} feeds tracked`} right={chev} />
         <Row to="/fertiliser" icon={icon(Sprout)} title="Fertiliser and spreading" sub={(() => { const due = d.fertiliser.due.filter((x) => x.kind !== 'cut_passed').length; const n = b.fertilisers.filter((p) => !p.archived).length; return due ? `${due} field${due > 1 ? 's' : ''} due` : n ? `${n} in stock` : 'Stock, spreading, closed period'; })()} right={chev} />

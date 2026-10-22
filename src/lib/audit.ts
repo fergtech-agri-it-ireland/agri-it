@@ -6,7 +6,7 @@ import { eur, fmtDay, fmtKg } from './format';
 const THING: Record<string, string> = {
   costs: 'Cost', income: 'Income', feed_transactions: 'Feed', animal_groups: 'Animal group', feeding_rules: 'Feeding plan',
   documents: 'Document', farm_records: 'Record', budget_lines: 'Budget', jobs: 'Job', feed_products: 'Feed', silage_stores: 'Silage store', calving_seasons: 'Calving season', calf_births: 'Calf born',
-  loans: 'Loan', loan_statements: 'Loan statement', expected_income: 'Expected payment', year_end_values: 'Year-end value'
+  loans: 'Loan', loan_statements: 'Loan statement', expected_income: 'Expected payment', year_end_values: 'Year-end value', animals: 'Animal'
 };
 const FIELD: Record<string, string> = {
   amount_eur: 'amount', occurred_on: 'date', paid_on: 'paid on', due_on: 'due', payment_status: 'paid or owed', invoice_ref: 'invoice no.',
